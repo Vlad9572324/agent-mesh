@@ -13,8 +13,11 @@ Use [getting started from source](getting-started.md) for an available setup
 route, then [your first handoff](first-session.md). The
 [archive installation guide](install-release.md) and [container guide](container.md)
 are recipes for a future verified publication, not links to existing downloads.
-For example, `v0.1.0-rc.1` in packaging instructions is an illustrative version,
-not an available release or a scheduled release promise.
+The next release candidate is **`v0.1.0-rc.2`**, targeting **Linux amd64**.
+Its installation filenames and version checks are prepared, but publication and
+remote verification are still pending. No ARM, macOS or Windows binary is planned
+by this candidate's packaging contract. Keep using source setup until verified
+release assets are announced here.
 
 Public source availability is separate from deployment security and package
 permissions. Agent Mesh remains a trusted-LAN pilot, not an Internet-facing
@@ -23,6 +26,8 @@ production service. A project-wide license has not been selected; see
 
 ## Release automation included in source
 
+- Within `Release`, a `main` push runs only the permission-free registration job;
+  that job does not validate a candidate, build archives or publish anything.
 - `release.yml` validates supported version tags, fences the exact source to
   `main` history, tests the candidate and publishes the GitHub Release last,
   after remote archive hashes and the pulled image identity are checked.

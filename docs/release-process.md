@@ -4,6 +4,8 @@
 
 This fresh source repository has no published release or container image yet.
 The checked-in workflows provide the release machinery, not publication evidence.
+The prepared candidate is `v0.1.0-rc.2`, targeting Linux amd64 only; successful
+publication and remote verification must be recorded before claiming availability.
 New version tags use the hosted
 [automatic release workflow](#automatic-version-tag-releases). Its manual
 dispatch is a **dry run only**. The separate
@@ -18,20 +20,21 @@ reviewed commit from this repository's fresh history.
 
 | Workflow invocation | Result |
 | --- | --- |
+| Push `main` (`Release` workflow) | Permission-free registration job only; no build, tag, release, archive or package publication |
 | Push a new validated `v*` version tag | Build/test archives and image; verify remote assets and image; publish the release last |
 | Manually dispatch `release.yml` on `main` with `version` and `expected_sha` | Build/test dry run; no tag, GitHub Release, or package publication |
 | Manually dispatch `Container CI` on `main` with `expected_sha` | Separate commit-tagged GHCR candidate, not a formal GitHub Release |
 
 ## Artifact contract
 
-The example version `v0.1.0-rc.1` below illustrates the contract; it is not an
-existing download. Substitute the exact validated release version, keeping the
+The candidate version `v0.1.0-rc.2` below illustrates the contract; it is not yet
+an available download. Substitute the exact validated release version, keeping the
 same four asset types. Never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
-| `agent-mesh_v0.1.0-rc.1_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `THIRD_PARTY_NOTICES.md` |
-| `agent-mesh_v0.1.0-rc.1_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-rc.2_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-rc.2_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `THIRD_PARTY_NOTICES.md` |
 | `RELEASE.json` | The same release/build metadata included in each archive |
 | `SHA256SUMS` | SHA-256 checksums for both archives and external `RELEASE.json` |
 
@@ -78,7 +81,15 @@ Do not add untested binaries or describe a cross-compilation as runtime evidence
 
 ## Automatic version-tag releases
 
-`.github/workflows/release.yml` runs on pushed tags matching `v*`. That broad
+`.github/workflows/release.yml` also runs a registration-only job on `main`
+pushes so GitHub can register the workflow. That job has `permissions: {}`, a
+two-minute timeout and static output only; validation and publication are skipped.
+It does not build archives or create tags, releases or packages. A successful
+registration run is not a successful release dry run.
+The separate `Container CI` workflow can still validate the same `main` push;
+the registration-only restriction applies to `Release`.
+
+Actual version releases start from pushed tags matching `v*`. That broad
 trigger is not an authorization shortcut: the workflow accepts only its supported
 canonical version subset, verifies the exact tag's live source commit, and requires
 that commit to belong to `main` history. Validation and publication use the fenced commit,
@@ -163,8 +174,8 @@ when needed and report skips explicitly.
 ## Local build and verification reference
 
 The commands below describe reproducible local packaging and verification.
-`v0.1.0-rc.1` is an example, not an existing or scheduled release. Local builds do
-not create tags or publish assets. For publication, use the guarded tag/dry-run
+`v0.1.0-rc.2` is the prepared candidate, not an availability claim. Local builds
+do not create tags or publish assets. For publication, use the guarded tag/dry-run
 workflow above and its exact reviewed version.
 
 ## 1. Review and test the candidate
@@ -199,7 +210,7 @@ From the clean source checkout:
 
 ```sh
 python3 -B scripts/build-release.py \
-  --version v0.1.0-rc.1 \
+  --version v0.1.0-rc.2 \
   --output /absolute/path/to/new-release-output
 ```
 
@@ -234,8 +245,8 @@ The smoke tool must never receive a production/shared workspace DSN.
 
 ```sh
 python3 -B scripts/smoke-release.py \
-  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.1_linux_amd64.tar.gz \
-  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.1_connectors.tar.gz \
+  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.2_linux_amd64.tar.gz \
+  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.2_connectors.tar.gz \
   --checksums /absolute/path/to/new-release-output/SHA256SUMS \
   --database-url-file /private/path/to/test-database-url
 ```

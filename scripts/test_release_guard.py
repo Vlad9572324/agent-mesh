@@ -1,6 +1,7 @@
 """Offline tests for release event, version, source, and live-response fences."""
 import importlib.util
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -119,6 +120,12 @@ class Local(unittest.TestCase):
         with self.assertRaises(guard.GuardError):
             self.check("tag")
 
+    def test_main_push_is_neither_tag_publication_nor_manual_rehearsal(self):
+        self.env.update(GITHUB_EVENT_NAME="push", GITHUB_REF="refs/heads/main")
+        for mode in ("tag", "dry-run"):
+            with self.subTest(mode=mode), self.assertRaises(guard.GuardError):
+                self.check(mode)
+
     def test_wrong_events_refs_or_identity_fail(self):
         for key, value in (("GITHUB_REF", "refs/heads/main"), ("GITHUB_EVENT_NAME", "pull_request"),
                            ("GITHUB_REPOSITORY", "other/repo"), ("GITHUB_SHA", OTHER)):
@@ -141,6 +148,42 @@ class Local(unittest.TestCase):
         self.env["GITHUB_SHA"] = self.sha
         with self.assertRaises(guard.GuardError):
             self.check()
+
+
+class WorkflowRegistration(unittest.TestCase):
+    """Pin the publication gates without introducing a YAML parser dependency."""
+    def setUp(self):
+        self.workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/release.yml").read_text()
+
+    def job(self, name):
+        match = re.search(r"^  " + name + r":\n(.*?)(?=^  [a-z_]+:\n|\Z)", self.workflow, re.M | re.S)
+        self.assertIsNotNone(match, "expected workflow job missing")
+        return match.group(1)
+
+    def test_main_trigger_and_registration_job_have_no_publication_authority(self):
+        self.assertRegex(self.workflow, r"(?m)^  push:\n    branches: \[main\]\n    tags: \['v\*'\]")
+        job = self.job("registration")
+        self.assertIn("    if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n", job)
+        self.assertIn("    permissions: {}\n", job)
+        self.assertIn("    timeout-minutes: 2\n", job)
+        self.assertNotIn("uses:", job)
+        self.assertNotIn("secrets.", job)
+        self.assertEqual(re.findall(r"^        run: (.*)$", job, re.M),
+                         ["echo 'Release workflow main registration only; validation and publication are skipped.'"])
+        self.assertNotRegex(job, r"(?m)^          \S")
+
+    def test_build_and_publish_gates_exclude_main_registration(self):
+        # Exact reviewed predicates fail this test if broadened to allow main
+        # pushes, PRs, or publication from workflow_dispatch.
+        validate = self.job("validate")
+        publish = self.job("publish")
+        self.assertEqual(re.findall(r"^    if: (.*)$", validate, re.M),
+                         ["github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))"])
+        self.assertEqual(re.findall(r"^    if: (.*)$", publish, re.M),
+                         ["github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"])
+        self.assertIn("    needs: validate\n", publish)
+        self.assertIn('--expected-commit "$EXPECTED_SHA" --mode tag', publish)
+        self.assertIn('--github-repository "$GITHUB_REPOSITORY" --live', publish)
 
 
 if __name__ == "__main__":
