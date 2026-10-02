@@ -166,8 +166,9 @@ Routine polling and successful lifecycle reports are hidden by default. Turn on
 **Show technical events** to reveal them; the adjacent count describes only the
 loaded window. Errors and explicit inbox view/acceptance reports stay visible.
 The same switch reveals CLI references in **Channel events** and technical
-entries in the general **Project map** list. Choosing a map entity type directly
-also reveals that type. Counts and stored history are unchanged. This display
+entries and relationships in **Project map**. Choosing a map entity type directly
+also reveals that type; selecting a diagnostic entity reveals its relationships.
+Counts and stored history are unchanged. This display
 preference follows navigation and live refresh within the current page session.
 
 Native reports include session/turn/tool lifecycle and inbox offer/acceptance.

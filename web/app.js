@@ -7,6 +7,8 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    " {0} technical relationships hidden. Turn on “Show technical events” to view them.": " Технических связей скрыто: {0}. Включите «Показывать технические события», чтобы увидеть их.",
+    "Only technical relationships are loaded for this entity. Turn on “Show technical events” to view them.": "Для этой сущности загружены только технические связи. Включите «Показывать технические события», чтобы увидеть их.",
     "{0} technical events hidden in this loaded window. No records were deleted; earlier events may be outside the window.": "Технических событий скрыто в загруженном окне: {0}. Записи не удалены; более ранние события могут находиться за пределами окна.",
     "All event types are shown in this loaded window. Earlier events may be outside the window.": "В загруженном окне показаны все типы событий. Более ранние события могут находиться за пределами окна.",
     "Only technical events are loaded. Turn on “Show technical events” to view them.": "Загружены только технические события. Включите «Показывать технические события», чтобы увидеть их.",
@@ -1257,6 +1259,7 @@
     for (const id of ["project-map-counts", "project-map-entities", "project-map-detail", "project-map-relations"]) $(id).replaceChildren();
     for (const id of ["project-map-status", "project-map-boundary", "project-map-list-status", "project-map-relations-status", "project-map-technical-notice"]) setText($(id), () => (""));
     $("project-map-technical-notice").dataset.hiddenCount = "0";
+    $("project-map-relations-status").dataset.hiddenCount = "0";
     delete $("project-map-detail").dataset.entityKey;
     $("project-map-type").value = ""; $("project-map-search").value = "";
     clearError("project-map-error");
@@ -1412,7 +1415,7 @@
     if (!item) {
       delete container.dataset.entityKey;
       replaceContent("project-map-detail", node("p", "empty-state", () => (tr("Select an entity from the loaded snapshot."))));
-      replaceContent("project-map-relations"); setText($("project-map-relations-status"), () => ("")); return;
+      replaceContent("project-map-relations"); setText($("project-map-relations-status"), () => ("")); $("project-map-relations-status").dataset.hiddenCount = "0"; return;
     }
     container.dataset.entityKey = item.key;
     const card = node("article", "map-detail-card"); card.dataset.entityKey = item.key; card.dataset.entityType = item.type; card.dataset.entityId = item.id;
@@ -1438,14 +1441,19 @@
     }
     replaceContent("project-map-detail", card);
     const byKey = new Map(data.snapshot.nodes.map(entry => [entry.key, entry]));
-    const edges = data.snapshot.edges.filter(edge => edge.source === item.key || edge.target === item.key);
+    const related = data.snapshot.edges.filter(edge => edge.source === item.key || edge.target === item.key);
+    // Selecting a diagnostic entity is an explicit request to inspect its links.
+    const diagnosticType = ["native", "receipt"].includes(item.type) ? item.type : "";
+    const edges = related.filter(edge => mapEntityVisible(byKey.get(edge.source), diagnosticType) && mapEntityVisible(byKey.get(edge.target), diagnosticType));
+    const hidden = related.length - edges.length;
     const rows = edges.slice(0, 30).map(edge => {
       const row = node("div", "map-relation"); row.dataset.relationType = edge.kind; row.dataset.source = edge.source; row.dataset.target = edge.target;
       appendOwned(row, () => (mapEntityButton(byKey.get(edge.source), "map-related-entity")), () => (node("span", "map-relation-label", () => formatText(["— ", " →"], mapEdgeLabel(edge, byKey.get(edge.source), byKey.get(edge.target))))), () => (mapEntityButton(byKey.get(edge.target), "map-related-entity"))); return row;
     });
-    if (!rows.length) rows.push(node("p", "empty-state", () => (tr("No relationships among the loaded entities. This does not establish that no relationships exist beyond this bounded snapshot."))));
+    if (!rows.length) rows.push(node("p", "empty-state", () => (hidden ? tr("Only technical relationships are loaded for this entity. Turn on “Show technical events” to view them.") : tr("No relationships among the loaded entities. This does not establish that no relationships exist beyond this bounded snapshot."))));
     replaceContent("project-map-relations", ...rows);
-    setText($("project-map-relations-status"), () => (tr("Showing {0} of {1} relationships for the selected entity among loaded entities. Entities outside the sample and their relationships are not shown.", () => (Math.min(30, edges.length)), () => (edges.length))));
+    $("project-map-relations-status").dataset.hiddenCount = String(hidden);
+    setText($("project-map-relations-status"), () => formatText(["", "", ""], () => tr("Showing {0} of {1} relationships for the selected entity among loaded entities. Entities outside the sample and their relationships are not shown.", () => Math.min(30, edges.length), () => edges.length), () => hidden ? tr(" {0} technical relationships hidden. Turn on “Show technical events” to view them.", () => hidden) : ""));
   }
 
   function renderProjectMap() {
