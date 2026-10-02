@@ -136,8 +136,9 @@ def verify_handoff(client, artifact_client, task_id, losses, artifact_loss, writ
 
 
 def exercise(args):
-    from adapter import Client, read_key
+    from adapter import read_key
     from artifact_client import ArtifactClient
+    from native_bridge import NativeHTTP
     from task_listener import TaskListener
 
     os.umask(0o077)
@@ -154,7 +155,7 @@ def exercise(args):
         fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as stream:
             stream.write(key)
-        clients[actor] = Client(args.origin, key)
+        clients[actor] = NativeHTTP({"url": args.origin, "ca_file": None}, key, 8)
         artifacts[actor] = ArtifactClient(args.origin, key_file, allow_loopback_http=True)
     creator = clients["claude-pilot"]
     task_input = {"client_id": "listener-contract-task", "title": "Correct the local addition fixture",
