@@ -525,3 +525,27 @@ dialog::backdrop { background: #15293875; }
 #admin-onboarding-command { font-family:monospace; font-size:12px; background:#f0f4f7; overflow-wrap:anywhere; }
 #admin-onboarding-list { margin-top:14px; }
 @media(max-width:640px) { .onboarding-form { grid-template-columns:minmax(0,1fr); } }
+
+/* Message notifications are compact and separate from connector telemetry. */
+.nav-unread-summary { display:flex; align-items:center; gap:10px; width:100%; padding:13px 12px; margin:20px 0 6px; border:1px solid #41615f; border-radius:10px; background:linear-gradient(120deg,#244741,#263944); color:#def8f1; text-align:left; }
+.nav-unread-summary:disabled { opacity:1; cursor:default; border-color:#344854; background:#233440; color:#beced9; }
+.nav-unread-summary:not(:disabled):hover { border-color:#74baad; background:#294e49; }
+.nav-unread-icon { color:#81d6bd; font-size:24px; }
+.nav-unread-summary strong { display:block; font-size:13px; font-weight:650; }
+.nav-unread-summary small { display:block; margin-top:4px; color:#a9c4c6; font-size:11px; line-height:1.5; }
+.nav-unread-summary[data-stale=true], .nav-activity[data-stale=true] { opacity:.72; }
+.nav-activity { display:block; padding:11px 12px; border-radius:8px; text-align:left; }
+.nav-activity-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.nav-activity-title { min-width:0; overflow-wrap:anywhere; }
+.nav-unread-badge { display:inline-flex; align-items:center; justify-content:center; min-width:23px; height:21px; padding:0 6px; border-radius:7px; background:#86e2cb; color:#153e39; font-size:11px; font-weight:750; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.nav-unread-badge[hidden] { display:none; }
+.nav-activity-meta { display:flex; align-items:center; gap:6px; margin-top:5px; color:#9eb2c0; font-size:10px; font-weight:400; line-height:1.4; }
+.nav-activity-dot { width:5px; height:5px; flex:0 0 5px; border-radius:50%; background:#6b7c89; }
+.nav-activity[data-active=true] .nav-activity-dot { background:#79d8b5; box-shadow:0 0 0 3px #79d8b516; }
+.nav-activity[data-active=true] .nav-activity-meta { color:#b4d9cf; }
+.nav-project { border:1px solid #334853; margin-bottom:3px; }
+#project-switcher { max-height:230px; }
+#nav-connect-agent { border:1px dashed #577978; color:#b9eadc; margin-bottom:5px; }
+.onboarding-step { margin:12px 0 0; padding-top:16px; border-top:1px solid var(--line); color:var(--accent); }
+.onboarding-step:first-child { padding-top:0; border-top:0; }
+@media(max-width:640px) { .nav-unread-summary { margin-top:14px; } }

@@ -7,6 +7,17 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    "{0} unread": "{0} непрочитанных",
+    "All caught up": "Всё прочитано",
+    "Checking messages…": "Проверяем сообщения…",
+    "Across {0} channels · open next →": "В {0} каналах · открыть →",
+    "New replies will appear here": "Новые ответы появятся здесь",
+    "{0} unread messages": "Непрочитанных сообщений: {0}",
+    "Checking activity…": "Проверяем активность…",
+    "No messages yet": "Сообщений пока нет",
+    "Recent discussion": "Свежее обсуждение",
+    "Last message {0}": "Сообщение {0}",
+
     "Select a project with an available communication channel.": "Выберите проект с доступным каналом для общения.",
     "Read and write: {0} channel(s). The connector starts in an empty folder on the agent’s computer.": "Чтение и запись: {0} каналов. Коннектор запускается в пустой папке на компьютере агента.",
     "Select 1 to 8 channels for the new agent.": "Выберите хотя бы один канал для нового агента (не более 8).",
@@ -732,6 +743,7 @@
     pollTimer: null, streamWatchdog: null, retry: 0, refreshing: false,
     lastRefresh: 0, refreshAgain: false, streamConnected: false,
     workspaceRevision: "", lastSync: 0, syncError: false, channelSeen: new Map(), channelUpdates: new Set(),
+    navigation: null, navigationRead: null, navigationReadTimer: null,
     pendingMessage: null, pendingNote: null, sending: false, publishing: false,
     loginBusy: false, loading: false, dataReady: false, projectReady: false,
     admin: null, adminLoading: false, adminBusy: false, adminKey: "", adminKeyVersion: 0,
@@ -917,6 +929,8 @@
       state.streamConnected = false; state.retry = 0; state.workspaceRevision = "";
       state.lastSync = 0; state.syncError = false;
       state.channelSeen.clear(); state.channelUpdates.clear();
+      state.navigation = null; state.navigationRead = null;
+      clearTimeout(state.navigationReadTimer); state.navigationReadTimer = null;
       state.accessRecheckUntil = 0;
     }
     state.refreshing = false;
@@ -1098,8 +1112,10 @@
   }
 
   function renderNavigation() {
+    const projectActivity = new Map(list(state.navigation?.projects).map(item => [item.id, item]));
+    const channelActivity = new Map(list(state.navigation?.channels).map(item => [item.id, item]));
     replaceContent("project-switcher", ...state.projects.map((project) => {
-      const button = node("button", "nav-button", () => (project.name));
+      const button = activityNavigationButton(project.name, projectActivity.get(project.id), "project");
       button.type = "button"; button.disabled = state.adminBusy;
       button.dataset.focusKey = `project:${project.id}`;
       button.setAttribute("aria-pressed", String(state.view !== "admin" && state.project?.id === project.id));
@@ -1107,8 +1123,9 @@
       return button;
     }));
     replaceContent("channel-list", ...state.channels.map((channel) => {
-      const updated = state.channelUpdates.has(channel.id) && (state.channel?.id !== channel.id || isCoordination() || ["overview", "project-native", "project-map"].includes(state.view));
-      const button = node("button", "nav-button", () => (formatText(["# ","",""], () => (channel.name), () => (updated ? tr(" · updates available") : ""))));
+      const activity = channelActivity.get(channel.id);
+      const updated = activity ? number(activity.unread_messages) > 0 : state.channelUpdates.has(channel.id) && (state.channel?.id !== channel.id || isCoordination() || ["overview", "project-native", "project-map"].includes(state.view));
+      const button = activityNavigationButton(`# ${channel.name}`, activity, "channel");
       button.type = "button";
       button.dataset.focusKey = `channel:${channel.id}`; button.dataset.updated = String(updated);
       button.disabled = state.adminBusy;
@@ -1134,6 +1151,7 @@
     }
     $("admin-navigation").hidden = !isOwner();
     $("nav-admin").disabled = state.adminBusy;
+    $("nav-connect-agent").disabled = state.adminBusy;
     $("nav-admin").setAttribute("aria-pressed", String(state.view === "admin"));
     setText($("project-name"), () => (state.view === "admin" ? tr("Administration") : state.project ? formatText(["","",""], () => (state.project.name), () => (state.project.archived_at ? tr(" · archived") : "")) : tr("No available projects")));
     setText($("view-name"), () => (({overview: tr("Overview"), "project-map": tr("Project map"), "project-native": tr("Project CLI feed"), chat: tr("Discussion"), activity: tr("Events"), native: tr("CLI activity"), notes: tr("Notes"), ...COORDINATION_VIEWS})[state.view] || ""));
@@ -1141,7 +1159,88 @@
       if (button.getAttribute("aria-pressed") === "true") button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }
+    const unreadChannels = list(state.navigation?.channels).filter(channel => number(channel.unread_messages) > 0);
+    const total = unreadChannels.reduce((sum, channel) => sum + number(channel.unread_messages), 0);
+    $("nav-unread").disabled = !total || state.adminBusy || state.loading;
+    $("nav-unread").dataset.unread = String(total);
+    $("nav-unread").dataset.stale = String(state.syncError);
+    setText($("nav-unread-count"), () => state.navigation ? total ? tr("{0} unread", () => numberText(total)) : tr("All caught up") : tr("Checking messages…"));
+    setText($("nav-unread-detail"), () => state.syncError ? tr("Refresh unconfirmed") : total ? tr("Across {0} channels · open next →", () => unreadChannels.length) : tr("New replies will appear here"));
     renderOverview();
+  }
+
+  function activityNavigationButton(name, activity, kind) {
+    const button = node("button", `nav-button nav-activity nav-${kind}`);
+    const unread = number(activity?.unread_messages);
+    const lastMessage = activity?.last_message_at ? new Date(activity.last_message_at) : null;
+    const recent = lastMessage && Number.isFinite(lastMessage.getTime()) && Date.now() - lastMessage.getTime() <= 5 * 60 * 1000;
+    button.dataset.unread = String(unread); button.dataset.active = String(Boolean(recent));
+    button.dataset.updated = String(unread > 0); button.dataset.stale = String(state.syncError);
+    const top = node("span", "nav-activity-top"), title = node("span", "nav-activity-title", () => name);
+    const badge = node("span", "nav-unread-badge", () => unread > 99 ? "99+" : String(unread)); badge.hidden = unread <= 0;
+    setOwnedAttribute(badge, "aria-label", () => tr("{0} unread messages", () => numberText(unread)));
+    appendOwned(top, () => title, () => badge);
+    const meta = node("span", "nav-activity-meta"), dot = node("span", "nav-activity-dot"); dot.setAttribute("aria-hidden", "true");
+    const when = node("span", "", () => !activity ? tr("Checking activity…") : !lastMessage ? tr("No messages yet") : recent ? tr("Recent discussion") : tr("Last message {0}", () => relativeMessageTime(lastMessage)));
+    if (lastMessage) setOwnedAttribute(meta, "title", () => dateText(activity.last_message_at));
+    appendOwned(meta, () => dot, () => when); appendOwned(button, () => top, () => meta);
+    return button;
+  }
+
+  function relativeMessageTime(date) {
+    const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    const [value, unit] = seconds < 60 ? [0, "minute"] : seconds < 3600 ? [-Math.floor(seconds / 60), "minute"] : seconds < 86400 ? [-Math.floor(seconds / 3600), "hour"] : [-Math.floor(seconds / 86400), "day"];
+    return new Intl.RelativeTimeFormat(localeName(), {numeric: "auto"}).format(value, unit);
+  }
+
+  async function loadNavigation(context) {
+    try {
+      const data = await api("/v1/navigation");
+      if (!current(context)) return;
+      if (!Array.isArray(data.projects) || !Array.isArray(data.channels)) throw new Error("Invalid navigation snapshot");
+      state.navigation = data;
+    } catch (error) {
+      if (!current(context)) return;
+      state.navigation = null;
+      if (error.status !== 404) throw error;
+    }
+  }
+
+  function scheduleChannelRead() {
+    if (state.navigationReadTimer) return;
+    state.navigationReadTimer = setTimeout(() => { state.navigationReadTimer = null; void markVisibleChannelRead(); }, 150);
+  }
+
+  async function markVisibleChannelRead() {
+    const scroller = $("message-list"), channelId = state.channel?.id, context = state.context;
+    const activity = list(state.navigation?.channels).find(channel => channel.id === channelId);
+    if (!activity || !state.dataReady || state.loading || state.view !== "chat" || document.hidden ||
+        $("search-input").value.trim() || !scroller.clientHeight || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 45 || state.navigationRead) return;
+    const through = Math.max(0, ...[...scroller.querySelectorAll("[data-message-seq]")].map(element => number(element.dataset.messageSeq)));
+    if (!through || through <= number(activity.last_read_seq)) return;
+    const request = {channelId, context}; state.navigationRead = request;
+    try {
+      await api(`/v1/channels/${pathId(channelId)}/read`, {method: "PUT", body: {through_seq: through}});
+      if (!current(context)) return;
+      await loadNavigation(context);
+      if (current(context)) renderNavigation();
+    } catch (error) {
+      // A failed or cancelled acknowledgement never clears a badge optimistically.
+      // The next authorized snapshot reconciles the monotonic cursor.
+      if (current(context) && error.status === 403) scheduleRefresh();
+    } finally { if (state.navigationRead === request) state.navigationRead = null; }
+  }
+
+  async function openNextUnread() {
+    if (state.adminBusy || state.loading) return;
+    const target = list(state.navigation?.channels).filter(channel => number(channel.unread_messages) > 0)
+      .sort((a, b) => String(b.last_message_at || "").localeCompare(String(a.last_message_at || "")))[0];
+    const project = target && state.projects.find(item => item.id === target.project_id);
+    if (!project) return;
+    if (state.project?.id !== project.id || state.view === "admin") await selectProject(project);
+    if (state.project?.id !== project.id) return;
+    const channel = state.channels.find(item => item.id === target.id);
+    if (channel) await selectChannel(channel);
   }
 
   function agentCard(agent) {
@@ -1186,7 +1285,7 @@
     const previousScroll = scroller.scrollTop;
     const openedDetails = new Set([...scroller.querySelectorAll(".message-details[open]")].map((item) => item.dataset.messageId));
     replaceContent("message-list", ...shown.map((message) => {
-      const article = node("article", "message"); article.dataset.messageId = message.id;
+      const article = node("article", "message"); article.dataset.messageId = message.id; article.dataset.messageSeq = String(message.seq);
       const content = node("div", "message-content");
       const meta = node("div", "message-meta");
       appendOwned(meta, () => (node("span", "message-author", () => (displayName(message.author_id)))), () => (node("time", "message-time", () => (dateText(message.created_at)))));
@@ -1247,6 +1346,7 @@
     }));
     if (state.messages.has(replyValue)) $("reply-to").value = replyValue;
     scroller.scrollTop = atBottom ? scroller.scrollHeight : previousScroll;
+    scheduleChannelRead();
   }
 
   function renderEvents() {
@@ -1836,7 +1936,7 @@
   }
 
   async function reconcileWorkspace(context) {
-    const projects = await api("/v1/projects");
+    const [projects] = await Promise.all([api("/v1/projects"), loadNavigation(context)]);
     if (!current(context)) return false;
     state.projects = list(projects.projects);
     let selected = state.project && state.projects.find((project) => project.id === state.project.id);
@@ -1945,6 +2045,7 @@
       state.messages.clear(); state.events.clear(); state.agents = []; state.notes = []; state.channels = []; state.notesTruncated = false;
       $("notes-truncated").hidden = true;
       state.channel = null; state.project = null; state.projects = []; state.cursors.clear();
+      state.navigation = null;
       clearDrafts();
       for (const id of ["message-list", "activity-list", "agent-list", "memory-list", "recipient-list"]) $(id).replaceChildren();
       setView("chat"); renderNavigation(); updatePermissions();
@@ -3167,6 +3268,9 @@
   for (const button of $("admin-section-nav").querySelectorAll("button")) button.addEventListener("click", () => setAdminSection(button.dataset.adminSection));
   setAdminSection("accounts");
   $("nav-admin").addEventListener("click", () => { if (state.view !== "admin") void selectAdmin(); });
+  $("nav-connect-agent").addEventListener("click", () => { setAdminSection("onboarding"); if (state.view !== "admin") void selectAdmin(); });
+  $("nav-unread").addEventListener("click", () => { setNavigationOpen(false); void openNextUnread(); });
+  $("message-list").addEventListener("scroll", scheduleChannelRead, {passive: true});
   $("admin-onboarding-project").addEventListener("change", () => { renderOnboardingChannels(true); updateAdminControls(); });
   $("admin-onboarding-form").addEventListener("submit", event => {
     event.preventDefault();
