@@ -93,16 +93,44 @@ def check_package(repository, identity, token, *, allow_missing=False):
     return True
 
 
+def inspect_package(repository, identity, token):
+    """Diagnostic metadata only; never accepts or repairs a package for publishing."""
+    identity = verify_repository(repository, identity, token)
+    owner = repository.split("/")[0]
+    status, value = api_get("/users/" + owner + "/packages/container/" + PACKAGE_NAME, token)
+    require(status == 200, "package metadata inspection failed")
+    linked = value.get("repository")
+    linked = linked if isinstance(linked, dict) else {}
+    def number(value):
+        return value if type(value) is int and 0 < value < 10**20 else None
+    def text(value, pattern):
+        return value if isinstance(value, str) and len(value) <= 256 and re.fullmatch(pattern, value) else None
+    return {"expected_repository_id": identity, "id": number(value.get("id")),
+            "name": text(value.get("name"), r"[A-Za-z0-9][A-Za-z0-9_.-]*"),
+            "package_type": value.get("package_type") if value.get("package_type") in
+                ("container", "docker", "npm", "maven", "rubygems", "nuget") else None,
+            "visibility": value.get("visibility") if value.get("visibility") in
+                ("private", "public", "internal") else None,
+            "repository": {"id": number(linked.get("id")),
+                "full_name": text(linked.get("full_name"), r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*")}}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--repository-id", required=True)
-    parser.add_argument("--allow-missing", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--allow-missing", action="store_true")
+    mode.add_argument("--inspect", action="store_true", help="Print allowlisted metadata only; not a publication check")
     args = parser.parse_args(argv)
     try:
         require(os.environ.get("GITHUB_REPOSITORY") == args.repository and
                 os.environ.get("GITHUB_REPOSITORY_ID") == args.repository_id,
                 "workflow repository identity mismatch")
+        if args.inspect:
+            print(json.dumps(inspect_package(args.repository, args.repository_id,
+                                             os.environ.get("GITHUB_TOKEN", "")), sort_keys=True))
+            return 0
         verified = check_package(args.repository, args.repository_id, os.environ.get("GITHUB_TOKEN", ""),
                                  allow_missing=args.allow_missing)
         print(json.dumps({"package": PACKAGE_NAME, "repository_id": int(args.repository_id),

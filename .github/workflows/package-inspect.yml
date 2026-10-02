@@ -1,0 +1,48 @@
+name: Package inspection
+run-name: Package inspection · ${{ github.event_name }} · ${{ github.sha }}
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  registration:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - run: echo 'Package inspection registration only; no registry requests or changes.'
+
+  inspect:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read only the new package's allowlisted identity metadata
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set +x
+          umask 077
+          python3 -B scripts/package-guard.py --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" --inspect \
+            | tee "$RUNNER_TEMP/package-inspection.json"
+          {
+            echo '### Read-only package identity inspection'
+            echo '```json'
+            cat "$RUNNER_TEMP/package-inspection.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

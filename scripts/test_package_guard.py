@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import unittest
@@ -82,6 +83,43 @@ class PackageGuardTests(unittest.TestCase):
             with self.assertRaises(guard.PackageError):
                 guard.api_get("/users/owner/packages/container/agent-mesh", "PRIVATE")
         opener.assert_not_called()
+
+    def test_inspection_reports_only_allowlisted_metadata_without_accepting_package(self):
+        package = dict(PACKAGE, id=77, visibility="public", description="PRIVATE_TOKEN",
+                       versions=[{"body": "PRIVATE_TOKEN"}],
+                       repository={"id": 9999, "full_name": "owner/different-repo", "description": "PRIVATE_TOKEN"})
+        with mock.patch.object(guard, "api_get", side_effect=[(200, REPOSITORY), (200, package)]) as api:
+            report = guard.inspect_package("owner/agent-mesh", "1234", "PRIVATE_TOKEN")
+        self.assertEqual(report, {"expected_repository_id": 1234, "id": 77, "name": "agent-mesh-server",
+                                 "package_type": "container", "visibility": "public",
+                                 "repository": {"id": 9999, "full_name": "owner/different-repo"}})
+        self.assertNotIn("PRIVATE", json.dumps(report))
+        self.assertEqual(api.call_args.args[0], "/users/owner/packages/container/agent-mesh-server")
+        with mock.patch.object(guard, "api_get", side_effect=[(200, REPOSITORY), (200, package)]):
+            with self.assertRaises(guard.PackageError):
+                guard.check_package("owner/agent-mesh", "1234", "PRIVATE_TOKEN")
+
+    def test_inspection_missing_or_malformed_fields_do_not_dump_remote_values(self):
+        package = {"id": True, "name": "PRIVATE\nTOKEN", "visibility": ["PRIVATE_TOKEN"],
+                   "package_type": {"PRIVATE": "TOKEN"}, "repository": {"id": "PRIVATE", "full_name": "PRIVATE\nTOKEN"}}
+        with mock.patch.object(guard, "api_get", side_effect=[(200, REPOSITORY), (200, package)]):
+            report = guard.inspect_package("owner/agent-mesh", "1234", "PRIVATE_TOKEN")
+        self.assertEqual(report, {"expected_repository_id": 1234, "id": None, "name": None,
+                                 "package_type": None, "visibility": None,
+                                 "repository": {"id": None, "full_name": None}})
+        with mock.patch.object(guard, "api_get", side_effect=[(200, REPOSITORY), (403, {"message": "PRIVATE_TOKEN"})]):
+            with self.assertRaisesRegex(guard.PackageError, "package metadata inspection failed"):
+                guard.inspect_package("owner/agent-mesh", "1234", "PRIVATE_TOKEN")
+
+    def test_diagnostic_workflow_has_read_only_manual_scope_and_static_registration(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/package-inspect.yml").read_text()
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("    permissions:\n      contents: read\n      packages: read", workflow)
+        self.assertIn("    permissions: {}", workflow)
+        self.assertIn('--repository-id "$GITHUB_REPOSITORY_ID" --inspect', workflow)
+        self.assertNotIn(": write", workflow)
+        for forbidden in ("docker ", "release-publish.py", "--allow-missing", "pull_request_target"):
+            self.assertNotIn(forbidden, workflow)
 
 
 if __name__ == "__main__":
