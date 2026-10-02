@@ -127,6 +127,8 @@ try {
   await tab.eval(`document.querySelector('#project-switcher [data-focus-key="project:${projectId}"]').click()`);
   await tab.wait(`!document.getElementById('nav-project-native').disabled`);
   stage = 'project_feed'; await tab.eval(`document.getElementById('nav-project-native').click()`);
+  // Watch the complete technical stream without any publication or model action.
+  await tab.eval(`{ const control=document.getElementById('project-native-technical'); if(control&&!control.checked) control.click(); }`);
   await tab.wait(`!document.getElementById('project-native-panel').hidden && document.querySelectorAll('#project-native-list [data-native-id]').length>0 && !document.getElementById('refresh-button').disabled`);
   const baseline = new Set((await tab.eval(rows)).map(r => r.id));
   check('real_existing_records_visible', initial.some(e => baseline.has(e.id)));
