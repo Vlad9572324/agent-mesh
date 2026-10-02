@@ -2,6 +2,7 @@
 // Own schema in agentlink_test, own loopback TLS server, own Chromium. No shared
 // seed credentials, agentlink_e2e dependency, production URL or model invocation.
 // Run after onboarding backend/web/packager integration: node tests/onboarding_gui.mjs
+// Sidebar/read-cursor regression: node tests/onboarding_gui.mjs --sidebar-only
 import {readFile, writeFile, mkdtemp, mkdir, copyFile, rm, open, lstat} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
@@ -15,14 +16,16 @@ import {runtimeDir, certificateFile, browserExecutable} from '../scripts/operato
 process.umask(0o077);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const runtime = runtimeDir(), chrome = browserExecutable(), caPath = certificateFile();
+const sidebarOnly = process.argv.includes('--sidebar-only');
 const run = `onboarding-${randomUUID().slice(0, 8)}`;
 const schema = `onboarding_gui_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const ids = Object.fromEntries(['owner', 'writer', 'peer', 'viewer', 'project', 'other', 'alpha', 'beta', 'quiet', 'private', 'other-channel', 'invitee', 'cancelled', 'invalid'].map(name => [name, `${run}-${name}`]));
-const report = {run, schema, database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
+const report = {run, schema, mode: sidebarOnly ? 'sidebar' : 'onboarding', database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
   browser_errors: [], requests: [], layouts: [], screenshots: [], models_started: 0,
   scope: 'Owned isolated schema, loopback TLS API and Chromium; no shared fixture keys or production requests'};
 const tabs = [], keys = {}, secrets = new Set();
 const allowedMutations = new Set();
+const allowedReads = new Set(sidebarOnly ? ['alpha', 'beta', 'quiet', 'other-channel'].map(name => `/v1/channels/${ids[name]}/read`) : []);
 const js = JSON.stringify, pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const assert = (value, message) => { if (!value) throw new Error(message); };
@@ -146,7 +149,8 @@ class CDP {
       if (message.method === 'Page.javascriptDialogOpening') { const accept = name === 'owner' && confirmNext; confirmNext = false; void this.call('Page.handleJavaScriptDialog', {accept}).catch(() => {}); }
       if (message.method === 'Fetch.requestPaused') {
         const {request, requestId} = message.params, url = new URL(request.url);
-        const deny = url.origin !== new URL(base).origin || request.method !== 'GET' && !(name === 'owner' && allowedMutations.has(request.method + ' ' + url.pathname));
+        const readCursor = request.method === 'PUT' && allowedReads.has(url.pathname) && ['writer', 'viewer', 'owner'].includes(name);
+        const deny = url.origin !== new URL(base).origin || request.method !== 'GET' && !readCursor && !(name === 'owner' && allowedMutations.has(request.method + ' ' + url.pathname));
         if (deny) report.browser_guard_failed = true;
         void this.call(deny ? 'Fetch.failRequest' : 'Fetch.continueRequest', deny ? {requestId, errorReason: 'BlockedByClient'} : {requestId}).catch(() => {});
       }
@@ -278,8 +282,146 @@ with tarfile.open(sys.argv[1], 'r:gz') as archive:
   return JSON.parse((await command('python3', ['-B', '-c', inspect, packagePath], 'inspect-private-package')).toString('utf8'));
 }
 
+const channelButton = name => `#channel-list [data-focus-key="channel:${ids[name]}"]`;
+const projectButton = name => `#project-switcher [data-focus-key="project:${ids[name]}"]`;
+const navigation = (actor = 'viewer') => api('/v1/navigation', 'GET', undefined, actor);
+const navigationChannel = async (name, actor = 'viewer') => (await navigation(actor)).channels.find(item => item.id === ids[name]);
+async function discussion(name, body = 'An actual isolated discussion message', actor = 'peer') {
+  return (await api(`/v1/channels/${ids[name]}/messages`, 'POST', {client_id: `${run}-${randomUUID()}`, body, recipient_ids: []}, actor, 201)).message;
+}
+async function technical(name, type = 'tool.completed') {
+  return (await api(`/v1/channels/${ids[name]}/activity`, 'POST', {client_id: `${run}-${randomUUID()}`,
+    session_id: `${run}-sidebar-session`, runtime: 'codex', event_type: type,
+    ...(type.startsWith('tool.') ? {tool_name: 'Read'} : {})}, 'writer', 201)).activity;
+}
+async function refreshTab(tab) {
+  const before = tab.requests.filter(item => item.path === '/v1/navigation').length;
+  await tab.click('#refresh-button');
+  await tab.wait(() => tab.requests.filter(item => item.path === '/v1/navigation').length > before
+    && ![...tab.active.values()].some(item => item.path === '/v1/navigation'), 'authorized navigation refresh');
+}
+async function unread(tab, selector, count, active) {
+  await tab.wait(`(()=>{const e=document.querySelector(${js(selector)});return e&&e.dataset.unread===${js(String(count))}${active === undefined ? '' : `&&e.dataset.active===${js(String(active))}`};})()`, `navigation count ${count}`);
+}
+async function readMarker(name, seq) {
+  await viewer.wait(async () => (await navigationChannel(name)).last_read_seq === seq, 'persisted visible read position');
+}
+async function deliverySnapshot() {
+  return (await sql(`SET search_path TO "${schema}"; SELECT json_build_object('native',(SELECT json_agg(n ORDER BY id) FROM native_activity n),'receipts',(SELECT json_agg(r ORDER BY message_id,agent_id) FROM receipts r))::text;`, 'delivery-state')).toString().trim();
+}
+async function sidebarCases() {
+  let lastAlpha, receiptsBefore;
+  await check('empty authorized sidebar has exact zero counts and no invented discussion activity', async () => {
+    await isolatedServer(); await fixtures(); await browsers();
+    for (const tab of [writer, viewer]) { await tab.click(projectButton('project')); await tab.click('#nav-overview'); }
+    const snapshot = await navigation();
+    assert(snapshot.projects.length === 2 && snapshot.channels.length === 4 && snapshot.channels.every(item => item.unread_messages === 0 && item.last_read_seq === 0 && item.latest_message_seq === 0 && !item.last_message_at), 'Empty authorized snapshot has invented history');
+    await unread(viewer, '#nav-unread', 0); await unread(viewer, channelButton('alpha'), 0, false);
+    assert(await viewer.eval(`!document.querySelector(${js(channelButton('private'))}) && document.getElementById('nav-connect-agent').closest('[hidden]')!==null`), 'Viewer sees hidden channel or owner connection control');
+    assert(report.requests.every(item => item.method === 'GET'), 'Empty sidebar produced a write');
+  });
+  await check('technical events preserve zero message counters and do not create recent discussion dots', async () => {
+    await technical('alpha'); await technical('beta', 'session.started'); await technical('quiet', 'tool.failed');
+    await refreshTab(viewer);
+    for (const name of ['alpha', 'beta', 'quiet']) await unread(viewer, channelButton(name), 0, false);
+    const snapshot = await navigation();
+    assert(snapshot.channels.every(item => !item.last_message_at && item.latest_message_seq === 0 && item.unread_messages === 0), 'Native activity became a discussion');
+    const channels = (await api(`/v1/projects/${ids.project}/channels`, 'GET', undefined, 'viewer')).channels;
+    assert(channels.find(item => item.id === ids.alpha).latest_seq > 0, 'Technical test did not actually create a journal event');
+  });
+  await check('actual other-author messages produce exact project and channel counts without hidden-channel leakage', async () => {
+    await discussion('private', 'Private channel must not influence viewer project summary', 'writer');
+    await refreshTab(viewer);
+    assert((await navigation()).projects.every(item => item.unread_messages === 0 && !item.last_message_at), 'Hidden discussion leaked through project aggregates');
+    await discussion('alpha'); await discussion('alpha'); lastAlpha = await discussion('alpha', 'Own writer message counts only for other accounts', 'writer');
+    await discussion('beta'); await discussion('other-channel');
+    await refreshTab(viewer); await refreshTab(writer);
+    await unread(viewer, channelButton('alpha'), 3, true); await unread(viewer, channelButton('beta'), 1, true);
+    await unread(viewer, projectButton('project'), 4, true); await unread(viewer, projectButton('other'), 1, true); await unread(viewer, '#nav-unread', 5);
+    await unread(writer, channelButton('alpha'), 2, true); await unread(writer, '#nav-unread', 4);
+    assert(!(await navigation()).channels.some(item => item.id === ids.private), 'Hidden channel present in navigation endpoint');
+    await viewer.click('#nav-project-native'); await refreshTab(viewer);
+    assert((await navigationChannel('alpha')).last_read_seq === 0, 'Opening CLI feed marked discussion as read');
+    receiptsBefore = await deliverySnapshot();
+  });
+  await check('opening visible discussion clears only its loaded messages and keeps delivery receipts unchanged', async () => {
+    await viewer.click(channelButton('alpha'));
+    await viewer.wait(`!!document.querySelector('#message-list [data-message-id="${lastAlpha.id}"]')`, 'actual discussion rendered');
+    await readMarker('alpha', lastAlpha.seq); await unread(viewer, channelButton('alpha'), 0, true); await unread(viewer, '#nav-unread', 2);
+    assert((await navigationChannel('beta')).last_read_seq === 0 && (await navigationChannel('other-channel')).last_read_seq === 0, 'Reading one channel cleared another');
+    assert(await deliverySnapshot() === receiptsBefore, 'GUI read changed CLI activity or agent delivery receipts');
+  });
+  await check('search and scrolled-away chat retain unread messages until the unfiltered bottom is visible', async () => {
+    await viewer.fill('search-input', 'missing-search-result');
+    const filtered = await discussion('alpha', 'Message hidden by search');
+    await refreshTab(viewer); await pause(250);
+    assert((await navigationChannel('alpha')).last_read_seq === lastAlpha.seq, 'Filtered message falsely acknowledged');
+    await unread(viewer, channelButton('alpha'), 1, true);
+    await viewer.fill('search-input', '');
+    await readMarker('alpha', filtered.seq);
+    await viewer.click('#nav-overview');
+    for (let index = 0; index < 18; index++) lastAlpha = await discussion('alpha', `Scrollable discussion ${index}\n${'Visible transcript line\n'.repeat(8)}`);
+    await viewer.click(channelButton('alpha')); await readMarker('alpha', lastAlpha.seq);
+    assert(await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=0;e.dispatchEvent(new Event('scroll'));return e.scrollHeight-e.clientHeight>200;})()`), 'Scroll test did not create real overflow');
+    const below = await discussion('alpha', 'New discussion below the currently visible viewport');
+    await refreshTab(viewer); await pause(250);
+    assert((await navigationChannel('alpha')).last_read_seq === lastAlpha.seq, 'Offscreen new message falsely acknowledged');
+    await unread(viewer, channelButton('alpha'), 1, true);
+    await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=e.scrollHeight;e.dispatchEvent(new Event('scroll'));})()`);
+    await readMarker('alpha', below.seq); lastAlpha = below;
+    assert(await deliverySnapshot() === receiptsBefore, 'GUI read synthesized agent acceptance');
+  });
+  await check('read state survives login and historical activity is distinct from unread messages', async () => {
+    await viewer.click('#logout-button'); await login(viewer, 'viewer'); await viewer.click(projectButton('project')); await viewer.click('#nav-overview');
+    await unread(viewer, channelButton('alpha'), 0, true);
+    assert((await navigationChannel('alpha')).last_read_seq === lastAlpha.seq, 'Server read cursor lost across login');
+    await sql(`SET search_path TO "${schema}"; UPDATE messages SET created_at=now()-interval '10 minutes' WHERE channel_id='${ids.beta}';`, 'age-owned-discussion');
+    await refreshTab(viewer); await unread(viewer, channelButton('beta'), 1, false);
+    await viewer.filter('language-select', 'en');
+    assert(await viewer.eval(`document.querySelector(${js(channelButton('beta'))}).textContent.includes('Last message')`), 'Historical discussion presented as currently active');
+    await viewer.click('#nav-unread');
+    await viewer.wait(`document.getElementById('channel-feed-name').textContent.includes(${js(ids['other-channel'])})`, 'next unread opens another project');
+    await viewer.wait(async () => (await navigationChannel('other-channel')).unread_messages === 0, 'next unread visible discussion acknowledged');
+    await unread(viewer, '#nav-unread', 1);
+    assert((await navigationChannel('beta')).unread_messages === 1, 'Next unread cleared a channel it did not display');
+  });
+  await check('revoked channel disappears from account counts while independent authorized accounts retain it', async () => {
+    await grant('viewer', 'channel', 'beta', 'none');
+    await refreshTab(viewer); await viewer.click(projectButton('project'));
+    await viewer.wait(`!document.querySelector(${js(channelButton('beta'))})`, 'revoked channel removed');
+    await unread(viewer, '#nav-unread', 0);
+    const snapshot = await navigation();
+    assert(!snapshot.channels.some(item => item.id === ids.beta) && snapshot.projects.find(item => item.id === ids.project).unread_messages === 0, 'Revoked channel count remains in project summary');
+    await api(`/v1/channels/${ids.beta}/read`, 'PUT', {through_seq: 1}, 'viewer', 404);
+    assert((await navigationChannel('beta', 'writer')).unread_messages === 1, 'One account read/revocation cleared another account');
+  });
+  await check('Russian English mobile and logout show truthful discussion labels and clear protected sidebar data', async () => {
+    for (const language of ['ru', 'en']) {
+      await viewer.filter('language-select', language);
+      const text = await viewer.eval(`document.querySelector(${js(channelButton('alpha'))}).textContent`);
+      assert(language === 'en' ? text.includes('Recent discussion') : /обсуждение/i.test(text), 'Recent discussion label not localized');
+      assert(!/working|работает/i.test(text), 'Message activity falsely claims a running agent');
+    }
+    await screenshot(viewer, 'sidebar-desktop', 1440);
+    await viewer.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
+    await viewer.click('#sidebar-toggle');
+    assert(await viewer.eval('document.documentElement.scrollWidth<=innerWidth+1'), 'Sidebar overflows mobile viewport');
+    await screenshot(viewer, 'sidebar-mobile-390', 390);
+    for (const tab of tabs) {
+      await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
+      await tab.click('#logout-button');
+      await tab.wait(`!document.getElementById('login-panel').hidden && document.getElementById('project-switcher').textContent==='' && document.getElementById('channel-list').textContent==='' && localStorage.length===0 && sessionStorage.length===0`, 'logout clears account navigation');
+    }
+    const writes = report.requests.filter(item => item.method !== 'GET');
+    assert(writes.length > 0 && writes.every(item => item.method === 'PUT' && allowedReads.has(item.path)), 'Browser wrote anything beyond scoped read cursors');
+    assert(!report.browser_guard_failed && report.browser_errors.length === 0, 'Browser crossed origin/mutation boundary or raised a runtime error');
+  });
+}
+
 let token, invitation;
 try {
+  if (sidebarOnly) await sidebarCases();
+  else {
   await check('isolated owner wizard is enabled without startup mutations and denied to other roles', async () => {
     await isolatedServer(); await fixtures(); await browsers();
     for (const actor of ['writer', 'viewer']) {
@@ -376,6 +518,7 @@ try {
     }
     assert(!report.browser_guard_failed && report.browser_errors.length === 0, 'Browser crossed mutation/origin boundary or raised a runtime error');
   });
+  }
 } catch (error) {
   if (!report.cases.some(item => !item.passed)) report.cases.push({name: 'infrastructure', passed: false, error: safeError(error)});
 } finally {
@@ -392,7 +535,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === 6 && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === (sidebarOnly ? 8 : 6) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/onboarding-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});
