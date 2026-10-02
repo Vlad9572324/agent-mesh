@@ -24,7 +24,7 @@ import tarfile
 import tempfile
 
 
-PACKAGING_VERSION = 2
+PACKAGING_VERSION = 3
 TARGET = {"goos": "linux", "goarch": "amd64"}
 VERSION = re.compile(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?\Z")
 INSTALL_SOURCE = "docs/install-release.md"
@@ -49,12 +49,21 @@ CONNECTOR_FILES = (
     "docs/task-listener.md",
     "listener-contract.json",
 )
+ONBOARDING_FILES = (
+    "onboarding/install.sh", "onboarding/install.py", "onboarding/connect.py",
+    "onboarding/README.md", "onboarding/PROMPT.md",
+)
+# The server embeds these exact committed connector sources for invitations.
+EMBED_FILES = (*CONNECTOR_FILES, *LICENSE_FILES, "CLI-CONNECTION.md", NOTICES_SOURCE,
+               *ONBOARDING_FILES)
 # Review changes to this list together with Go embeds/imports. Tests and other
 # tools are deliberately not build inputs, and never become release payloads.
 BUILD_FILES = (
+    "onboarding_assets.go",
     "go.mod",
     "go.sum",
     "cmd/agent-link/main.go",
+    "cmd/agent-link/onboarding.go",
     "cmd/agent-link/version.go",
     "internal/link/admin.go",
     "internal/link/artifacts.go",
@@ -65,6 +74,8 @@ BUILD_FILES = (
     "internal/link/memory_schema.sql",
     "internal/link/native_events.go",
     "internal/link/native_events_schema.sql",
+    "internal/link/onboarding.go",
+    "internal/link/onboarding_schema.sql",
     "internal/link/project_map.go",
     "internal/link/schema.sql",
     "internal/link/sessions.go",
@@ -185,8 +196,9 @@ def validate_build_inputs(tree):
     # A new non-test Go/assembly/embed input must be consciously allowlisted,
     # not silently omitted from the isolated build or accidentally packaged.
     for name in tree:
-        if name.startswith(("cmd/agent-link/", "internal/link/")) and not name.endswith("_test.go"):
-            if name not in BUILD_FILES:
+        if (name.startswith(("cmd/agent-link/", "internal/link/", "onboarding/"))
+                or ("/" not in name and name.endswith(".go"))) and not name.endswith("_test.go"):
+            if name not in (*BUILD_FILES, *EMBED_FILES):
                 raise ReleaseError("unreviewed build input; update BUILD_FILES: " + name)
 
 
@@ -282,8 +294,8 @@ def release(repo, version, output):
     commit = clean_commit(repo)
     tree = source_tree(repo, commit)
     validate_build_inputs(tree)
-    names = (*BUILD_FILES, *WEB_FILES, *CONNECTOR_FILES, *LICENSE_FILES, INSTALL_SOURCE, NOTICES_SOURCE,
-             "scripts/build-release.py")
+    names = tuple(dict.fromkeys((*BUILD_FILES, *EMBED_FILES, *WEB_FILES, *CONNECTOR_FILES,
+                               *LICENSE_FILES, INSTALL_SOURCE, NOTICES_SOURCE, "scripts/build-release.py")))
     blobs = read_manifest(repo, tree, names)
     if blobs["scripts/build-release.py"] != Path(__file__).read_bytes():
         raise ReleaseError("running builder does not match the committed builder")
@@ -298,7 +310,7 @@ def release(repo, version, output):
         staging = Path(temp)
         source = staging / "source"
         source.mkdir()
-        for name in BUILD_FILES:
+        for name in dict.fromkeys((*BUILD_FILES, *EMBED_FILES)):
             target = source / name
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:

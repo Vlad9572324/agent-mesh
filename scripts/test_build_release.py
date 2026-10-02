@@ -193,7 +193,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info["source_commit"], self.commit)
         self.assertEqual(info["build_date"], "2026-10-02T00:00:00Z")
         self.assertEqual(info["target"], {"goos": "linux", "goarch": "amd64"})
-        self.assertEqual(info["packaging_version"], 2)
+        self.assertEqual(info["packaging_version"], 3)
         with patch.dict(os.environ, {"GOFLAGS": "-tags=unsafe", "CGO_ENABLED": "1", "GOOS": "windows",
                                     "GOWORK": "/outside/go.work", "SOURCE_DATE_EPOCH": "0", "GOPROXY": "https://example.invalid"}):
             env = release.build_environment(self.epoch)
@@ -253,8 +253,9 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse((self.root / "new").exists())
 
     def test_complete_release_contract_and_repeatability_with_fake_offline_build(self):
-        names = (*release.BUILD_FILES, *release.WEB_FILES, *release.CONNECTOR_FILES, *release.LICENSE_FILES,
-                 release.INSTALL_SOURCE, release.NOTICES_SOURCE, "scripts/build-release.py")
+        names = tuple(dict.fromkeys((*release.BUILD_FILES, *release.EMBED_FILES, *release.WEB_FILES,
+                                    *release.CONNECTOR_FILES, *release.LICENSE_FILES,
+                                    release.INSTALL_SOURCE, release.NOTICES_SOURCE, "scripts/build-release.py")))
         blobs = {name: ("committed:" + name).encode() for name in names}
         blobs["scripts/build-release.py"] = Path(release.__file__).read_bytes()
         blobs[release.INSTALL_SOURCE] = (b"<!-- release-install-version: v0.1.0-rc.1 -->\n"
@@ -271,8 +272,8 @@ class ReleaseTests(unittest.TestCase):
             raise AssertionError(args)
 
         def fake_build(source, binary, info, env):
-            self.assertEqual({str(p.relative_to(source)) for p in source.rglob("*") if p.is_file()}, set(release.BUILD_FILES))
-            for name in release.BUILD_FILES:
+            self.assertEqual({str(p.relative_to(source)) for p in source.rglob("*") if p.is_file()}, set((*release.BUILD_FILES, *release.EMBED_FILES)))
+            for name in (*release.BUILD_FILES, *release.EMBED_FILES):
                 self.assertEqual((source / name).read_bytes(), blobs[name])
             binary.write_bytes(b"fake-offline-go-binary")
 
