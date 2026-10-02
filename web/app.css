@@ -549,3 +549,5 @@ dialog::backdrop { background: #15293875; }
 .onboarding-step { margin:12px 0 0; padding-top:16px; border-top:1px solid var(--line); color:var(--accent); }
 .onboarding-step:first-child { padding-top:0; border-top:0; }
 @media(max-width:640px) { .nav-unread-summary { margin-top:14px; } }
+
+.nav-unread-summary { position:sticky; top:8px; z-index:2; box-shadow:0 4px 14px #14242d35; }

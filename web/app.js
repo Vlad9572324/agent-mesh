@@ -1095,6 +1095,7 @@
   function setAdminSection(section) {
     if (!["onboarding", "accounts", "projects", "access", "diagnostics"].includes(section)) return;
     state.adminSection = section;
+    $("admin-panel").querySelector(".admin-heading").hidden = section === "onboarding";
     const groups = {
       onboarding: [$("admin-onboarding-panel")],
       accounts: [$("admin-principal-list").closest("section"), $("admin-principal-form").closest("section")],
