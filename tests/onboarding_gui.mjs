@@ -241,7 +241,8 @@ async function generatedCommand() {
   const token = tokens[0]; secrets.add(token);
   const metadata = await api('/v1/admin/onboarding');
   assert(value.includes(new URL(base).origin) && value.includes('/connect/install.sh') && value.includes('bash -o pipefail')
-    && value.includes('--pinnedpubkey') && value.includes(metadata.spki_pin), 'Connection command lost its configured origin, failure boundary or TLS pin');
+    && value.includes('--pinnedpubkey') && value.includes(metadata.spki_pin) && value.includes('curl --disable')
+    && value.includes('--noproxy'), 'Connection command lost its origin, failure boundary, TLS pin or curl configuration isolation');
   assert(!value.includes(keys.owner), 'Owner key appeared in agent onboarding command');
   assert(await owner.eval(`localStorage.length===0 && sessionStorage.length===0 && !location.href.includes(${js(token)})`), 'Invitation persisted in browser storage or URL');
   return token;
