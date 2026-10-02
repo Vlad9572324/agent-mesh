@@ -29,9 +29,12 @@ reviewed commit from this repository's fresh history.
 
 ## Artifact contract
 
-The published prerelease `v0.1.0-rc.2` below illustrates the contract. For a new
-release, substitute a new validated version, keeping the same four asset types.
-Never overwrite an already published version.
+The table records the published `v0.1.0-rc.2` packaging-version-1 contents.
+The current builder uses packaging version 2 and adds root `LICENSE` (Apache-2.0)
+and `NOTICE` files to both archives, retaining `THIRD_PARTY_NOTICES.md` and its
+separate dependency licenses. For a new release, substitute a new validated
+version, keeping the same four asset types. No new build has been published by
+this license change; never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
@@ -320,8 +323,10 @@ After a successful publication, the reference format is
 `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-40-character-source-commit>`.
 The binary version is `v0.1.0-rc.2-container.<first-12-commit-characters>`.
 `VERSION`, `REVISION`, and `CREATED` build arguments carry that identity into the
-runtime image; the source OCI label links the image to its repository. No license
-label should be invented where the project has not declared one.
+runtime image; the source OCI label links the image to its repository. New images
+built from the licensed source declare `org.opencontainers.image.licenses=Apache-2.0`
+and include `LICENSE` and `NOTICE` alongside the dependency notices under
+`/opt/agent-mesh/`. The published rc.2 image predates this addition and is unchanged.
 
 Publication refuses an existing commit tag. Only an explicit registry
 manifest-not-found response permits a new push; authentication or network failure

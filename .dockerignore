@@ -11,4 +11,6 @@ web/**
 !web/app.css
 !RELEASE.json
 !INSTALL.md
+!LICENSE
+!NOTICE
 !THIRD_PARTY_NOTICES.md

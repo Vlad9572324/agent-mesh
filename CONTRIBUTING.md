@@ -9,6 +9,14 @@ Start with the [architecture](docs/architecture.md), [API reference](docs/api-re
 and [backend invariants](BACKEND.md). [Getting started](docs/getting-started.md)
 provides a fresh local development setup.
 
+## License and contributions
+
+Agent Mesh is licensed under [Apache License 2.0](LICENSE). Unless you explicitly
+state otherwise, contributions intentionally submitted for inclusion are under
+that license, as described in its Section 5. You retain copyright in your work;
+no copyright assignment is required. Submit only material you are authorized to
+contribute, and preserve applicable third-party licenses and attribution notices.
+
 ## Language and contribution scope
 
 Source comments, documentation, command help, API examples, and default names use

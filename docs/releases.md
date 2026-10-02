@@ -56,8 +56,16 @@ rewritten to update documentation status.
 
 Public source availability is separate from deployment security and package
 permissions. Agent Mesh remains a trusted-LAN pilot, not an Internet-facing
-production service. A project-wide license has not been selected; see
-[authorship](../AUTHORS.md) and [dependency notices](third-party-notices.md).
+production service. The current source is licensed under [Apache-2.0](../LICENSE),
+with [NOTICE](../NOTICE) and separate [dependency notices](third-party-notices.md).
+
+### License adoption after rc.2
+
+Apache-2.0 was added to the current source after `v0.1.0-rc.2` was published.
+That release's tag, archives and image are unchanged: the archives do not include
+the new `LICENSE` and `NOTICE` files. The next build from the updated source will
+include them alongside `THIRD_PARTY_NOTICES.md`; no new licensed build has been
+published by this source-only change. Dependencies retain their own licenses.
 
 ## Release automation included in source
 

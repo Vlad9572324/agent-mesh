@@ -23,7 +23,7 @@ SPEC.loader.exec_module(smoke)
 VERSION = "v0.1.0-rc.1"
 SERVER_NAME = "agent-mesh_" + VERSION + "_linux_amd64.tar.gz"
 CONNECTOR_NAME = "agent-mesh_" + VERSION + "_connectors.tar.gz"
-METADATA = {"schema_version": 1, "packaging_version": 1, "version": VERSION,
+METADATA = {"schema_version": 1, "packaging_version": 2, "version": VERSION,
             "source_commit": "a" * 40, "source_date_epoch": 1700000000,
             "build_date": "2026-10-01T12:00:00Z", "target": {"goos": "linux", "goarch": "amd64"},
             "builder_version": "go1.25.0"}
@@ -64,6 +64,12 @@ class TemporaryTest(unittest.TestCase):
 
 
 class ArchiveTests(TemporaryTest):
+    def test_licensed_payload_counts_and_names_are_exact(self):
+        self.assertEqual(len(smoke.SERVER_FILES), 9)
+        self.assertEqual(len(smoke.CONNECTOR_FILES), 12)
+        for allowed in (smoke.SERVER_FILES, smoke.CONNECTOR_FILES):
+            self.assertTrue({"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}.issubset(allowed))
+
     def test_valid_extract_is_exact_and_private(self):
         root, version = smoke.extract_archive(archive_bytes(), SERVER_NAME, "server", self.directory)
         self.assertEqual(version, VERSION)
@@ -107,6 +113,21 @@ class ArchiveTests(TemporaryTest):
         with self.assertRaises(smoke.SmokeError):
             smoke.extract_archive(archive_bytes(omit={"web/app.js"}, extra=[(item, b"a")]),
                                   SERVER_NAME, "server", self.directory)
+
+    def test_both_archives_reject_missing_or_linked_license_and_notice(self):
+        for filename, kind, files in ((SERVER_NAME, "server", smoke.SERVER_FILES),
+                                      (CONNECTOR_NAME, "connectors", smoke.CONNECTOR_FILES)):
+            for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+                with self.subTest(kind=kind, name=name):
+                    with self.assertRaisesRegex(smoke.SmokeError, "incomplete archive"):
+                        smoke.extract_archive(archive_bytes(filename, files, omit={name}),
+                                              filename, kind, self.directory)
+                    item = tarfile.TarInfo(filename[:-7] + "/" + name)
+                    item.type, item.linkname = tarfile.SYMTYPE, "/outside"
+                    with self.assertRaisesRegex(smoke.SmokeError, "unsafe archive member"):
+                        smoke.extract_archive(archive_bytes(filename, files, omit={name}, extra=[(item, b"")]),
+                                              filename, kind, self.directory)
+                    self.assertEqual(list(self.directory.iterdir()), [])
 
     def test_oversized_archive_refused(self):
         with mock.patch.object(smoke, "MAX_FILE", 2), self.assertRaises(smoke.SmokeError):
@@ -153,7 +174,9 @@ class ArchiveTests(TemporaryTest):
     def test_release_metadata_and_duplicate_json(self):
         self.assertEqual(smoke.validate_metadata(json.dumps(METADATA), VERSION), METADATA)
         for changed in ({"version": "v9.0.0"}, {"source_commit": "main"},
-                        {"target": {"goos": "linux", "goarch": "arm64"}}, {"source_date_epoch": True}):
+                        {"target": {"goos": "linux", "goarch": "arm64"}}, {"source_date_epoch": True},
+                        {"packaging_version": 1}, {"packaging_version": True},
+                        {"packaging_version": 2.0}, {"packaging_version": "2"}):
             with self.assertRaises(smoke.SmokeError):
                 smoke.validate_metadata(json.dumps({**METADATA, **changed}), VERSION)
         with self.assertRaises(smoke.SmokeError):

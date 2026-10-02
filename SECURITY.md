@@ -1,7 +1,7 @@
 # Reporting security concerns
 
-Do not submit vulnerability details through ordinary issues, even while this
-repository is private. Do not include live credentials, private project content,
+Do not submit vulnerability details through ordinary public issues.
+Do not include live credentials, private project content,
 database dumps, or raw exploit logs in an issue or pull request.
 
 If this repository's **Security** tab offers **Report a vulnerability**, use that

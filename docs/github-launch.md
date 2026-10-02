@@ -6,7 +6,7 @@ Agent Mesh is presented from a sanitized source snapshot with a fresh Git histor
 The source is intended for public reading after the maintainer's privacy gate;
 deployments remain trusted-LAN pilots. This checklist is not evidence that a
 visibility change, metadata update, release, image publication or deployment has
-already happened, and it does not select a license.
+already happened. Current source is licensed under [Apache-2.0](../LICENSE).
 
 ## Repository presentation
 
@@ -51,10 +51,10 @@ setup visible; do not advertise an instant installer or unattended agents.
 - **Published:** the `v0.1.0-rc.2` GitHub prerelease and public
   `agent-mesh-server` image. [Release status](releases.md) records the verified
   artifacts, original failed publication run and explicit finalization recovery.
-- **Not decided:** a project-wide license. [Authorship](../AUTHORS.md) and
-  [third-party notices](third-party-notices.md) do not select one. Publicly
-  readable source is not a substitute for a license; do not add an open-source
-  claim or license badge without an explicit decision.
+- **Licensed current source:** [Apache-2.0](../LICENSE), with [NOTICE](../NOTICE)
+  and separately preserved [dependency licenses](third-party-notices.md).
+  The published `v0.1.0-rc.2` archives predate this addition and have not been
+  regenerated with license files; do not claim a newly published licensed build.
 - **Not established here:** adoption, testimonials, comparative benchmarks,
   productivity gains, broad platform support or Internet-scale readiness.
 

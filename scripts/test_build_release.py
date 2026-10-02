@@ -114,6 +114,17 @@ class ReleaseTests(unittest.TestCase):
                     release.read_manifest(self.root, tree, ("web/app.js",))
                 git.assert_not_called()
 
+    def test_license_sources_require_regular_committed_files(self):
+        self.assertEqual(release.LICENSE_FILES, ("LICENSE", "NOTICE"))
+        for name in release.LICENSE_FILES:
+            for entry in (None, ("120000", "blob", "a" * 40),
+                          ("160000", "commit", "a" * 40), ("040000", "tree", "a" * 40)):
+                tree = {} if entry is None else {name: entry}
+                with self.subTest(name=name, entry=entry), patch.object(release, "git") as git:
+                    with self.assertRaises(release.ReleaseError):
+                        release.read_manifest(self.root, tree, (name,))
+                    git.assert_not_called()
+
     def test_new_build_inputs_require_allowlist_review_but_tests_are_not_inputs(self):
         tree = dict.fromkeys((*release.BUILD_FILES, "internal/link/new_test.go", "docs/example.md"))
         release.validate_build_inputs(tree)
@@ -177,6 +188,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info["source_commit"], self.commit)
         self.assertEqual(info["build_date"], "2026-10-02T00:00:00Z")
         self.assertEqual(info["target"], {"goos": "linux", "goarch": "amd64"})
+        self.assertEqual(info["packaging_version"], 2)
         with patch.dict(os.environ, {"GOFLAGS": "-tags=unsafe", "CGO_ENABLED": "1", "GOOS": "windows",
                                     "GOWORK": "/outside/go.work", "SOURCE_DATE_EPOCH": "0", "GOPROXY": "https://example.invalid"}):
             env = release.build_environment(self.epoch)
@@ -236,12 +248,14 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse((self.root / "new").exists())
 
     def test_complete_release_contract_and_repeatability_with_fake_offline_build(self):
-        names = (*release.BUILD_FILES, *release.WEB_FILES, *release.CONNECTOR_FILES,
+        names = (*release.BUILD_FILES, *release.WEB_FILES, *release.CONNECTOR_FILES, *release.LICENSE_FILES,
                  release.INSTALL_SOURCE, release.NOTICES_SOURCE, "scripts/build-release.py")
         blobs = {name: ("committed:" + name).encode() for name in names}
         blobs["scripts/build-release.py"] = Path(release.__file__).read_bytes()
         blobs[release.INSTALL_SOURCE] = (b"<!-- release-install-version: v0.1.0-rc.1 -->\n"
                                          b"# Install v0.1.0-rc.1\n")
+        for name in release.LICENSE_FILES:
+            blobs[name] = (Path(__file__).resolve().parents[1] / name).read_bytes()
         tree = {name: ("100644", "blob", "b" * 40) for name in names}
 
         def fake_git(repo, *args):
@@ -260,13 +274,14 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(release, "git", side_effect=fake_git), \
                 patch.object(release, "clean_commit", return_value=self.commit) as clean, \
                 patch.object(release, "source_tree", return_value=tree), \
-                patch.object(release, "read_manifest", return_value=blobs), \
+                patch.object(release, "read_manifest", return_value=blobs) as manifest, \
                 patch.object(release, "build_binary", side_effect=fake_build), \
                 patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"go1.23.2\n", b"")):
             info = release.release(self.root, "v0.1.0-rc.1", self.root / "first")
             release.release(self.root, "v0.1.0-rc.1", self.root / "second")
             release.release(self.root, "v0.2.0", self.root / "future")
         self.assertEqual(clean.call_count, 6)
+        manifest.assert_called_with(self.root, tree, names)
         clean.assert_called_with(self.root, expected=self.commit)
         first, second = self.root / "first", self.root / "second"
         expected = {"agent-mesh_v0.1.0-rc.1_linux_amd64.tar.gz", "agent-mesh_v0.1.0-rc.1_connectors.tar.gz",
@@ -285,10 +300,14 @@ class ReleaseTests(unittest.TestCase):
             root = "agent-mesh_v0.1.0-rc.1_" + kind
             with tarfile.open(first / (root + ".tar.gz"), "r:gz") as archive:
                 files = {member.name: archive.extractfile(member).read() for member in archive.getmembers()}
-            self.assertEqual(set(files), {root + "/" + name for name in payload | {"INSTALL.md", "RELEASE.json", "THIRD_PARTY_NOTICES.md"}})
+            self.assertEqual(set(files), {root + "/" + name for name in payload |
+                             {"INSTALL.md", "RELEASE.json", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}})
+            self.assertEqual(len(files), 9 if kind == "linux_amd64" else 12)
             self.assertEqual(files[root + "/RELEASE.json"], (first / "RELEASE.json").read_bytes())
             self.assertEqual(files[root + "/INSTALL.md"], blobs[release.INSTALL_SOURCE])
             self.assertEqual(files[root + "/THIRD_PARTY_NOTICES.md"], blobs[release.NOTICES_SOURCE])
+            for name in release.LICENSE_FILES:
+                self.assertEqual(files[root + "/" + name], blobs[name])
             future_root = "agent-mesh_v0.2.0_" + kind
             with tarfile.open(self.root / "future" / (future_root + ".tar.gz"), "r:gz") as archive:
                 guide = archive.extractfile(future_root + "/INSTALL.md").read()

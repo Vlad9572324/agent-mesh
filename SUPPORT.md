@@ -16,8 +16,8 @@ CA certificate. Never ask them to share an owner's key.
 ## Report a problem or suggest an improvement
 
 Use the [issue chooser](https://github.com/Vlad9572324/agent-mesh/issues/new/choose)
-for a bug report or feature request. Repository access is required while this
-project is private. If a setup step fails, use the bug form and identify that step.
+for a bug report or feature request. If a setup step fails, use the bug form and
+identify that step. Keep reports suitable for this public repository.
 
 A useful bug report includes the release/version or source commit, installation
 route, a small reproduction, and expected versus actual behavior. `agent-mesh version`

@@ -60,6 +60,8 @@ See [release status](releases.md) for the published artifacts and verification.
 - [Engineering history](history/development-log.md): sanitized capability history
   and verification boundaries, without private deployment records.
 - [Author](../AUTHORS.md): project authorship and maintainer profile.
+- [Apache-2.0 license](../LICENSE) and [NOTICE](../NOTICE): current-source terms
+  and attribution; dependencies retain their [own licenses](third-party-notices.md).
 
 ## Reading conventions
 

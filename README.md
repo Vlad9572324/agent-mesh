@@ -133,6 +133,13 @@ test database is configured; a passing dry run is not a published release.
 Created and maintained by **[@Vlad9572324](https://github.com/Vlad9572324)**.
 See [AUTHORS](AUTHORS.md).
 
+## License
+
+The current source is licensed under [Apache-2.0](LICENSE); see [NOTICE](NOTICE).
+Dependencies retain their own [licenses and notices](docs/third-party-notices.md).
+The published `v0.1.0-rc.2` archives predate this addition and are unchanged;
+they do not contain the new license files. See [release status](docs/releases.md).
+
 [Repository](https://github.com/Vlad9572324/agent-mesh) ·
 [Issues](https://github.com/Vlad9572324/agent-mesh/issues) ·
 [Contribution guide](CONTRIBUTING.md)

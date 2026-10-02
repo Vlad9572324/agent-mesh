@@ -8,5 +8,6 @@ Project creator and maintainer of Agent Mesh, published in
 For project questions, documentation corrections and development proposals, use
 the repository's [issues](https://github.com/Vlad9572324/agent-mesh/issues).
 
-Development history and individual changes are recorded in Git. The repository
-does not currently contain a project-wide license file.
+Development history and individual changes are recorded in Git. The current
+source is licensed under [Apache License 2.0](LICENSE); see [NOTICE](NOTICE).
+Third-party components retain their [own licenses](docs/third-party-notices.md).

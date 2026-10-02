@@ -133,6 +133,7 @@ class Smoke:
         self.report = {"success": False, "phase": "inputs", "checksums_verified": 0,
                        "connector_help_checks": 0, "connector_imports": 0,
                        "version_verified": False, "non_root_verified": False,
+                       "image_notice_files_verified": 0,
                        "postgresql14_verified": False, "application_role_unprivileged": False,
                        "https_verified": False, "web_assets_verified": 0,
                        "unauthenticated_denials": 0, "owner_authenticated": False,
@@ -146,7 +147,7 @@ class Smoke:
         if argv[:len(self.docker)] == self.docker:
             tail = argv[len(self.docker):]
             operation = "docker_" + tail[0] if tail[0] in {
-                "info", "build", "create", "start", "image", "container", "network", "volume"} else "docker_command"
+                "info", "build", "create", "cp", "start", "image", "container", "network", "volume"} else "docker_command"
             if tail[0] == "compose":
                 operation = "compose_command"
                 for name in ("config", "up", "run", "exec", "stop", "start", "restart", "down", "ps"):
@@ -248,7 +249,8 @@ class Smoke:
         for field, expected in (("version", self.metadata["version"]),
                                 ("revision", self.metadata["source_commit"]),
                                 ("created", self.metadata["build_date"]),
-                                ("source", "https://github.com/" + self.args.source)):
+                                ("source", "https://github.com/" + self.args.source),
+                                ("licenses", "Apache-2.0")):
             require(config["Labels"].get("org.opencontainers.image." + field) == expected,
                     "OCI identity mismatch")
         self.report["non_root_verified"] = True
@@ -256,6 +258,12 @@ class Smoke:
         self.command(self.docker + ["create", "--name", self.version_name,
                      "--label", "com.docker.compose.project=" + self.project,
                      "--network", "none", self.args.image, "--version"])
+        for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            target = self.directory / ("image-" + name)
+            self.command(self.docker + ["cp", self.version_name + ":/opt/agent-mesh/" + name, str(target)])
+            require(release.read_regular(target, release.MAX_FILE) ==
+                    release.read_regular(self.bundle / name, release.MAX_FILE), "image notice content mismatch")
+        self.report["image_notice_files_verified"] = 3
         self.check_version(self.command(self.docker + ["start", "--attach", self.version_name]))
         self.command(self.docker + ["container", "rm", self.version_name])
         self.report["version_verified"] = True

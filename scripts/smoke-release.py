@@ -28,12 +28,14 @@ import urllib.parse
 import uuid
 
 
+PACKAGING_VERSION = 2
 SERVER_FILES = frozenset({"bin/agent-mesh", "web/index.html", "web/app.js", "web/app.css",
-                          "INSTALL.md", "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
+                          "INSTALL.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
 CONNECTOR_FILES = frozenset({"scripts/agent-link-cli.py", "scripts/native_launch.py",
                              "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py",
                              "adapters/native_bridge.py", "adapters/native_hooks.py",
-                             "adapters/native_mcp.py", "INSTALL.md", "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
+                             "adapters/native_mcp.py", "INSTALL.md", "LICENSE", "NOTICE",
+                             "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
 VERSION_RE = r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?"
 SCHEMA_RE = r"release_smoke_[0-9a-f]{32}"
 MAX_ARCHIVE = 128 * 1024 * 1024
@@ -143,7 +145,8 @@ def extract_archive(raw, filename, kind, destination):
 def validate_metadata(raw, version):
     value = strict_json(raw)
     require(isinstance(value, dict) and value.get("schema_version") == 1 and
-            value.get("packaging_version") == 1 and value.get("version") == version,
+            type(value.get("packaging_version")) is int and
+            value["packaging_version"] == PACKAGING_VERSION and value.get("version") == version,
             "release metadata mismatch")
     require(re.fullmatch(r"[0-9a-f]{40}", value.get("source_commit", "")) is not None,
             "release commit required")

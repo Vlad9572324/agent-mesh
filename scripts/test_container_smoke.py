@@ -183,6 +183,87 @@ class SmokeTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(smoke.release.SmokeError):
                 self.instance.check_version(json.dumps(dict(value, **{field: "wrong"})))
 
+    def test_dockerfile_and_context_remain_an_exact_licensed_server_payload(self):
+        dockerfile = (self.args.repository / "Dockerfile").read_text()
+        self.assertIn('org.opencontainers.image.licenses="Apache-2.0"', dockerfile)
+        copied = set()
+        for line in dockerfile.splitlines():
+            if line.startswith("COPY "):
+                fields = line.split()
+                copied.update(field for field in fields[1:-1] if not field.startswith("--"))
+        self.assertEqual(copied, smoke.release.SERVER_FILES)
+        patterns = [line for line in (self.args.repository / ".dockerignore").read_text().splitlines()
+                    if line and not line.startswith("#")]
+        self.assertEqual(patterns[0], "**")
+        self.assertEqual(set(patterns), {"**", "!bin/", "bin/**", "!web/", "web/**"} |
+                         {"!" + name for name in smoke.release.SERVER_FILES})
+
+    def build_fixture(self, *, license_label="Apache-2.0", changed_notice=None):
+        instance = self.instance
+        instance.bundle = self.directory / "bundle"
+        instance.bundle.mkdir(exist_ok=True)
+        for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            (instance.bundle / name).write_bytes(("committed:" + name).encode())
+        labels = {"org.opencontainers.image." + key: value for key, value in {
+            "version": instance.metadata["version"], "revision": COMMIT,
+            "created": instance.metadata["build_date"],
+            "source": "https://github.com/" + self.args.source}.items()}
+        if license_label is not None:
+            labels["org.opencontainers.image.licenses"] = license_label
+
+        def command(argv, **kwargs):
+            tail = argv[len(instance.docker):]
+            if tail[0] == "info":
+                return b'{"OSType":"linux","Architecture":"amd64","SecurityOptions":[]}'
+            if tail[:2] == ["image", "inspect"]:
+                return json.dumps([{"Config": {"User": "10001:10001", "Labels": labels}}]).encode()
+            if tail[0] == "cp":
+                name = tail[1].rsplit("/", 1)[-1]
+                self.assertEqual(tail[1], instance.version_name + ":/opt/agent-mesh/" + name)
+                self.assertEqual(Path(tail[2]), self.directory / ("image-" + name))
+                data = b"altered" if name == changed_notice else (instance.bundle / name).read_bytes()
+                Path(tail[2]).write_bytes(data)
+            if tail[0] == "start":
+                return json.dumps({"version": instance.metadata["version"], "commit": COMMIT,
+                    "build_date": instance.metadata["build_date"], "go_version": "go1.23.6",
+                    "goos": "linux", "goarch": "amd64"}).encode()
+            return b""
+        return command
+
+    def test_image_license_label_and_all_notice_bytes_are_verified(self):
+        command = self.build_fixture()
+        with mock.patch.object(smoke.os, "getuid", return_value=1000), \
+             mock.patch.object(smoke.os, "getgid", return_value=1000), \
+             mock.patch.object(self.instance, "command", side_effect=command) as run:
+            self.instance.build()
+        self.assertEqual(self.instance.report["image_notice_files_verified"], 3)
+        self.assertTrue(self.instance.report["version_verified"])
+        self.assertEqual(sum("cp" in call.args[0] for call in run.call_args_list), 3)
+
+    def test_missing_or_wrong_image_license_label_is_rejected_before_start(self):
+        for label in (None, "MIT", "Apache-2.0 OR MIT"):
+            command = self.build_fixture(license_label=label)
+            with self.subTest(label=label), \
+                 mock.patch.object(smoke.os, "getuid", return_value=1000), \
+                 mock.patch.object(smoke.os, "getgid", return_value=1000), \
+                 mock.patch.object(self.instance, "command", side_effect=command) as run:
+                with self.assertRaisesRegex(smoke.release.SmokeError, "OCI identity mismatch"):
+                    self.instance.build()
+            self.assertFalse(any("start" in call.args[0] for call in run.call_args_list))
+            self.assertEqual(self.instance.report["image_notice_files_verified"], 0)
+
+    def test_altered_image_license_or_notice_is_rejected_before_start(self):
+        for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            command = self.build_fixture(changed_notice=name)
+            with self.subTest(name=name), \
+                 mock.patch.object(smoke.os, "getuid", return_value=1000), \
+                 mock.patch.object(smoke.os, "getgid", return_value=1000), \
+                 mock.patch.object(self.instance, "command", side_effect=command) as run:
+                with self.assertRaisesRegex(smoke.release.SmokeError, "image notice content mismatch"):
+                    self.instance.build()
+            self.assertFalse(any("start" in call.args[0] for call in run.call_args_list))
+            self.assertEqual(self.instance.report["image_notice_files_verified"], 0)
+
     def test_environment_drops_inherited_tokens_and_remote_docker(self):
         with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "PRIVATE", "DOCKER_HOST": "tcp://private",
                                          "AGENT_LINK_DATABASE_URL": "PRIVATE", "HTTPS_PROXY": "PRIVATE"}):

@@ -14,6 +14,13 @@ is also published with server and connector archives.
 See [release status](releases.md) for the exact evidence. This is the new server
 package, not an inherited image or earlier repository release.
 
+The current source is licensed under [Apache-2.0](../LICENSE). This published
+rc.2 image predates the license-file addition and is unchanged. New images built
+from the updated source will contain `LICENSE`, `NOTICE` and the retained
+`THIRD_PARTY_NOTICES.md` under `/opt/agent-mesh/`, with an Apache-2.0 OCI license
+label; no such new image has been published by the source-license change.
+Dependencies retain their own licenses.
+
 ## Releases and Packages are different
 
 | Distribution | Identity | What it supplies |

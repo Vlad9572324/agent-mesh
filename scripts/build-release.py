@@ -24,12 +24,13 @@ import tarfile
 import tempfile
 
 
-PACKAGING_VERSION = 1
+PACKAGING_VERSION = 2
 TARGET = {"goos": "linux", "goarch": "amd64"}
 VERSION = re.compile(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?\Z")
 INSTALL_SOURCE = "docs/install-release.md"
 INSTALL_VERSION_MARKER = re.compile(r"^<!-- release-install-version: (\S+) -->$", re.MULTILINE)
 NOTICES_SOURCE = "docs/third-party-notices.md"
+LICENSE_FILES = ("LICENSE", "NOTICE")
 WEB_FILES = ("web/index.html", "web/app.js", "web/app.css")
 CONNECTOR_FILES = (
     "scripts/agent-link-cli.py",
@@ -273,7 +274,7 @@ def release(repo, version, output):
     commit = clean_commit(repo)
     tree = source_tree(repo, commit)
     validate_build_inputs(tree)
-    names = (*BUILD_FILES, *WEB_FILES, *CONNECTOR_FILES, INSTALL_SOURCE, NOTICES_SOURCE,
+    names = (*BUILD_FILES, *WEB_FILES, *CONNECTOR_FILES, *LICENSE_FILES, INSTALL_SOURCE, NOTICES_SOURCE,
              "scripts/build-release.py")
     blobs = read_manifest(repo, tree, names)
     if blobs["scripts/build-release.py"] != Path(__file__).read_bytes():
@@ -296,7 +297,8 @@ def release(repo, version, output):
                 stream.write(blobs[name])
         binary = staging / "agent-mesh"
         build_binary(source, binary, info, env)
-        common = {"INSTALL.md": install_guide, "RELEASE.json": release_json,
+        common = {**{name: blobs[name] for name in LICENSE_FILES},
+                  "INSTALL.md": install_guide, "RELEASE.json": release_json,
                   "THIRD_PARTY_NOTICES.md": blobs[NOTICES_SOURCE]}
         server = {**common, **{name: blobs[name] for name in WEB_FILES}, "bin/agent-mesh": binary.read_bytes()}
         connectors = {**common, **{name: blobs[name] for name in CONNECTOR_FILES}}

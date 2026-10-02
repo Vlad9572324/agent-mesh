@@ -60,6 +60,12 @@ Both archives extract into a versioned top-level directory matching the archive
 name without `.tar.gz`. Each contains `INSTALL.md` and the same `RELEASE.json`.
 Do not combine files from different versions or extract over an existing release.
 Both also include `THIRD_PARTY_NOTICES.md` with dependency notices.
+New builds using packaging version 2 additionally include `LICENSE` (Apache-2.0)
+and `NOTICE` at each archive root. Existing packaging-version-1 archives are
+unchanged and do not contain these newly added files. Check `RELEASE.json` and
+[current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
+instead of assuming that a source-license update republished an older artifact.
+Third-party components retain their own licenses.
 
 ## 2. Extract and identify the server
 
