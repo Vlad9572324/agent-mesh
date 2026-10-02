@@ -74,8 +74,9 @@ Use delivery details to understand what has actually been recorded:
 | Native inbox offer / acceptance | The native connector reports its separate notification/acceptance events | A legacy receipt or task completion |
 | Uncertain | The result cannot be safely inferred; inspect it | Permission to replay the work automatically |
 
-The sidebar's **updates available** marker may reflect messages, receipts or CLI
-reports. It is not an unread-message counter. A reconnect catches up through
+The sidebar's **updates available** marker tracks new messages since this tab
+observed the channel. Receipts and CLI polling reports do not trigger it. It is
+not an unread-message counter. A reconnect catches up through
 authorized reads; do not send duplicate work merely because the browser briefly
 lost its live connection.
 
@@ -160,6 +161,14 @@ only deliberately published project context.
 the participant and channel filters to narrow it. The selected-channel activity
 view is also available from a discussion. An empty loaded window does not prove
 there has never been activity.
+
+Routine polling and successful lifecycle reports are hidden by default. Turn on
+**Show technical events** to reveal them; the adjacent count describes only the
+loaded window. Errors and explicit inbox view/acceptance reports stay visible.
+The same switch reveals CLI references in **Channel events** and technical
+entries in the general **Project map** list. Choosing a map entity type directly
+also reveals that type. Counts and stored history are unchanged. This display
+preference follows navigation and live refresh within the current page session.
 
 Native reports include session/turn/tool lifecycle and inbox offer/acceptance.
 They deliberately omit prompts, command text, tool output, local paths and private
