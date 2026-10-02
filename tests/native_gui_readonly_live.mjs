@@ -102,6 +102,8 @@ try {
   stage = 'channel'; await tab.eval(`document.querySelector('#channel-list [data-focus-key="channel:${channelId}"]').click()`);
   await tab.wait(`document.querySelector('#channel-list [data-focus-key="channel:${channelId}"]').getAttribute('aria-pressed')==='true'&&!document.getElementById('refresh-button').disabled`);
   stage = 'activity'; await tab.eval(`document.getElementById('tab-native').click()`);
+  // Reveal the full timeline locally; this remains a GET-only deployment watcher.
+  await tab.eval(`{ const control=document.getElementById('native-technical'); if(control&&!control.checked) control.click(); }`);
   await tab.wait(`!document.getElementById('native-panel').hidden&&!!document.querySelector('#native-activity-list [data-native-id="${baseline.id}"]')`);
   check('actual_existing_event_visible_in_activity_cli', true, {event_id: baseline.id});
   report.initial_dom_count = (await tab.eval(snapshot)).length; report.time_origin = await tab.eval('performance.timeOrigin');

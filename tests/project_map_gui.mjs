@@ -306,6 +306,8 @@ async function project(tab, name = 'project') {
 async function map(tab) {
   await tab.click('#nav-project-map');
   await tab.wait("!document.getElementById('project-map-panel').hidden", 'map opened');
+  // Relationship/schema assertions below intentionally inspect all entity types.
+  await tab.eval("if (!document.getElementById('project-map-technical').checked) document.getElementById('project-map-technical').click()");
 }
 async function ready(tab) {
   await tab.wait("Array.from(document.querySelectorAll('#project-map-counts [data-count-state]')).length===14 && Array.from(document.querySelectorAll('#project-map-counts [data-count-state]')).every(e=>['ready','partial'].includes(e.dataset.countState))", 'confirmed map counts');

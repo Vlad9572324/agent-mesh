@@ -104,7 +104,11 @@ async function activity(type, options = {}) {
   return (await api(activityPath(channel), 'POST', body, actor, 201)).activity;
 }
 const hasNative = item => `!!document.querySelector('#native-activity-list [data-native-id="${item.id}"]')`;
-async function nativeTab(tab) { await tab.click('tab-native'); await tab.wait(`!document.getElementById('native-panel').hidden`, 'native tab'); }
+async function nativeTab(tab) {
+  await tab.click('tab-native'); await tab.wait(`!document.getElementById('native-panel').hidden`, 'native tab');
+  // This legacy suite verifies the complete technical timeline explicitly.
+  await tab.eval(`if (!document.getElementById('native-technical').checked) document.getElementById('native-technical').click()`);
+}
 async function selectChannel(tab, channel) {
   await tab.eval(`document.querySelector('#channel-list [data-focus-key="channel:${ids[channel]}"]').click()`);
   await tab.wait(textHas('current-channel', ids[channel]), 'channel selection');

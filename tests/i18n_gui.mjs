@@ -415,6 +415,8 @@ try {
   });
   await check('project CLI timeline filters and fresh empty statuses localize with stable connection', async () => {
     await pane(viewer, 'project-native', 'project-native-panel');
+    // Preserve complete-event localization coverage after the quieter default.
+    await viewer.eval("if (!document.getElementById('project-native-technical').checked) document.getElementById('project-native-technical').click()");
     await viewer.wait("!!document.querySelector('#project-native-list [data-native-id=\"" + fixturesData.native.id + "\"]')", 'project native fixture');
     await viewer.filter('project-native-actor', ids.writer); await viewer.filter('project-native-channel', ids.alpha); await idle(viewer);
     const expression = "({actor:document.getElementById('project-native-actor').value,channel:document.getElementById('project-native-channel').value,freshness:document.getElementById('project-native-last-event').dataset.freshness,ids:Array.from(document.querySelectorAll('#project-native-list [data-native-id]')).map(e=>e.dataset.nativeId)})";
