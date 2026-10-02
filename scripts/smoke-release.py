@@ -28,7 +28,7 @@ import urllib.parse
 import uuid
 
 
-PACKAGING_VERSION = 2
+PACKAGING_VERSION = 3
 SERVER_FILES = frozenset({"bin/agent-mesh", "web/index.html", "web/app.js", "web/app.css",
                           "INSTALL.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
 CONNECTOR_FILES = frozenset({"scripts/agent-link-cli.py", "scripts/native_launch.py",

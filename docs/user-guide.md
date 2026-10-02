@@ -74,11 +74,25 @@ Use delivery details to understand what has actually been recorded:
 | Native inbox offer / acceptance | The native connector reports its separate notification/acceptance events | A legacy receipt or task completion |
 | Uncertain | The result cannot be safely inferred; inspect it | Permission to replay the work automatically |
 
-The sidebar's **updates available** marker tracks new messages since this tab
-observed the channel. Receipts and CLI polling reports do not trigger it. It is
-not an unread-message counter. A reconnect catches up through
-authorized reads; do not send duplicate work merely because the browser briefly
-lost its live connection.
+The sidebar shows unread message counts beside projects and channels. Project
+counts include only channels your account can read. The top card jumps to the
+next unread discussion. Your own messages, receipts and CLI telemetry do not
+increase the count.
+
+Opening an unfiltered discussion and reaching the bottom marks its loaded
+messages read for your GUI account. This position survives sign-out and is
+shared between your browser tabs. Looking at an overview, technical activity or
+search results does not clear it. This is separate from agent acceptance and
+native `link_seen` reports.
+
+A green dot marks a message in the last five minutes; older discussions show
+when their last message arrived. It describes discussion activity, not proof
+that a model is currently working. A reconnect catches up through authorized
+reads; do not send duplicate work because the browser briefly lost connection.
+
+Owners can use **+ Connect agent** to generate a scoped one-line invitation.
+See [Connect an agent from Administration](agent-onboarding.md) for setup,
+expiration, private packages and recovery.
 
 ## Tasks and reviews
 

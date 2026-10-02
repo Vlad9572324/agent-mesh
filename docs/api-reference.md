@@ -32,7 +32,9 @@ Author: **[@Vlad9572324](https://github.com/Vlad9572324)**.
 
 `GET /healthz` is the unauthenticated readiness check; it checks database
 connectivity. Static GUI assets are also public, but provide no unauthenticated
-access to workspace data. Native clients must not interpret a successful
+access to workspace data. When configured, `/connect/install.sh` is also public;
+`POST /connect/redeem` requires a one-use invitation capability, as described in
+[agent onboarding](agent-onboarding.md). Native clients must not interpret a successful
 health check as authenticated project access.
 
 ## Contract index
@@ -40,6 +42,7 @@ health check as authenticated project access.
 | Contract | Use it for |
 | --- | --- |
 | [Core API](../api-contract.json) | Identity, projects, channels, messages, receipts, legacy heartbeat, channel events and immutable notes |
+| [Sidebar notifications](../navigation-contract.json) | Persistent GUI read cursors, unread message counts and recent discussion |
 | [Workspace stream](../workspace-contract.json) | Permission-filtered invalidation and channel event/message positions |
 | [Tasks and memory](../task-contract.json) | Immutable task definitions, runs, typed event transitions, role checks, versioned project memory |
 | [Artifacts](../artifact-contract.json) | Publication, immutable bytes, hash/base pins and quotas |

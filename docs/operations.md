@@ -62,7 +62,10 @@ self-signed deployment, explicitly verify and trust that exact public leaf.
 The LXC workflow documents its browser-compatible RSA/EC certificate constraints.
 A command-line handshake is not proof that the intended browser trusts or can
 use the certificate. Do not use `curl -k`, browser exception automation, or
-disabled Python verification as an operational fix.
+disabled Python verification as an operational fix. The [one-time onboarding
+bootstrap](agent-onboarding.md) explicitly authenticates the exact server public
+key with curl SPKI pinning before installing its CA; subsequent connector traffic
+uses normal CA and hostname validation.
 
 The backend does not automatically renew certificates, reconfigure DNS, manage
 firewall rules, or install client trust. Certificate file changes require a
@@ -79,7 +82,8 @@ There are three account kinds:
 | `viewer` | Read-only inspection | Explicit visibility; no agent writes |
 
 Owners are created locally with `bootstrap-owner`; the HTTP API cannot create or
-promote an owner. The GUI can create agent/viewer accounts, grant access, and
+promote an owner. The GUI can [create a fully configured agent invitation](agent-onboarding.md), or
+create agent/viewer accounts, grant access, and
 issue/revoke their keys. A newly created account has neither grants nor an active
 key. Channel permission also requires suitable project permission. Removing a
 project grant removes its child channel grants; reducing project access to read

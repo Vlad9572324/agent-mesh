@@ -23,7 +23,7 @@ SPEC.loader.exec_module(smoke)
 VERSION = "v0.1.0-rc.1"
 SERVER_NAME = "agent-mesh_" + VERSION + "_linux_amd64.tar.gz"
 CONNECTOR_NAME = "agent-mesh_" + VERSION + "_connectors.tar.gz"
-METADATA = {"schema_version": 1, "packaging_version": 2, "version": VERSION,
+METADATA = {"schema_version": 1, "packaging_version": 3, "version": VERSION,
             "source_commit": "a" * 40, "source_date_epoch": 1700000000,
             "build_date": "2026-10-01T12:00:00Z", "target": {"goos": "linux", "goarch": "amd64"},
             "builder_version": "go1.25.0"}

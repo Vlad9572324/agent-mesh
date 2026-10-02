@@ -10,7 +10,13 @@
     "POST /v1/admin/principals/{agent}/rotate-key": "empty JSON object ->200 {agent_id,key}; non-owner target only; newly generated secret shown once, no automatic request retry, invalidate old key, preserve identity/history",
     "POST /v1/admin/principals/{agent}/revoke-key": "empty JSON object ->200 {revoked:true}; non-owner target only; invalidate access, stop existing SSE via existing reauth; does not kill an external CLI process or undo dispatched work",
     "GET /v1/admin/audit?limit=100": "{entries:[{id,actor_id,action,target_type,target_id,details,created_at}],truncated:boolean}; latest bounded records (max500), deterministic ordering; strict allowlisted metadata, no secrets",
-    "GET /v1/admin/deliveries?limit=100": "{deliveries:[{message_id,channel_id,author_id,recipient_id,created_at,delivered_at,accepted_at,uncertain_at}],truncated:boolean}; pending acceptance or uncertain only, latest bounded(max500); read-only, no forced redispatch"
+    "GET /v1/admin/deliveries?limit=100": "{deliveries:[{message_id,channel_id,author_id,recipient_id,created_at,delivered_at,accepted_at,uncertain_at}],truncated:boolean}; pending acceptance or uncertain only, latest bounded(max500); read-only, no forced redispatch",
+    "GET /v1/admin/onboarding": "{enabled,public_url,spki_pin,repository,invitations,truncated}; bounded sanitized history; no raw invitations or keys",
+    "POST /v1/admin/onboarding": "{id,name,project_id,channel_ids:[1..8 unique],runtime:auto|codex|claude,expires_in_hours:1|12|24} ->201 {invitation,token,public_url,spki_pin,repository,enabled}; atomically create ordinary agent without key, project/channel write grants, hashed invitation and audit",
+    "POST /v1/admin/onboarding/{invite}/reissue": "{expires_in_hours:1|12|24}; inactive ordinary agent and current active write grants only; revoke prior unused invitations; return fresh token once; active keys are not rotated",
+    "POST /v1/admin/onboarding/{invite}/revoke": "{}; revoke unused invitation atomically with audit; retain account and grants",
+    "GET /connect/install.sh": "Public static bootstrap only when explicitly configured",
+    "POST /connect/redeem": "{token}; bounded public capability endpoint; revalidate active scope and inactive identity, create bounded private archive before commit, atomically consume invitation and activate key hash with audit. Return archive once, unavailable/consumed410. Never retry automatically."
   },
   "project_lifecycle": "Owner-only archive/restore/deletion-preview/DELETE endpoints, confirmation/version/retired-ID semantics are specified in project-lifecycle-contract.json.",
   "security": [
@@ -18,6 +24,7 @@
     "Use existing strict JSON decoding, validID/text limits, parameterized SQL, TLS/no-store/CSP. No token in URL/storage/logs. Do not automatically retry key rotation.",
     "Concurrent ACL changes serialize in a consistent order; removed project membership must not leave orphaned channel grants. Existing ordinary agent/viewer isolation remains unchanged.",
     "Owner key provisioning private0600 file, never stdout; no public signup or role elevation endpoint. Web cannot revoke/rotate owner keys.",
-    "GUI one-time keys cleared on close, logout and authorization failure; all destructive access/revocation/rotation controls explicit confirmation; audit distinguishes local-cli and authenticated owner actions."
+    "GUI one-time keys cleared on close, logout and authorization failure; all destructive access/revocation/rotation controls explicit confirmation; audit distinguishes local-cli and authenticated owner actions.",
+    "Key rotation/revocation via current CLI and admin API also invalidate unused invitations. Invitation and key hashes only in PostgreSQL; fresh package exists in request memory, not server files. GUI clears one-time connection commands on close/logout/authorization failure. Explicit public HTTPS origin and CA configured by operator, SPKI pinned bootstrap, CA-verified connector."
   ]
 }

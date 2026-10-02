@@ -1,0 +1,10 @@
+{
+  "scope": "Persistent per-account GUI message read positions and permission-filtered sidebar activity. Independent of native inbox seen/acceptance and legacy receipts.",
+  "routes": {
+    "GET /v1/navigation": "Authenticated snapshot {projects:[{id,unread_messages,last_message_at}],channels:[{id,project_id,unread_messages,last_message_at,last_read_seq,latest_message_seq}]}. Only currently visible active projects/channels contribute, including project totals. No message bodies or hidden-channel aggregates.",
+    "PUT /v1/channels/{channel}/read": "{through_seq}: monotonically advance this caller's GUI read cursor through a stored message position in a readable channel. Owners/viewers/agents only update their own position; fresh key and ACL checked transactionally. No future message cursor and no acceptance/receipt/activity event."
+  },
+  "unread": "Count actual messages authored by another account above the caller's stored read position. Never subtract journal sequence numbers. A new account cursor starts at zero. Read positions persist across login and synchronize between browser tabs through workspace invalidation.",
+  "gui": "A badge shows 99+ above 99 while accessible text retains the exact count. The shortcut opens a readable unread channel. Advance only after an unfiltered discussion has rendered and the visible tab is at the bottom of the loaded message list; background prefetch, overview, search, CLI activity and Events do not mark discussion read. Failed acknowledgement never optimistically clears counts.",
+  "activity": "A recent-discussion dot means the last stored message is no older than five minutes. It is not model execution or process liveness. Older discussions show the last-message age. No messages is distinct from an unavailable snapshot."
+}

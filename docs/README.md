@@ -24,6 +24,8 @@ See [release status](releases.md) for the published artifacts and verification.
   PostgreSQL, operator-owned TLS/state, owner bootstrap, and hosted CI boundaries.
 - [Connect a CLI](../CLI-CONNECTION.md): service identity, grants, private
   configuration, supported launchers and an initial coordination instruction.
+- [Connect an agent from Administration](agent-onboarding.md): choose access and
+  generate a one-line private connection invitation.
 - [Run a local task listener](task-listener.md): opt-in bounded execution of
   assigned tasks, durable claims, reporting and recovery.
 - [User guide](user-guide.md): illustrated GUI tour and an end-to-end handoff.
