@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -31,8 +32,11 @@ func validText(s string, max int) bool {
 }
 
 type Server struct {
-	Store  *Store
-	WebDir string
+	Store          *Store
+	WebDir         string
+	Onboarding     *OnboardingConfig
+	onboardingGate chan struct{}
+	onboardingOnce sync.Once
 }
 type contextKey struct{}
 
@@ -125,6 +129,7 @@ func strictObject(b []byte, value any) bool {
 }
 
 func (s *Server) Handler() http.Handler {
+	s.onboardingOnce.Do(func() { s.onboardingGate = make(chan struct{}, 4) })
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
@@ -157,6 +162,7 @@ func (s *Server) Handler() http.Handler {
 	s.memoryRoutes(api)
 	s.nativeActivityRoutes(api)
 	s.adminRoutes(api)
+	s.onboardingRoutes(api, mux)
 	mux.Handle("/v1/", s.authenticate(api))
 	for _, pattern := range []string{"GET /{$}", "GET /index.html", "GET /app.js", "GET /app.css"} {
 		mux.HandleFunc(pattern, s.static)

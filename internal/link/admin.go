@@ -431,6 +431,10 @@ func (s *Server) adminKey(w http.ResponseWriter, r *http.Request, rotate bool) {
 		internal(w)
 		return
 	}
+	if err = revokeAgentInvitations(r.Context(), tx, id); err != nil {
+		internal(w)
+		return
+	}
 	if !adminCommit(w, r, tx, action, "principal", id, auditDetails{}) {
 		return
 	}

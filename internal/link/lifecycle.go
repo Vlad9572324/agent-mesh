@@ -104,22 +104,23 @@ func (s *Server) adminProjectState(w http.ResponseWriter, r *http.Request, archi
 }
 
 type deletionCounts struct {
-	Channels       int64 `json:"channels"`
-	Messages       int64 `json:"messages"`
-	Notes          int64 `json:"notes"`
-	Receipts       int64 `json:"receipts"`
-	Events         int64 `json:"events"`
-	ProjectMembers int64 `json:"project_members"`
-	ChannelMembers int64 `json:"channel_members"`
-	Tasks          int64 `json:"tasks"`
-	TaskRuns       int64 `json:"task_runs"`
-	TaskEvents     int64 `json:"task_events"`
-	Memory         int64 `json:"memory"`
-	MemoryVersions int64 `json:"memory_versions"`
-	Artifacts      int64 `json:"artifacts"`
-	ArtifactBytes  int64 `json:"artifact_bytes"`
-	Sessions       int64 `json:"sessions"`
-	NativeActivity int64 `json:"native_activity"`
+	Channels              int64 `json:"channels"`
+	Messages              int64 `json:"messages"`
+	Notes                 int64 `json:"notes"`
+	Receipts              int64 `json:"receipts"`
+	Events                int64 `json:"events"`
+	ProjectMembers        int64 `json:"project_members"`
+	ChannelMembers        int64 `json:"channel_members"`
+	Tasks                 int64 `json:"tasks"`
+	TaskRuns              int64 `json:"task_runs"`
+	TaskEvents            int64 `json:"task_events"`
+	Memory                int64 `json:"memory"`
+	MemoryVersions        int64 `json:"memory_versions"`
+	Artifacts             int64 `json:"artifacts"`
+	ArtifactBytes         int64 `json:"artifact_bytes"`
+	Sessions              int64 `json:"sessions"`
+	NativeActivity        int64 `json:"native_activity"`
+	OnboardingInvitations int64 `json:"onboarding_invitations"`
 }
 
 func (s *Server) adminDeletionPreview(w http.ResponseWriter, r *http.Request) {
@@ -149,8 +150,9 @@ func (s *Server) adminDeletionPreview(w http.ResponseWriter, r *http.Request) {
  (SELECT count(*) FROM link_artifacts WHERE project_id=$1),
  (SELECT COALESCE(sum(size_bytes),0) FROM link_artifacts WHERE project_id=$1),
  (SELECT count(*) FROM execution_sessions WHERE project_id=$1),
- (SELECT count(*) FROM native_activity na JOIN channels c ON c.id=na.channel_id WHERE c.project_id=$1)`, p.ID).Scan(&counts.Channels, &counts.Messages, &counts.Notes, &counts.Receipts, &counts.Events, &counts.ProjectMembers, &counts.ChannelMembers,
-		&counts.Tasks, &counts.TaskRuns, &counts.TaskEvents, &counts.Memory, &counts.MemoryVersions, &counts.Artifacts, &counts.ArtifactBytes, &counts.Sessions, &counts.NativeActivity)
+ (SELECT count(*) FROM native_activity na JOIN channels c ON c.id=na.channel_id WHERE c.project_id=$1),
+ (SELECT count(*) FROM onboarding_invitations WHERE project_id=$1)`, p.ID).Scan(&counts.Channels, &counts.Messages, &counts.Notes, &counts.Receipts, &counts.Events, &counts.ProjectMembers, &counts.ChannelMembers,
+		&counts.Tasks, &counts.TaskRuns, &counts.TaskEvents, &counts.Memory, &counts.MemoryVersions, &counts.Artifacts, &counts.ArtifactBytes, &counts.Sessions, &counts.NativeActivity, &counts.OnboardingInvitations)
 	if err != nil {
 		internal(w)
 		return

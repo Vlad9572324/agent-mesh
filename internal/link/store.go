@@ -52,7 +52,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(731840593)"); err == nil {
-		_, err = tx.Exec(ctx, schema+"\n"+artifactsSchema+"\n"+sessionsSchema+"\n"+tasksSchema+"\n"+memorySchema+"\n"+nativeActivitySchema)
+		_, err = tx.Exec(ctx, schema+"\n"+artifactsSchema+"\n"+sessionsSchema+"\n"+tasksSchema+"\n"+memorySchema+"\n"+nativeActivitySchema+"\n"+onboardingSchema)
 	}
 	if err != nil {
 		return errors.New("schema initialization failed")
@@ -211,6 +211,9 @@ func (s *Store) Revoke(ctx context.Context, id string) error {
 	if result.RowsAffected() != 1 {
 		return errors.New("agent not found")
 	}
+	if err = revokeAgentInvitations(ctx, tx, id); err != nil {
+		return errors.New("invitation revocation failed")
+	}
 	if err = writeAudit(ctx, tx, "local-cli", "key.revoke", "principal", id, auditDetails{}); err != nil {
 		return errors.New("key revocation audit failed")
 	}
@@ -238,6 +241,9 @@ func (s *Store) Rotate(ctx context.Context, id, path string) error {
 	}
 	if result.RowsAffected() != 1 {
 		return errors.New("agent not found")
+	}
+	if err = revokeAgentInvitations(ctx, tx, id); err != nil {
+		return errors.New("invitation revocation failed")
 	}
 	if err = writeAudit(ctx, tx, "local-cli", "key.rotate", "principal", id, auditDetails{}); err != nil {
 		return errors.New("key rotation audit failed")

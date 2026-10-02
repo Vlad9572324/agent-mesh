@@ -43,6 +43,9 @@ func run() error {
 	cert := fs.String("tls-cert", "", "TLS certificate path")
 	key := fs.String("tls-key", "", "TLS private key path")
 	web := fs.String("web-dir", "web", "allowlisted browser assets directory")
+	publicURL := fs.String("public-url", os.Getenv("AGENT_LINK_PUBLIC_URL"), "trusted HTTPS origin for onboarding (or AGENT_LINK_PUBLIC_URL)")
+	onboardingCA := fs.String("onboarding-ca-file", os.Getenv("AGENT_LINK_ONBOARDING_CA_FILE"), "CA certificate for onboarding packages (or AGENT_LINK_ONBOARDING_CA_FILE)")
+	onboardingRepository := fs.String("onboarding-repository", "https://github.com/Vlad9572324/agent-mesh", "trusted HTTPS source repository for onboarding metadata")
 	out := fs.String("credentials-out", "", "bootstrap credentials JSON destination; must not exist")
 	agent := fs.String("agent", "", "stable agent identifier")
 	keyOut := fs.String("key-out", "", "new key JSON destination; must not exist")
@@ -81,6 +84,7 @@ func run() error {
 	if dsn == "" {
 		return errors.New("database URL file or AGENT_LINK_DATABASE_URL required")
 	}
+	var onboarding *link.OnboardingConfig
 	if command == "serve" {
 		if (*cert == "") != (*key == "") {
 			return errors.New("both --tls-cert and --tls-key required")
@@ -94,6 +98,10 @@ func run() error {
 			if ip == nil || !ip.IsLoopback() {
 				return errors.New("TLS is required outside numeric loopback")
 			}
+		}
+		onboarding, err = loadOnboarding(*publicURL, *onboardingCA, *onboardingRepository, *cert, *key)
+		if err != nil {
+			return err
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -129,7 +137,7 @@ func run() error {
 		fmt.Fprintln(os.Stderr, "key rotated; private output written")
 		return nil
 	}
-	server := &http.Server{Addr: *listen, Handler: (&link.Server{Store: store, WebDir: *web}).Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	server := &http.Server{Addr: *listen, Handler: (&link.Server{Store: store, WebDir: *web, Onboarding: onboarding}).Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	stopped := make(chan os.Signal, 1)
 	signal.Notify(stopped, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(stopped)
