@@ -2,20 +2,37 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: source snapshot
+## Current status: partial publication — recovery pending
 
 This repository starts with a sanitized source snapshot and a fresh, independent
 Git history. Earlier repository commits, tags, release records and container
-publications are not imported here. **No prebuilt release or container image has
-been published from this repository yet.**
+publications are not imported here. **The `v0.1.0-rc.2` GitHub Release is still a
+draft; its binaries are not publicly released. A candidate container image exists.**
+
+The [tag publication run](https://github.com/Vlad9572324/agent-mesh/actions/runs/36987513835)
+validated source `c42ca369bf529773e8efec8e7872bba23cceb7b5`, rebuilt matching
+archives and uploaded four hash-verified assets to the draft. It also pushed and
+pulled the image, verifying digest
+`sha256:45f6f7a7180c89299407c2c46a9b27a5d0c790023a570248cfb0e6b08697a2c0`.
+
+The final package guard then failed: the new
+`ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.2` image is publicly readable,
+while the workflow requires private package visibility. A separate
+[metadata diagnostic](https://github.com/Vlad9572324/agent-mesh/actions/runs/36988549817)
+confirmed that its package name/type and repository association are correct;
+visibility is the only failed policy check. The maintainer's decision
+on that policy mismatch and release recovery is pending. The tag already exists;
+do not move it, blindly rerun publication, or overwrite the draft/assets/image.
+This is not a successful completed release.
 
 Use [getting started from source](getting-started.md) for an available setup
 route, then [your first handoff](first-session.md). The
 [archive installation guide](install-release.md) and [container guide](container.md)
-are recipes for a future verified publication, not links to existing downloads.
+remain recipes, not an announcement of public binary downloads or a resolved
+container access policy.
 The next release candidate is **`v0.1.0-rc.2`**, targeting **Linux amd64**.
-Its installation filenames and version checks are prepared, but publication and
-remote verification are still pending. No ARM, macOS or Windows binary is planned
+Its installation filenames and version checks are prepared, but final publication
+and policy reconciliation are still pending. No ARM, macOS or Windows binary is planned
 by this candidate's packaging contract. Keep using source setup until verified
 release assets are announced here.
 
@@ -38,11 +55,11 @@ production service. A project-wide license has not been selected; see
   formal GitHub Release.
 - New images use `ghcr.io/vlad9572324/agent-mesh-server`, with an exact release
   tag or a `sha-<full-commit>` candidate tag. No `latest` alias is published.
-  Packages remain private by default; source visibility does not grant package
-  access or prove that any image exists.
+  The workflow requires private package visibility; the actual rc.2 candidate is
+  public, so finalization halted. Treat policy and observed state separately.
 
-These are implemented workflow capabilities, not successful-run or publication
-claims. Record actual results against commits in this fresh history. A passing
+These describe workflow capabilities; the partial attempt above records its
+actual outcome, not successful final publication. A passing
 dry run does not qualify the remote publication path. Partial publication can
 leave a draft or image requiring an explicit recovery decision; existing
 versions are not overwritten. See the [publication gates](release-process.md).
@@ -88,7 +105,8 @@ database pass. Hosted Compose smoke exercises its documented scenarios, not the
 entire Go database/race suite or provider compatibility matrix.
 
 Run current gates against the exact candidate and record pass/fail/skips honestly.
-No new hosted-run, release-publication or live-model result is asserted here.
+The partial hosted outcome above does not establish final release success or
+any live-model result.
 Operator-specific evidence stays outside the repository.
 
 - No scheduler, automatic idle wakeup, merge/deploy, external process stopping

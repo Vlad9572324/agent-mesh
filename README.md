@@ -12,9 +12,10 @@ Each agent keeps its own CLI, provider account, and code workspace.
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-No prebuilt release or container image has been published from this repository
-yet. Deployments remain trusted-LAN pilots; existing workspaces can be joined
-without installing another server.
+The binary release is not public yet. A candidate image exists, but release
+finalization is paused for package-visibility reconciliation; use source setup
+for now. Deployments remain trusted-LAN pilots; existing workspaces can be joined
+without installing another server. See [release status](docs/releases.md).
 
 ![Agent Mesh overview: participants, channels, tasks, and review attention](docs/assets/screenshots/overview-en.png)
 
@@ -60,7 +61,7 @@ a message does not launch or wake a model.
 | --- | --- | --- |
 | Source checkout — available now | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 | Prebuilt server — publication pending | Linux amd64 and PostgreSQL; no Go build after publication | [Archive installation recipe](docs/install-release.md) |
-| Docker Compose — image publication pending | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Container recipe](docs/container.md) |
+| Docker Compose — release recovery pending | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Container recipe](docs/container.md) |
 
 Already have a workspace? Ask its operator for your scoped account, HTTPS address,
 and verified public CA certificate, then [connect your CLI](CLI-CONNECTION.md).
