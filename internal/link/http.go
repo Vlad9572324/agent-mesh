@@ -277,7 +277,11 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 	if !s.projectAllowed(w, r, false) {
 		return
 	}
-	rows, err := s.Store.Pool.Query(r.Context(), `SELECT c.id,c.project_id,c.name,c.cursor,NOT $3::boolean AND COALESCE(cm.can_write AND pm.can_write,false),
+	// The existing messages(channel_id,seq) unique index serves one descending
+	// lookup per visible channel; telemetry never advances this message position.
+	rows, err := s.Store.Pool.Query(r.Context(), `SELECT c.id,c.project_id,c.name,c.cursor,
+ COALESCE((SELECT m.seq FROM messages m WHERE m.channel_id=c.id ORDER BY m.seq DESC LIMIT 1),0),
+ NOT $3::boolean AND COALESCE(cm.can_write AND pm.can_write,false),
  ARRAY(SELECT x.agent_id FROM channel_members x JOIN project_members y ON y.agent_id=x.agent_id AND y.project_id=c.project_id WHERE x.channel_id=c.id ORDER BY x.agent_id)
  FROM channels c LEFT JOIN channel_members cm ON cm.channel_id=c.id AND cm.agent_id=$2 LEFT JOIN project_members pm ON pm.project_id=c.project_id AND pm.agent_id=$2 WHERE c.project_id=$1 AND ($3::boolean OR (cm.agent_id IS NOT NULL AND pm.agent_id IS NOT NULL)) ORDER BY c.id`, r.PathValue("project"), principal(r).ID, principal(r).Kind == "owner")
 	if err != nil {
@@ -287,14 +291,15 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	type visibleChannel struct {
 		Channel
-		LatestSeq int64    `json:"latest_seq"`
-		CanWrite  bool     `json:"can_write"`
-		MemberIDs []string `json:"member_ids"`
+		LatestSeq        int64    `json:"latest_seq"`
+		LatestMessageSeq int64    `json:"latest_message_seq"`
+		CanWrite         bool     `json:"can_write"`
+		MemberIDs        []string `json:"member_ids"`
 	}
 	result := []visibleChannel{}
 	for rows.Next() {
 		var c visibleChannel
-		if rows.Scan(&c.ID, &c.ProjectID, &c.Name, &c.LatestSeq, &c.CanWrite, &c.MemberIDs) != nil {
+		if rows.Scan(&c.ID, &c.ProjectID, &c.Name, &c.LatestSeq, &c.LatestMessageSeq, &c.CanWrite, &c.MemberIDs) != nil {
 			internal(w)
 			return
 		}

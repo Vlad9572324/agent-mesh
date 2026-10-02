@@ -76,6 +76,58 @@ func TestWorkspaceMessagesReceiptsNotesAndChannelSequence(t *testing.T) {
 	workspaceExpectSame(t, denied, workspaceTestRevision(t, f, "deny-pilot"), "all pilot state")
 }
 
+func TestWorkspaceChannelMessageSequenceIgnoresTelemetryAndReceipts(t *testing.T) {
+	f := newFixture(t)
+	f.owner("owner")
+	check := func(eventSeq, messageSeq float64) {
+		t.Helper()
+		for _, actor := range []string{"viewer-pilot", "owner"} {
+			channels := f.expect("GET", "/v1/projects/pilot/channels", actor, nil, 200)["channels"].([]any)
+			if len(channels) != 1 {
+				t.Fatal("unexpected channel scope")
+			}
+			channel := channels[0].(map[string]any)
+			if channel["latest_seq"] != eventSeq || channel["latest_message_seq"] != messageSeq {
+				t.Fatalf("%s: channel positions got (%v,%v), want (%v,%v)", actor,
+					channel["latest_seq"], channel["latest_message_seq"], eventSeq, messageSeq)
+			}
+		}
+	}
+	check(0, 0)
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", nativeInput("before-message", "session.started"), 201)
+	check(1, 0)
+	message := f.message("message-position-first", "claude-pilot")
+	check(2, 2) // Message sequence is a journal position, not the count (one).
+	messageID := message["id"].(string)
+	f.heartbeat("codex-pilot", "message-position-receipts")
+	eventSeq := float64(2)
+	for _, status := range []string{"delivered", "accepted", "uncertain"} {
+		f.expect("POST", "/v1/messages/"+messageID+"/receipts", "codex-pilot",
+			map[string]any{"session_id": "message-position-receipts", "status": status}, 200)
+		eventSeq++
+		check(eventSeq, 2)
+	}
+	for _, kind := range []string{"inbox.offered", "inbox.seen", "inbox.accepted", "tool.started", "tool.completed", "session.ended"} {
+		input := nativeInput(kind, kind)
+		if strings.HasPrefix(kind, "inbox.") {
+			input.MessageID = &messageID
+		}
+		f.expect("POST", "/v1/channels/general/activity", "codex-pilot", input, 201)
+		eventSeq++
+		check(eventSeq, 2)
+	}
+	input := map[string]any{"client_id": "message-position-second", "body": "Actual new discussion", "recipient_ids": []string{}}
+	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", input, 201)
+	eventSeq++
+	check(eventSeq, eventSeq)
+	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", input, 200)
+	check(eventSeq, eventSeq)
+	events := f.expect("GET", "/v1/channels/general/events", "viewer-pilot", nil, 200)["events"].([]any)
+	if len(events) != int(eventSeq) {
+		t.Fatal("separate message position must preserve the full event journal")
+	}
+}
+
 func TestWorkspaceHiddenStateAndFreshACL(t *testing.T) {
 	f := newFixture(t)
 	f.owner("owner")
@@ -91,17 +143,21 @@ func TestWorkspaceHiddenStateAndFreshACL(t *testing.T) {
 	workspaceExpectSame(t, viewer, workspaceTestRevision(t, f, "viewer-pilot"), "hidden project/channel/note/heartbeat/audit")
 	workspaceExpectChanged(t, owner, workspaceTestRevision(t, f, "owner"), "owner inventory and hidden-to-viewer content")
 	channels := f.expect("GET", "/v1/projects/pilot/channels", "viewer-pilot", nil, 200)["channels"].([]any)
-	if len(channels) != 1 || channels[0].(map[string]any)["id"] != "general" || channels[0].(map[string]any)["latest_seq"] != float64(0) {
-		t.Fatal("channel list/latest_seq leaked a hidden channel")
+	if len(channels) != 1 || channels[0].(map[string]any)["id"] != "general" || channels[0].(map[string]any)["latest_seq"] != float64(0) || channels[0].(map[string]any)["latest_message_seq"] != float64(0) {
+		t.Fatal("channel list/positions leaked a hidden channel")
 	}
 	f.access("viewer-pilot", "channel", "hidden-channel", "read", 200)
 	workspaceExpectChanged(t, viewer, workspaceTestRevision(t, f, "viewer-pilot"), "new channel grant")
 	channels = f.expect("GET", "/v1/projects/pilot/channels", "viewer-pilot", nil, 200)["channels"].([]any)
-	if len(channels) != 2 || channels[1].(map[string]any)["id"] != "hidden-channel" || channels[1].(map[string]any)["latest_seq"] != float64(1) {
-		t.Fatal("newly authorized channel must expose its current cursor")
+	if len(channels) != 2 || channels[1].(map[string]any)["id"] != "hidden-channel" || channels[1].(map[string]any)["latest_seq"] != float64(1) || channels[1].(map[string]any)["latest_message_seq"] != float64(1) {
+		t.Fatal("newly authorized channel must expose its current event/message positions")
 	}
 	f.access("viewer-pilot", "channel", "hidden-channel", "none", 200)
 	workspaceExpectSame(t, viewer, workspaceTestRevision(t, f, "viewer-pilot"), "revoked channel returns to original visible state")
+	channels = f.expect("GET", "/v1/projects/pilot/channels", "viewer-pilot", nil, 200)["channels"].([]any)
+	if len(channels) != 1 || channels[0].(map[string]any)["id"] != "general" || channels[0].(map[string]any)["latest_message_seq"] != float64(0) {
+		t.Fatal("revoked channel message position remained visible")
+	}
 	f.access("viewer-pilot", "project", "hidden-project", "read", 200)
 	workspaceExpectChanged(t, viewer, workspaceTestRevision(t, f, "viewer-pilot"), "project addition without any selected channel")
 	f.access("viewer-pilot", "project", "hidden-project", "none", 200)

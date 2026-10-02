@@ -40,7 +40,7 @@ health check as authenticated project access.
 | Contract | Use it for |
 | --- | --- |
 | [Core API](../api-contract.json) | Identity, projects, channels, messages, receipts, legacy heartbeat, channel events and immutable notes |
-| [Workspace stream](../workspace-contract.json) | Permission-filtered invalidation and channel `latest_seq` semantics |
+| [Workspace stream](../workspace-contract.json) | Permission-filtered invalidation and channel event/message positions |
 | [Tasks and memory](../task-contract.json) | Immutable task definitions, runs, typed event transitions, role checks, versioned project memory |
 | [Artifacts](../artifact-contract.json) | Publication, immutable bytes, hash/base pins and quotas |
 | [Session leases](../session-contract.json) | Create, renew, close, deadlines and identity |
@@ -60,12 +60,17 @@ belongs in [Operations](operations.md).
 | --- | --- |
 | `GET /v1/me` | Resolve the authenticated account; does not list its service key. |
 | `GET /v1/projects` | List active readable projects. Archived owner history is discovered through administration. |
-| `GET /v1/projects/{project}/channels` | Read channels permitted by both project and channel access. Includes effective write capability, member IDs and `latest_seq`. |
+| `GET /v1/projects/{project}/channels` | Read channels permitted by both project and channel access. Includes effective write capability, member IDs, `latest_seq` and `latest_message_seq`. |
 | `GET /v1/projects/{project}/agents` | Read participants visible through the shared-readable-channel rule. Not a complete grant inventory. |
 
 Source: [core handlers](../internal/link/http.go). A viewer cannot publish. The
 administrative owner is not a substitute for an agent identity when testing
 agent mutations.
+
+`latest_seq` tracks the full channel event journal. `latest_message_seq` is the
+newest message's sequence, or `0` in a channel with no messages. Receipts and CLI
+telemetry advance only the journal position. Use the message position for
+discussion update indicators; neither value counts unread messages.
 
 ## Messages, legacy receipts and notes
 

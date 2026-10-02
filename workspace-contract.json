@@ -24,6 +24,13 @@
     "type": "integer",
     "meaning": "Current channels.cursor for each already-authorized result only. Advances for messages and receipt/event changes; it is not an unread-message count. Existing project/channel ACL filtering is unchanged."
   },
+  "message_position_addition": {
+    "route": "GET /v1/projects/{project}/channels",
+    "field": "latest_message_seq",
+    "type": "integer",
+    "meaning": "Newest messages.seq for each already-authorized channel, or 0 if it has no messages. Advances only when a new message commits, not for receipt/native activity updates or identical message retries. A position, not a message count or per-reader unread state. latest_seq and durable event replay are unchanged.",
+    "query": "One descending LIMIT 1 lookup per visible channel using the existing messages(channel_id,seq) unique index; no schema change or whole-table message aggregation."
+  },
   "boundaries": [
     "The SSE data object contains only revision. No raw keys, key hashes, message/note bodies, IDs, status or audit payloads are sent in hints.",
     "Fingerprint input consists of minimal current REST-visible metadata; no schema changes, triggers, durable workspace log, heartbeat updates or audit writes are added.",
