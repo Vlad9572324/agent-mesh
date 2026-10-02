@@ -23,6 +23,8 @@ const runtime = runtimeDir(), chrome = browserExecutable(), caPath = certificate
 const run = `project-native-${randomUUID().slice(0, 8)}`;
 const schema = `project_native_gui_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const ids = Object.fromEntries(['owner', 'writer', 'peer', 'viewer', 'project', 'other', 'alpha', 'beta', 'quiet', 'private', 'other-channel'].map(name => [name, `${run}-${name}`]));
+const readPaths = new Set(['alpha', 'beta', 'quiet', 'other-channel'].map(name => `/v1/channels/${ids[name]}/read`));
+const allowedBrowserRequest = item => item.method === 'GET' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
 const report = {run, schema, database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
   browser_errors: [], requests: [], layouts: [], screenshots: [], models_started: 0,
   scope: 'Owned isolated schema, loopback TLS API and Chromium; no shared fixture keys or production requests'};
@@ -172,7 +174,7 @@ class CDP {
       if (message.method === 'Page.javascriptDialogOpening') void this.call('Page.handleJavaScriptDialog', {accept: false}).catch(() => {});
       if (message.method === 'Fetch.requestPaused') {
         const {request, requestId} = message.params, url = new URL(request.url);
-        const deny = request.method !== 'GET' || url.origin !== new URL(base).origin;
+        const deny = url.origin !== new URL(base).origin || !allowedBrowserRequest({method: request.method, path: url.pathname, tab: name});
         if (deny) report.browser_guard_failed = true;
         void this.call(deny ? 'Fetch.failRequest' : 'Fetch.continueRequest', deny ? {requestId, errorReason: 'BlockedByClient'} : {requestId}).catch(() => {});
       }
@@ -379,9 +381,14 @@ async function quietCases() {
     assert(await viewer.eval(`${channelButton}.dataset.updated!=='true'`), 'Technical-only reports created a channel badge');
     const actualMessage = await message('beta', 'A real peer message must produce a channel badge');
     await viewer.wait(`${channelButton}.dataset.updated==='true'`, 'real peer message badge', 12000);
+    const deliverySQL = `SET search_path TO "${schema}"; SELECT json_build_object('native',(SELECT json_agg(n ORDER BY id) FROM native_activity n),'receipts',(SELECT json_agg(r ORDER BY message_id,agent_id) FROM receipts r))::text;`;
+    const deliveryBefore = (await sql(deliverySQL, 'delivery-before-gui-read')).toString();
     await viewer.click(`#channel-list [data-focus-key="channel:${ids.beta}"]`);
     await viewer.wait(`!document.getElementById('refresh-button').disabled && ${channelButton}.dataset.updated!=='true'`, 'opening message channel clears badge');
     assert(await viewer.eval(`document.getElementById('chat-panel').textContent.includes(${js(actualMessage.body)})`), 'Real badge did not correspond to a rendered message');
+    const recorded = (await api('/v1/navigation', 'GET', undefined, 'viewer')).channels.find(channel => channel.id === ids.beta);
+    assert(recorded.unread_messages === 0 && recorded.last_read_seq === actualMessage.seq, 'Visible discussion was not recorded at its actual message position');
+    assert((await sql(deliverySQL, 'delivery-after-gui-read')).toString() === deliveryBefore, 'GUI read altered native events or delivery receipts');
   });
   await check('Russian English refresh and mobile views preserve reveal preference and logout clears content', async () => {
     await feed(viewer); await viewer.click('#project-native-technical');
@@ -402,7 +409,7 @@ async function quietCases() {
       await tab.click('#logout-button');
       await tab.wait(`!document.getElementById('login-panel').hidden && localStorage.length===0 && sessionStorage.length===0 && document.getElementById('project-native-technical-notice').textContent===''`, 'logout clears quiet controls and storage');
     }
-    assert(!report.browser_guard_failed && report.browser_errors.length===0 && report.requests.every(request=>request.method==='GET'), 'Browser mutation or runtime failure');
+    assert(!report.browser_guard_failed && report.browser_errors.length===0 && report.requests.every(allowedBrowserRequest), 'Unexpected browser mutation or runtime failure');
   });
 }
 
@@ -418,7 +425,7 @@ try {
     assert(await viewer.eval(`!document.querySelector(${js(eventSelector(privateEvents[0]))}) && !document.getElementById('project-native-list').textContent.includes(${js(ids.private)}) && !document.querySelector('#project-native-list img') && !window.nativeFeedInjected`), 'Hidden channel or executable actor markup leaked');
     await owner.wait(hasEvent(privateEvents[0]), 'owner private channel visibility');
     assert(await viewer.eval(`!document.querySelector('#project-native-panel form') && /клиент|самоотч|не проверено/i.test(document.getElementById('project-native-panel').textContent)`), 'Project feed provenance/write boundary missing');
-    assert(!report.browser_guard_failed && report.requests.every(r => r.method === 'GET'), 'Read-only GUI attempted a mutation');
+    assert(!report.browser_guard_failed && report.requests.every(allowedBrowserRequest), 'GUI attempted a mutation beyond its owned read cursors');
   });
   await check('actor/channel filters intersect and empty filtered results are explicit', async () => {
     await viewer.filter('project-native-channel', ids.beta);

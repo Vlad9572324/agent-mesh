@@ -388,7 +388,7 @@ async function sidebarCases() {
   await check('revoked channel disappears from account counts while independent authorized accounts retain it', async () => {
     await grant('viewer', 'channel', 'beta', 'none');
     await refreshTab(viewer); await viewer.click(projectButton('project'));
-    await viewer.wait(`!document.querySelector(${js(channelButton('beta'))})`, 'revoked channel removed');
+    await viewer.wait(`!!document.querySelector(${js(channelButton('alpha'))}) && !document.querySelector(${js(channelButton('beta'))}) && !document.getElementById('refresh-button').disabled`, 'authorized project loaded without revoked channel');
     await unread(viewer, '#nav-unread', 0);
     const snapshot = await navigation();
     assert(!snapshot.channels.some(item => item.id === ids.beta) && snapshot.projects.find(item => item.id === ids.project).unread_messages === 0, 'Revoked channel count remains in project summary');
