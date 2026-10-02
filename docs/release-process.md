@@ -2,9 +2,9 @@
 
 [Documentation](README.md) · [Install a release](install-release.md) · [Release notes](releases.md)
 
-The public `v0.1.0-rc.2` server image is verified, while the GitHub binary Release
-is still awaiting finalization. See [release status](releases.md) for the actual
-run and digest evidence. Packaging targets Linux amd64 only; workflow definitions
+The `v0.1.0-rc.2` GitHub prerelease and public server image are published.
+See [release status](releases.md) for artifact verification, the original failed
+tag run and explicit finalization recovery. Packaging targets Linux amd64 only; workflow definitions
 alone do not establish successful publication.
 New version tags use the hosted
 [automatic release workflow](#automatic-version-tag-releases). Its manual
@@ -29,9 +29,9 @@ reviewed commit from this repository's fresh history.
 
 ## Artifact contract
 
-The candidate version `v0.1.0-rc.2` below illustrates the contract; it is not yet
-an available download. Substitute the exact validated release version, keeping the
-same four asset types. Never overwrite an already published version.
+The published prerelease `v0.1.0-rc.2` below illustrates the contract. For a new
+release, substitute a new validated version, keeping the same four asset types.
+Never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
@@ -65,7 +65,10 @@ It refuses a missing, malformed, or duplicate marker and does not rewrite the
 repository guide or old published assets. Its supplementary links are GitHub URLs,
 not relative references to omitted files. Dry-run and commit-candidate builds do
 not create the referenced version tags/releases; generated links are not
-publication evidence. These are runtime bundles, not copies of
+publication evidence. Bundled and tag-pinned guides are immutable build-time
+snapshots; their status text can predate publication. Record actual availability
+in [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md),
+without rewriting a tag or archive. These are runtime bundles, not copies of
 the whole repository: no test harness, deployment script, engineering archive,
 private runtime state, database dump, keys, logs, or provider credentials belongs
 in an archive.

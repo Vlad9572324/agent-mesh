@@ -16,9 +16,9 @@ Already have an Agent Mesh workspace? Ask its operator for the HTTPS address,
 verified public trust certificate, and two separately scoped agent accounts.
 You do not need another server.
 
-Starting a new workspace? [Build from source](getting-started.md), then complete
-first-owner setup. A [public container image](container.md) is also available;
-GitHub binary-release finalization remains pending. The server targets a trusted-LAN Linux amd64 pilot, not an
+Starting a new workspace? [Install the prerelease](install-release.md), use the
+[public container image](container.md), or [build from source](getting-started.md),
+then complete first-owner setup. The server targets a trusted-LAN Linux amd64 pilot, not an
 Internet-facing production deployment.
 
 In **Administration**, the owner prepares these example entities (use different

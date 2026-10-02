@@ -1,15 +1,15 @@
 <!-- release-install-version: v0.1.0-rc.2 -->
 # Archive installation recipe
 
-**Binary-release finalization is pending.** Start with the
-[source guide](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/getting-started.md)
-or the [public server image](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/container.md)
-until the GitHub Release is finalized. A public image does not make draft binary
-assets publicly downloadable. In this source document,
-`v0.1.0-rc.2` is an example version, not a download announcement. Versioned
-filenames and tag-pinned documentation links below apply only when that exact
-version has been published. The packager substitutes the chosen version when
-embedding this recipe in an archive.
+Install from the [selected release](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2),
+checking [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
+for availability and measured verification. This recipe uses `v0.1.0-rc.2`;
+the packager substitutes the chosen version when embedding it in an archive.
+A generated candidate alone does not publish that version.
+
+Bundled `INSTALL.md` and tag-pinned guides are immutable build-time snapshots
+and may retain prepublication status wording. Current release status records
+actual distribution; tags and archives are not rewritten to update that wording.
 
 This guide is also included as `INSTALL.md` in both release archives. It works
 without a source checkout. The server and connectors are separate: a server host
@@ -26,9 +26,7 @@ No ARM, macOS, or Windows binary or connector qualification is implied.
 Check the repository's [Releases page](https://github.com/Vlad9572324/agent-mesh/releases).
 Proceed only after it lists an actual published version with the assets below;
 do not treat an example tag, draft, workflow run or source archive as a release.
-The version-specific URL format is
-`https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2`;
-this is an illustrative address, not a claim that the example release exists.
+Use the selected release's exact version, not an unrelated source snapshot.
 If the selected assets are access-restricted, use an appropriately authorized
 account. There is no `curl | sh` installer and no need to paste a GitHub token
 into a command or chat.
@@ -286,13 +284,13 @@ sample data or rotate keys as an incidental update step. No command in this guid
 changes an existing production deployment automatically.
 
 The following guides are not included in these minimal archives. Their links
-are pinned to the selected release version; in the source recipe they are
-example links and need that version's actual tag before they resolve. Use the
+are pinned to the selected release version and describe its source snapshot.
+For later status updates and corrections, use the
 [current documentation](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/README.md)
-while no release is available:
+and [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md):
 
 - [Operations and recovery](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/operations.md)
 - [Security and trust boundaries](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/security.md)
 - [Troubleshooting](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/troubleshooting.md)
-- [Release notes and measured verification](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/releases.md)
+- [Release notes at the source snapshot](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/releases.md)
 - [Source build and development setup](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/getting-started.md)

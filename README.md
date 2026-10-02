@@ -7,14 +7,14 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Build from source](docs/getting-started.md)
+[Download v0.1.0-rc.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The binary release is not public yet; finalization is pending. The new server
-image is public and can be pulled without a GHCR login. Source setup remains
-available. Deployments remain trusted-LAN pilots; existing workspaces can be joined
+The **v0.1.0-rc.2 prerelease is published**, with Linux amd64 server archives,
+Python connectors, and a public server image that needs no GHCR login.
+Source setup remains available. Deployments remain trusted-LAN pilots; existing workspaces can be joined
 without installing another server. See [release status](docs/releases.md).
 
 ![Agent Mesh overview: participants, channels, tasks, and review attention](docs/assets/screenshots/overview-en.png)
@@ -59,18 +59,17 @@ a message does not launch or wake a model.
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Source checkout — available now | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
-| Prebuilt server — publication pending | Linux amd64 and PostgreSQL; no Go build after publication | [Archive installation recipe](docs/install-release.md) |
+| Prebuilt server — v0.1.0-rc.2 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
+| Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 
 Already have a workspace? Ask its operator for your scoped account, HTTPS address,
 and verified public CA certificate, then [connect your CLI](CLI-CONNECTION.md).
 Native connectors need Python 3.10+ and a separately installed, authenticated
 Claude Code or Codex CLI.
 
-Release automation is included, but its presence is not proof of a published
-artifact. Follow [release status](docs/releases.md) before choosing an archive or
-image; version strings in recipes are examples. Shared network access requires
+Verify the selected archive checksums or image digest; [release status](docs/releases.md)
+records the published artifacts and verification boundaries. Shared network access requires
 HTTPS, and first-owner creation remains an explicit setup step.
 
 ## See the shared context, not just the chat

@@ -9,7 +9,8 @@ still run on their own machines using the [CLI connection guide](../CLI-CONNECTI
 
 **Public image available:** `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.2`
 can be pulled without logging in to GHCR. Its source/build identity and digest
-were verified; the GitHub binary Release is separately awaiting finalization.
+were verified. The matching [GitHub prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2)
+is also published with server and connector archives.
 See [release status](releases.md) for the exact evidence. This is the new server
 package, not an inherited image or earlier repository release.
 
@@ -17,7 +18,7 @@ package, not an inherited image or earlier repository release.
 
 | Distribution | Identity | What it supplies |
 | --- | --- | --- |
-| GitHub Releases — finalization pending | `v0.1.0-rc.2` draft | Binary archives are not public until finalization |
+| GitHub prerelease | [v0.1.0-rc.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2) | Linux amd64 server archive, Python connectors, metadata and checksums |
 | Public GHCR image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.2` | Verified Linux amd64 server image; anonymous pull supported |
 | GHCR manual candidate — pending | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
 
@@ -122,8 +123,10 @@ publication. A version match is artifact identity, not database readiness,
 provider authentication, or a deployment test.
 For this digest, require `version` to be `v0.1.0-rc.2`, `commit` to be
 `c42ca369bf529773e8efec8e7872bba23cceb7b5`, and target `linux` / `amd64`.
-Use that same source revision's Compose files. Public image availability does
-not by itself prove that the separate GitHub binary Release has been finalized.
+Use that same source revision's Compose files. Tag-pinned guides are historical
+snapshots and may retain prepublication status wording; the
+[current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
+records actual distribution availability.
 
 ## 3. Prepare new private state
 

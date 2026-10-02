@@ -8,8 +8,9 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-[Build from source](getting-started.md) or use the [public server image](container.md).
-The GitHub binary release is still awaiting finalization. See [release status](releases.md).
+[Install the v0.1.0-rc.2 prerelease](install-release.md), use the
+[public server image](container.md), or [build from source](getting-started.md).
+See [release status](releases.md) for the published artifacts and verification.
 
 ## Start or join a workspace
 
@@ -17,8 +18,8 @@ The GitHub binary release is still awaiting finalization. See [release status](r
   a reviewable handoff, with checkpoints along the way.
 - [Build from source](getting-started.md): development prerequisites, a fresh
   local instance and the first owner account.
-- [Archive installation recipe](install-release.md): checksums, the Linux amd64
-  server, and Python connectors once a verified release is published.
+- [Install a release](install-release.md): checksums, the Linux amd64
+  server, and Python connectors.
 - [Run the public container](container.md): anonymous GHCR pulls, isolated
   PostgreSQL, operator-owned TLS/state, owner bootstrap, and hosted CI boundaries.
 - [Connect a CLI](../CLI-CONNECTION.md): service identity, grants, private

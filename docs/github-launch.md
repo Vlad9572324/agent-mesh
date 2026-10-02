@@ -35,8 +35,8 @@ Suggested invitation copy:
 
 An existing-workspace participant should go straight to
 [Connect a CLI](../CLI-CONNECTION.md), not install another server. New operators
-can use [source setup](getting-started.md) or the [public image](container.md)
-while binary-release finalization is pending. Keep Linux amd64 scope,
+can [install the prerelease](install-release.md), use the [public image](container.md),
+or [build from source](getting-started.md). Keep Linux amd64 scope,
 PostgreSQL/TLS requirements and explicit owner
 setup visible; do not advertise an instant installer or unattended agents.
 
@@ -48,9 +48,9 @@ setup visible; do not advertise an instant installer or unattended agents.
 - **Implemented verification:** source checks, archive/container smoke tests,
   and release automation. Cite only actual runs against this fresh repository.
   A dry run does not prove publication, and a recipe does not prove an image exists.
-- **Partially available:** the new `agent-mesh-server` image is public and
-  anonymously readable under the approved distribution policy. The GitHub binary
-  release is still a draft; record finalization only after it actually succeeds.
+- **Published:** the `v0.1.0-rc.2` GitHub prerelease and public
+  `agent-mesh-server` image. [Release status](releases.md) records the verified
+  artifacts, original failed publication run and explicit finalization recovery.
 - **Not decided:** a project-wide license. [Authorship](../AUTHORS.md) and
   [third-party notices](third-party-notices.md) do not select one. Publicly
   readable source is not a substitute for a license; do not add an open-source

@@ -2,12 +2,16 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: public image — binary finalization pending
+## Current status: v0.1.0-rc.2 prerelease published
 
 This repository starts with a sanitized source snapshot and a fresh, independent
 Git history. Earlier repository commits, tags, release records and container
-publications are not imported here. **The `v0.1.0-rc.2` GitHub Release is still a
-draft; its binaries are not publicly released. The new server image is public.**
+publications are not imported here. **The
+[v0.1.0-rc.2 prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2)
+is published, with Linux amd64 server archives, Python connectors and a public
+server image.** The four release assets were downloaded without authentication
+and their hashes matched the audited build. The downloaded server's version
+identity also matched.
 
 The [tag publication run](https://github.com/Vlad9572324/agent-mesh/actions/runs/36987513835)
 validated source `c42ca369bf529773e8efec8e7872bba23cceb7b5`, rebuilt matching
@@ -23,20 +27,32 @@ confirmed that its package name/type and repository association are correct;
 visibility was the only failed policy check. The maintainer has now explicitly
 approved **public distribution of this new image**, and the publication policy
 requires public visibility with the exact current repository association.
-Anonymous pulls are supported; no GHCR login is needed. Finalization of the
-existing GitHub draft is still pending. The tag already exists;
-do not move it, blindly rerun publication, or overwrite the draft/assets/image.
-This is not a successful completed release.
+Anonymous pulls are supported; no GHCR login is needed.
 
-Use [getting started from source](getting-started.md) for an available setup
-route, then [your first handoff](first-session.md). The
-[archive installation guide](install-release.md) still awaits public binary
-downloads; the [container guide](container.md) now uses the verified public image.
-The next release candidate is **`v0.1.0-rc.2`**, targeting **Linux amd64**.
-Its installation filenames and version checks are prepared, but GitHub binary
-publication is still pending. No ARM, macOS or Windows binary is planned by this
-candidate's packaging contract. Source setup and the public image are available
-independently of final binary-release publication.
+After the policy update, [hosted CI](https://github.com/Vlad9572324/agent-mesh/actions/runs/36998644300)
+and the [read-only package diagnostic](https://github.com/Vlad9572324/agent-mesh/actions/runs/36998656594)
+passed. The existing draft was then explicitly finalized after all four assets
+were independently downloaded and hash-verified again. Public release metadata
+confirmed publication as a prerelease. The source tag, assets and image were not
+moved or replaced. **This was a verified recovery; the original tag run remains
+failed**, not retroactively successful.
+
+Anonymous download of the image configuration and all four layers also verified
+every descriptor's size and digest, with the expected version, source, Linux
+amd64 target and nonroot configuration. This byte-level check was not a new Docker
+execution; container execution and Compose smoke were verified by the original
+hosted run.
+
+Use [archive installation](install-release.md), the [public container](container.md),
+or [source setup](getting-started.md), then [your first handoff](first-session.md).
+Only **Linux amd64** is runtime-qualified; no ARM, macOS or Windows binary
+qualification is implied.
+
+The tag-pinned documentation and bundled `INSTALL.md` are historical source/build
+snapshots and still contain prepublication status wording. This
+[current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
+records actual distribution availability. The immutable tag and archives are not
+rewritten to update documentation status.
 
 Public source availability is separate from deployment security and package
 permissions. Agent Mesh remains a trusted-LAN pilot, not an Internet-facing
@@ -60,13 +76,13 @@ production service. A project-wide license has not been selected; see
   The new server package must be public and associated with this exact repository;
   workflows verify that policy but never change package visibility themselves.
 
-These describe workflow capabilities; the partial attempt above records its
-actual outcome, not successful final publication. A passing
+These describe workflow capabilities; the run and explicit recovery above record
+the actual publication outcome. A passing
 dry run does not qualify the remote publication path. Partial publication can
 leave a draft or image requiring an explicit recovery decision; existing
 versions are not overwritten. See the [publication gates](release-process.md).
 
-## Planned artifact contract
+## Published artifact contract
 
 The builder produces a Linux amd64 server archive, a separate Python connector
 archive, `RELEASE.json`, and `SHA256SUMS`. Both archives contain a version-rendered
@@ -107,8 +123,8 @@ database pass. Hosted Compose smoke exercises its documented scenarios, not the
 entire Go database/race suite or provider compatibility matrix.
 
 Run current gates against the exact candidate and record pass/fail/skips honestly.
-The partial hosted outcome above does not establish final release success or
-any live-model result.
+The hosted checks, explicit recovery and anonymous downloads above establish
+the recorded artifact publication, not live-model or production qualification.
 Operator-specific evidence stays outside the repository.
 
 - No scheduler, automatic idle wakeup, merge/deploy, external process stopping
