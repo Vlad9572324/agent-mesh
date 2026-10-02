@@ -1228,7 +1228,7 @@
     } catch (error) {
       // A failed or cancelled acknowledgement never clears a badge optimistically.
       // The next authorized snapshot reconciles the monotonic cursor.
-      if (current(context) && error.status === 403) scheduleRefresh();
+      if (current(context) && [403, 404].includes(error.status)) scheduleRefresh();
     } finally { if (state.navigationRead === request) state.navigationRead = null; }
   }
 
@@ -1875,6 +1875,7 @@
     }
     $("search-input").disabled = view !== "chat";
     renderNavigation(); updatePermissions();
+    if (view === "chat") scheduleChannelRead();
     if (view === "native") { renderNativeActivity(); if (previousView !== "native") scheduleRefresh(); }
     if (view === "project-native") renderProjectNative();
     if (view === "project-map") renderProjectMap();
@@ -3455,7 +3456,7 @@
   $("note-cancel").addEventListener("click", () => { if (!state.publishing) $("note-dialog").close(); });
   $("note-dialog").addEventListener("cancel", (event) => { if (state.publishing) event.preventDefault(); });
   window.addEventListener("pagehide", () => lock());
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.key) scheduleRefresh(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.key) { scheduleRefresh(); scheduleChannelRead(); } });
 
   captureStaticTranslations();
   $("language-select")?.addEventListener("change", () => applyLanguage($("language-select").value, true));
