@@ -2,6 +2,7 @@
 // Own schema in agentlink_test, own loopback TLS server, own Chromium. No shared
 // seed credentials, agentlink_e2e dependency, production URL or model invocation.
 // Run only after the backend/web changes are integrated: node tests/project_native_gui.mjs
+// Focused quiet-feed regression: node tests/project_native_gui.mjs --quiet-only
 import {readFile, writeFile, mkdtemp, mkdir, copyFile, rm, open, lstat} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
@@ -14,6 +15,10 @@ import {runtimeDir, certificateFile, browserExecutable} from '../scripts/operato
 
 process.umask(0o077);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const quietOnly = process.argv.includes('--quiet-only');
+const technicalTypes = new Set(['session.started', 'session.ended', 'turn.started', 'turn.completed',
+  'tool.started', 'tool.completed', 'agent.waiting', 'inbox.offered']);
+const quietTechnical = [], quietImportant = [];
 const runtime = runtimeDir(), chrome = browserExecutable(), caPath = certificateFile();
 const run = `project-native-${randomUUID().slice(0, 8)}`;
 const schema = `project_native_gui_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
@@ -121,10 +126,15 @@ async function api(path, method = 'GET', body, actor = 'owner', expected = 200) 
 }
 const grant = (actor, scope, resource, access) => api('/v1/admin/access', 'PUT', {agent_id: ids[actor], scope, resource_id: ids[resource], access});
 const feedPath = (project = 'project', query = '') => `/v1/projects/${ids[project]}/activity?limit=100${query}`;
-async function activity(type, channel = 'alpha', actor = 'writer') {
+async function activity(type, channel = 'alpha', actor = 'writer', messageId) {
   return (await api(`/v1/channels/${ids[channel]}/activity`, 'POST', {client_id: `${run}-${randomUUID()}`,
     session_id: `${run}-${actor}-client-session`, runtime: actor === 'peer' ? 'claude' : 'codex', event_type: type,
-    ...(type.startsWith('tool.') ? {tool_name: 'Read'} : {})}, actor, 201)).activity;
+    ...(type.startsWith('tool.') ? {tool_name: 'Read'} : {}), ...(messageId ? {message_id: messageId} : {})}, actor, 201)).activity;
+}
+async function message(channel = 'alpha', body = 'Isolated meaningful message', actor = 'peer') {
+  return (await api(`/v1/channels/${ids[channel]}/messages`, 'POST', {
+    client_id: `${run}-${randomUUID()}`, body, recipient_ids: [ids[actor === 'peer' ? 'writer' : 'peer']],
+  }, actor, 201)).message;
 }
 async function fixtures() {
   for (const actor of ['writer', 'peer', 'viewer']) {
@@ -240,6 +250,9 @@ async function login(tab, actor) {
   await tab.fill('api-key', keys[actor]); await tab.click('#login-button');
   await tab.wait(`document.getElementById('login-panel').hidden && !document.getElementById('refresh-button').disabled`, 'login ready');
   await project(tab);
+  // The historical regression deliberately inspects every archived event.
+  // The quiet regression keeps the product's default until testing the toggle.
+  if (!quietOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
 }
 async function project(tab, name = 'project') {
   await tab.click(`#project-switcher [data-focus-key="project:${ids[name]}"]`);
@@ -266,7 +279,123 @@ async function stopChild(child) {
   return !child || !child.pid || child.exitCode !== null || child.signalCode !== null;
 }
 
+async function quietCases() {
+  const hidden = id => `Number(document.getElementById(${js(id)}).dataset.hiddenCount)`;
+  const projectRows = `Array.from(document.querySelectorAll('#project-native-list [data-native-id]')).map(e=>e.dataset.nativeId)`;
+  const channelRows = `Array.from(document.querySelectorAll('#native-activity-list [data-native-id]')).map(e=>e.dataset.nativeId)`;
+  let allPublic;
+  await check('quiet default retains failures and explicit inbox decisions while counting hidden technical reports', async () => {
+    await isolatedServer(); await fixtures();
+    const reference = await message('alpha', 'Reference for explicit viewed and accepted reports');
+    for (const type of technicalTypes) quietTechnical.push(await activity(type, 'alpha', 'writer', type.startsWith('inbox.') ? reference.id : undefined));
+    for (const type of ['tool.failed', 'inbox.seen', 'inbox.accepted']) quietImportant.push(await activity(type, 'alpha', 'writer', type.startsWith('inbox.') ? reference.id : undefined));
+    allPublic = [...publicEvents, ...quietTechnical, ...quietImportant];
+    await browsers();
+    const page = (await api(feedPath(), 'GET', undefined, 'viewer')).activity;
+    const important = page.filter(event => !technicalTypes.has(event.event_type));
+    await viewer.wait(`${projectRows}.length===${important.length} && ${hidden('project-native-technical-notice')}===${page.length - important.length}`, 'quiet first page');
+    assert(JSON.stringify(await viewer.eval(projectRows)) === JSON.stringify(important.map(event => event.id)), 'Quiet feed changed important event identities or order');
+    assert(quietImportant.every(event => important.some(item => item.id === event.id)), 'Fixture important events are outside tested page');
+    assert(await viewer.eval(`!document.getElementById('project-native-technical').checked && !document.querySelector('#project-native-list img') && !window.nativeFeedInjected`), 'Default toggle or safe actor rendering regressed');
+    assert(await viewer.eval(`document.getElementById('project-native-last-event').dataset.freshness==='fresh'`), 'Hidden reports erased actual observation freshness');
+  });
+  await check('technical-only scope states hidden data honestly and reveal preference survives filters', async () => {
+    await viewer.filter('project-native-channel', ids.beta);
+    await viewer.wait(`${projectRows}.length===0 && ${hidden('project-native-technical-notice')}===6`, 'technical-only channel');
+    assert(await viewer.eval(`/техническ/i.test(document.getElementById('project-native-list').textContent) && document.getElementById('project-native-last-event').dataset.freshness!=='empty'`), 'Hidden-only scope falsely claimed no activity');
+    await viewer.click('#project-native-technical');
+    await viewer.wait(`${projectRows}.length===6 && ${hidden('project-native-technical-notice')}===0`, 'reveal all six reports');
+    await viewer.filter('project-native-actor', ids.writer);
+    await viewer.wait(`${projectRows}.length===0 && document.getElementById('project-native-last-event').dataset.freshness==='empty'`, 'genuinely empty actor intersection');
+    assert(await viewer.eval(`document.getElementById('project-native-technical').checked`), 'Actor filter reset reveal preference');
+    await viewer.filter('project-native-actor', ids.peer); await viewer.wait(`${projectRows}.length===6`, 'matching actor restored');
+    await resetFilters(viewer); await viewer.wait(`${projectRows}.length===100`, 'revealed bounded first page');
+  });
+  await check('reveal retains complete ordered opaque-cursor history and hiding does not erase loaded records', async () => {
+    await viewer.click('#project-native-more'); await viewer.wait(`${projectRows}.length===${allPublic.length}`, 'all earlier rows loaded');
+    const expected = [...allPublic].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)).map(event => event.id);
+    assert(JSON.stringify(await viewer.eval(projectRows)) === JSON.stringify(expected), 'Technical toggle changed history order, scope or completeness');
+    assert(viewer.requests.some(request => request.path === `/v1/projects/${ids.project}/activity` && new URLSearchParams(request.query).has('before')), 'Pagination did not retain opaque cursor');
+    await viewer.click('#project-native-technical');
+    await viewer.wait(`${projectRows}.length===3 && ${hidden('project-native-technical-notice')}===${allPublic.length - 3}`, 'hide preserves loaded history counter');
+    await viewer.click('#project-native-technical'); await viewer.wait(`${projectRows}.length===${allPublic.length}`, 'cached history revealed again');
+    await viewer.click('#project-native-technical');
+  });
+  await check('channel CLI and ordinary event feeds share quiet mode without dropping their messages', async () => {
+    await viewer.click(`#channel-list [data-focus-key="channel:${ids.alpha}"]`);
+    await viewer.wait(`!document.getElementById('channel-toolbar').hidden && !document.getElementById('refresh-button').disabled`, 'channel selected');
+    await viewer.click('#tab-native');
+    await viewer.wait(`${channelRows}.length===3 && ${hidden('native-technical-notice')}>0`, 'important channel reports visible');
+    assert(await viewer.eval(`!document.getElementById('native-technical').checked`), 'Channel navigation reset shared preference');
+    assert(JSON.stringify(await viewer.eval(channelRows)) === JSON.stringify([...quietImportant].reverse().map(event => event.id)), 'Channel quiet mode omitted explicit inbox decisions');
+    await viewer.click('#native-technical');
+    await viewer.wait(`${channelRows}.length===115 && ${hidden('native-technical-notice')}===0`, 'all channel reports restored');
+    await viewer.click('#native-technical'); await viewer.click('#tab-activity');
+    await viewer.wait(`document.querySelectorAll('#activity-list article').length===1 && ${hidden('activity-technical-notice')}>0`, 'ordinary event feed retains message event');
+    assert(await viewer.eval(`!document.getElementById('activity-technical').checked && /сообщен/i.test(document.getElementById('activity-list').textContent)`), 'Quiet channel events hid the message');
+    await viewer.click('#activity-technical');
+    await viewer.wait(`document.querySelectorAll('#activity-list article').length>1 && ${hidden('activity-technical-notice')}===0`, 'ordinary event diagnostic history revealed');
+    await viewer.click('#activity-technical');
+  });
+  await check('project map keeps important reports visible and explicit native type reveals technical entities', async () => {
+    await viewer.click('#nav-project-map');
+    await viewer.wait(`!document.getElementById('project-map-panel').hidden && document.querySelector('#project-map-counts [data-entity-type="native"]')?.dataset.countState!=='loading'`, 'project map snapshot');
+    await viewer.wait(`${hidden('project-map-technical-notice')}>0`, 'map counts hidden technical sample');
+    const defaultNative = await viewer.eval(`Array.from(document.querySelectorAll('#project-map-entities [data-entity-type="native"]')).map(e=>e.dataset.entityId)`);
+    assert(quietImportant.every(event => defaultNative.includes(event.id)) && !quietTechnical.some(event => defaultNative.includes(event.id)), 'Default map concealed important reports or exposed routine ones');
+    const sampleCount = await viewer.eval(`Number(document.querySelector('#project-map-counts [data-entity-type="native"]').dataset.countShown)`);
+    await viewer.filter('project-map-type', 'native');
+    await viewer.wait(`document.querySelectorAll('#project-map-entities [data-entity-type="native"]').length===${sampleCount} && ${hidden('project-map-technical-notice')}===0`, 'explicit native type includes technical reports');
+    assert(await viewer.eval(`!document.getElementById('project-map-technical').checked`), 'Explicit entity type changed shared preference');
+    await viewer.click(`#project-map-entities [data-entity-id="${quietTechnical.at(-1).id}"]`);
+    await viewer.wait(`document.querySelector('#project-map-detail [data-entity-id="${quietTechnical.at(-1).id}"]')!==null`, 'technical record remains inspectable');
+    await viewer.click('#project-map-detail [data-target-view="project-native"]');
+    await viewer.wait(`!document.getElementById('project-native-panel').hidden && document.getElementById('project-native-channel').value===${js(ids.alpha)}`, 'map opens actual channel feed');
+  });
+  await check('technical-only bursts never create channel message badges but a real message does', async () => {
+    await resetFilters(viewer);
+    const channelButton = `document.querySelector('[data-focus-key="channel:${ids.beta}"]')`;
+    assert(await viewer.eval(`${channelButton}.dataset.updated!=='true'`), 'Badge fixture must start without unread messages');
+    const channelBefore = (await api(`/v1/projects/${ids.project}/channels`, 'GET', undefined, 'viewer')).channels.find(channel => channel.id === ids.beta);
+    assert(Object.hasOwn(channelBefore, 'latest_message_seq'), 'Backend must expose independent message sequence');
+    for (const type of ['turn.started', 'tool.completed', 'agent.waiting']) await activity(type, 'beta', 'peer');
+    const channelAfter = (await api(`/v1/projects/${ids.project}/channels`, 'GET', undefined, 'viewer')).channels.find(channel => channel.id === ids.beta);
+    assert(channelAfter.latest_seq > channelBefore.latest_seq && channelAfter.latest_message_seq === channelBefore.latest_message_seq, 'Technical events changed message sequence or failed to advance full cursor');
+    await viewer.click('#refresh-button'); await viewer.wait(`!document.getElementById('refresh-button').disabled`, 'technical burst refresh');
+    assert(await viewer.eval(`${channelButton}.dataset.updated!=='true'`), 'Technical-only reports created a channel badge');
+    const actualMessage = await message('beta', 'A real peer message must produce a channel badge');
+    await viewer.wait(`${channelButton}.dataset.updated==='true'`, 'real peer message badge', 12000);
+    await viewer.click(`#channel-list [data-focus-key="channel:${ids.beta}"]`);
+    await viewer.wait(`!document.getElementById('refresh-button').disabled && ${channelButton}.dataset.updated!=='true'`, 'opening message channel clears badge');
+    assert(await viewer.eval(`document.getElementById('chat-panel').textContent.includes(${js(actualMessage.body)})`), 'Real badge did not correspond to a rendered message');
+  });
+  await check('Russian English refresh and mobile views preserve reveal preference and logout clears content', async () => {
+    await feed(viewer); await viewer.click('#project-native-technical');
+    for (const language of ['en', 'ru']) {
+      await viewer.filter('language-select', language);
+      await viewer.click('#refresh-button'); await viewer.wait(`!document.getElementById('refresh-button').disabled`, 'language refresh');
+      assert(await viewer.eval(`document.documentElement.lang===${js(language)} && document.getElementById('project-native-technical').checked && ${hidden('project-native-technical-notice')}===0`), 'Language or refresh reset reveal preference');
+      const label = await viewer.eval(`document.querySelector('label[for="project-native-technical"]').textContent`);
+      assert((language === 'ru' ? /техническ/i : /technical/i).test(label), 'Technical control was not translated');
+    }
+    await viewer.click('#project-native-technical');
+    await screenshot(viewer, 'quiet-project-cli-desktop', 1440);
+    await viewer.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
+    assert(await viewer.eval(`document.documentElement.scrollWidth<=innerWidth+1`), 'Quiet controls overflow mobile viewport');
+    await screenshot(viewer, 'quiet-project-cli-mobile-390', 390);
+    for (const tab of tabs) {
+      await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
+      await tab.click('#logout-button');
+      await tab.wait(`!document.getElementById('login-panel').hidden && localStorage.length===0 && sessionStorage.length===0 && document.getElementById('project-native-technical-notice').textContent===''`, 'logout clears quiet controls and storage');
+    }
+    assert(!report.browser_guard_failed && report.browser_errors.length===0 && report.requests.every(request=>request.method==='GET'), 'Browser mutation or runtime failure');
+  });
+}
+
 try {
+  if (quietOnly) {
+    await quietCases();
+  } else {
   await check('owned schema TLS fixtures and browser load latest project events without choosing a channel', async () => {
     await isolatedServer(); await fixtures(); await browsers();
     const expected = (await api(feedPath(), 'GET', undefined, 'viewer')).activity;
@@ -315,7 +444,9 @@ try {
     const latest = await activity('turn.completed', 'alpha', 'writer');
     await writer.wait(hasEvent(latest), 'SSE reconnect catchup', 12000); await viewer.wait(hasEvent(latest), 'live update in idle viewer');
     assert(await writer.eval(`performance.timeOrigin===${navigations} && document.getElementById('message-input').value===${js(`${run} unsent chat draft`)} && document.querySelector('#project-native-list [data-native-id]').dataset.nativeId===${js(latest.id)}`), 'Catchup lost draft/reloaded or missed latest-first event');
-    await writer.wait(`document.querySelector('[data-focus-key="channel:${ids.alpha}"]').dataset.updated==='true'`, 'selected chat gets update hint while project feed is open');
+    assert(await writer.eval(`document.querySelector('[data-focus-key="channel:${ids.alpha}"]').dataset.updated!=='true'`), 'Technical reports caused a message update hint');
+    await message('alpha', 'Message update hint fixture');
+    await writer.wait(`document.querySelector('[data-focus-key="channel:${ids.alpha}"]').dataset.updated==='true'`, 'new message gets update hint while project feed is open');
     await writer.click(`#channel-list [data-focus-key="channel:${ids.alpha}"]`);
     await writer.wait(`!document.getElementById('composer-form').hidden && !document.getElementById('refresh-button').disabled`, 'same chat roundtrip');
     assert(await writer.eval(`document.getElementById('message-input').value===${js(`${run} unsent chat draft`)}`), 'Project feed to same chat discarded unsent draft');
@@ -375,6 +506,7 @@ try {
     assert(tabs.every((tab, index) => tab.requests.length === counts[index]), 'Logout reconnected');
     assert(!report.browser_guard_failed && report.browser_errors.length === 0, 'Browser safety/runtime failure');
   });
+  }
 } catch (error) {
   if (!report.cases.some(item => !item.passed)) report.cases.push({name: 'infrastructure', passed: false, error: safeError(error)});
   report.failure_controls = [];
@@ -393,7 +525,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === 10 && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === (quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/project-native-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});
