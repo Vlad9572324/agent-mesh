@@ -224,6 +224,109 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(bridge.offer_inbox()["messages"], [])
         self.assertFalse(any(path.endswith("/receipts") or path == "/v1/heartbeat" for _, path, _ in self.api.calls))
 
+    def test_seen_survives_new_session_without_acceptance_and_can_be_reviewed(self):
+        self.api.messages = [self.message()]
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        bridge.offer_inbox()
+        self.assertFalse(bridge.seen_message("m1")["accepted"])
+        bridge.close()
+        reopened = self.bridge(session="another-native-session")
+        self.assertTrue(reopened.seen_message("m1")["replayed"])
+        self.assertEqual(reopened.offer_inbox()["messages"], [])
+        self.assertFalse(reopened.offer_inbox()["has_more"])
+        self.assertEqual([m["id"] for m in reopened.offer_inbox(include_seen=True)["messages"]], ["m1"])
+        self.assertEqual(reopened.status()["pending_messages"], 1)
+        self.assertEqual(reopened.status()["unseen_messages"], 0)
+        self.assertIsNone(reopened.db.execute("SELECT accepted_at FROM inbox").fetchone()[0])
+        self.assertEqual(reopened.db.execute("SELECT count(*) FROM outbox WHERE payload LIKE '%inbox.seen%'").fetchone()[0], 1)
+        self.assertFalse(reopened.accept_message("m1")["replayed"])
+        self.assertEqual(reopened.offer_inbox(include_seen=True)["messages"], [])
+        self.assertFalse(any('/receipt' in path or '/heartbeat' in path for _, path, _ in self.api.calls))
+
+    def test_old_sqlite_migration_preserves_inbox_acceptance_cursors_offers_and_outbox(self):
+        self.api.messages = [self.message(), self.message("m2", seq=2)]
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        bridge.offer_inbox()
+        bridge.accept_message("m1")
+        snapshots = {table: [tuple(row) for row in bridge.db.execute('SELECT * FROM ' + table)]
+                     for table in ("meta", "cursors", "offers", "outbox")}
+        # Recreate the original inbox schema, including an already accepted row.
+        bridge.db.execute("ALTER TABLE inbox DROP COLUMN seen_at")
+        bridge.db.execute("ALTER TABLE inbox DROP COLUMN seen_session")
+        inbox = [tuple(row) for row in bridge.db.execute("SELECT * FROM inbox")]
+        bridge.close()
+        for session in ("migration-one", "migration-two"):
+            reopened = self.bridge(session=session)
+            for table, before in snapshots.items():
+                self.assertEqual([tuple(row) for row in reopened.db.execute('SELECT * FROM ' + table)], before)
+            self.assertEqual([tuple(row)[:6] for row in reopened.db.execute("SELECT * FROM inbox")], inbox)
+            self.assertTrue(all(row[0] is None and row[1] is None for row in reopened.db.execute("SELECT seen_at,seen_session FROM inbox")))
+            reopened.close()
+        self.assertEqual([m["id"] for m in self.bridge().offer_inbox()["messages"]], ["m2"])
+
+    def test_full_message_is_bounded_redacted_and_does_not_mark_seen_or_accepted(self):
+        body = "Ж" * 8192
+        self.api.messages = [self.message(body=body)]
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        self.assertTrue(bridge.offer_inbox()["messages"][0]["truncated"])
+        full = bridge.message("m1")
+        self.assertEqual(full["message"]["body"], body)
+        self.assertFalse(full["seen"] or full["accepted"])
+        self.assertIsNone(bridge.db.execute("SELECT seen_at FROM inbox").fetchone()[0])
+        self.api.messages[0]["body"] = "credential " + bridge.key
+        self.assertEqual(bridge.message("m1")["message"]["body"], "credential [REDACTED]")
+        for invalid in ("x" * 16385, "\x00", ""):
+            self.api.messages[0]["body"] = invalid
+            with self.assertRaisesRegex(native.NativeError, "invalid_inbox_message"):
+                bridge.message("m1")
+
+    def test_message_and_seen_recheck_acl_binding_and_never_use_cached_data_offline(self):
+        self.api.messages = [self.message()]
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        self.api.channels["c"] = False
+        self.assertEqual(bridge.message("m1")["message"]["id"], "m1")
+        with self.assertRaisesRegex(native.NativeError, "not_authorized"):
+            bridge.seen_message("m1")
+        self.api.channels = {}
+        for operation in (bridge.message, bridge.seen_message):
+            with self.assertRaisesRegex(native.NativeError, "not_authorized"):
+                operation("m1")
+        self.api.channels = {"c": True}
+        for fields in ({"recipient_ids": ["other"]}, {"channel_id": "d"}, {"id": "wrong"}, {"author_id": "a"}):
+            # Return a wrong record for the known ID to exercise response binding.
+            original = self.api.request
+            self.api.request = lambda method, path, body=None, **kwargs: ({"message": self.message(**fields)}
+                if path == '/v1/messages/m1' else original(method, path, body, **kwargs))
+            for operation in (bridge.message, bridge.seen_message):
+                with self.assertRaisesRegex(native.NativeError, "message_no_longer_addressed"):
+                    operation("m1")
+            self.api.request = original
+        self.api.offline = True
+        for operation in (bridge.message, bridge.seen_message):
+            with self.assertRaisesRegex(native.NativeError, "offline"):
+                operation("m1")
+        self.assertEqual(tuple(bridge.db.execute("SELECT seen_at,accepted_at FROM inbox").fetchone()), (None, None))
+
+    def test_seen_publication_lost_ack_recovers_once_after_reopen(self):
+        self.api.messages = [self.message()]
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        bridge.seen_message("m1")
+        self.api.lose_next_ack = True
+        with self.assertRaises(native.NativeError):
+            bridge.flush()
+        bridge.close()
+        reopened = self.bridge(session="recovery-session")
+        self.assertTrue(reopened.seen_message("m1")["replayed"])
+        reopened.flush()
+        self.assertEqual([v["event_type"] for v in self.api.activity.values()], ["inbox.seen"])
+        self.assertEqual(reopened.offer_inbox()["messages"], [])
+        self.assertIsNone(reopened.db.execute("SELECT accepted_at FROM inbox").fetchone()[0])
+
     def test_invalid_message_page_does_not_advance_cursor_or_partially_persist(self):
         self.api.messages = [self.message(), self.message("bad", seq=True)]
         bridge = self.bridge()

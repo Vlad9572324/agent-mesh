@@ -15,7 +15,7 @@ func nativeInput(client, kind string) nativeActivityInput {
 }
 
 func TestNativeActivityValidation(t *testing.T) {
-	for _, kind := range []string{"session.started", "session.ended", "turn.started", "turn.completed", "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.accepted"} {
+	for _, kind := range []string{"session.started", "session.ended", "turn.started", "turn.completed", "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.seen", "inbox.accepted"} {
 		in := nativeInput("client", kind)
 		if strings.HasPrefix(kind, "inbox.") {
 			message := "message-id"
@@ -44,6 +44,51 @@ func TestNativeActivityValidation(t *testing.T) {
 				t.Fatal("invalid native activity accepted")
 			}
 		})
+	}
+}
+
+func TestNativeActivitySeenMigrationPreservesHistory(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	message := f.message("seen-upgrade", "claude-pilot")
+	messageID := message["id"].(string)
+	offered := nativeInput("before-upgrade", "inbox.offered")
+	offered.MessageID = &messageID
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", offered, 201)
+	const snapshot = `SELECT json_build_object('activity',(SELECT json_agg(n ORDER BY id) FROM native_activity n),'receipts',(SELECT json_agg(r ORDER BY message_id,agent_id) FROM receipts r))::text`
+	before := f.snapshot(snapshot)
+	// Restore the old checks with different names to cover PostgreSQL-generated
+	// names as well as renamed constraints on an existing installation.
+	_, err := f.s.Pool.Exec(ctx, `DO $$ DECLARE c record; BEGIN
+ FOR c IN SELECT conname FROM pg_constraint WHERE conrelid='native_activity'::regclass
+ AND contype='c' AND pg_get_constraintdef(oid) LIKE '%inbox.offered%' LOOP
+ EXECUTE format('ALTER TABLE native_activity DROP CONSTRAINT %I', c.conname);
+ END LOOP; END $$;
+ ALTER TABLE native_activity ADD CONSTRAINT old_native_enum CHECK(event_type IN
+ ('session.started','session.ended','turn.started','turn.completed','tool.started','tool.completed','tool.failed','agent.waiting','inbox.offered','inbox.accepted'));
+ ALTER TABLE native_activity ADD CONSTRAINT old_native_message CHECK((event_type IN ('inbox.offered','inbox.accepted')) = (message_id IS NOT NULL));`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := f.s.Migrate(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if after := f.snapshot(snapshot); after != before {
+		t.Fatal("seen migration changed native history or legacy receipts")
+	}
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", offered, 200)
+	seen := nativeInput("after-upgrade", "inbox.seen")
+	seen.MessageID = &messageID
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", seen, 201)
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", seen, 200)
+	f.expect("POST", "/v1/channels/general/activity", "claude-pilot", seen, 404)
+	if _, err := f.s.Pool.Exec(ctx, `UPDATE native_activity SET message_id=NULL WHERE event_type='inbox.seen'`); err == nil {
+		t.Fatal("migration lost inbox message binding constraint")
+	}
+	if _, err := f.s.Pool.Exec(ctx, `UPDATE native_activity SET event_type='unknown' WHERE event_type='inbox.seen'`); err == nil {
+		t.Fatal("migration lost event type constraint")
 	}
 }
 
@@ -79,7 +124,7 @@ func TestNativeActivityACLReplayCursorAndNoLegacyMutation(t *testing.T) {
 		f.expect(method, "/v1/channels/general/activity", "", body, 401)
 	}
 	messageID := message["id"].(string)
-	for _, kind := range []string{"inbox.offered", "inbox.accepted"} {
+	for _, kind := range []string{"inbox.offered", "inbox.seen", "inbox.accepted"} {
 		in := nativeInput(kind, kind)
 		in.MessageID = &messageID
 		f.expect("POST", "/v1/channels/general/activity", "claude-pilot", in, 404) // author is not recipient

@@ -167,6 +167,8 @@ try {
     const offered = await activity('inbox.offered', {message: inboxMessage.id});
     await viewer.wait(hasNative(offered), 'native inbox offer');
     assert(await viewer.eval(textHas('native-activity-list', 'Предложено — не значит принято')), 'Offer/acceptance distinction missing');
+    const seen = await activity('inbox.seen', {message: inboxMessage.id}); await viewer.wait(hasNative(seen), 'native inbox seen');
+    assert(await viewer.eval(textHas('native-activity-list', 'Просмотрено — не значит принято')), 'Seen/acceptance distinction missing');
     const accepted = await activity('inbox.accepted', {message: inboxMessage.id}); await viewer.wait(hasNative(accepted), 'native inbox acceptance');
     assert(await viewer.eval(textHas('native-activity-list', 'не legacy-receipt')), 'Legacy receipt distinction missing');
     const after = (await api(`/v1/messages/${inboxMessage.id}`, 'GET', undefined, 'writer')).message.receipts;

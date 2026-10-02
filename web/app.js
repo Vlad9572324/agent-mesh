@@ -266,6 +266,7 @@
     "Tool failed": "Ошибка инструмента",
     "Adapter waiting": "Ожидание адаптера",
     "Message offered to CLI": "Сообщение предложено CLI",
+    "CLI reported message viewed": "CLI сообщил о просмотре сообщения",
     "CLI reported message acceptance": "CLI сообщил о приёме сообщения",
     "Client report": "Клиентский отчёт",
     "Client-reported · not server-verified": "Сообщено клиентом · не проверено сервером",
@@ -276,6 +277,7 @@
     "\nRelated message: {0}": "\nСвязанное сообщение: {0}",
     "Turn completion does not confirm task completion or passing checks.": "Завершение хода не подтверждает выполнение задачи или прохождение проверок.",
     "Offered does not mean accepted by the model. Delivery and legacy receipts are tracked separately.": "Предложено — не значит принято моделью. Доставка и legacy-подтверждения учитываются отдельно.",
+    "Viewed does not mean accepted or completed; legacy receipts are unchanged.": "Просмотрено — не значит принято или выполнено; legacy-подтверждения не меняются.",
     "An acceptance report is not proof of completion.": "Отчёт о приёме — не доказательство выполнения.",
     "Last event: data has not been confirmed yet.": "Последнее событие: данные ещё не подтверждены.",
     "Last event: refresh is unconfirmed. The previous snapshot was empty; current absence of events has not been established.": "Последнее событие: обновление не подтверждено. Предыдущий снимок был пуст; текущее отсутствие событий не установлено.",
@@ -314,6 +316,7 @@
     "Tool failure reported": "Сообщено об ошибке инструмента",
     "Adapter reports waiting": "Адаптер сообщает об ожидании",
     "Message offered to a CLI session": "Сообщение предложено сессии CLI",
+    "Session explicitly reported message viewed": "Сессия явно сообщила о просмотре сообщения",
     "Session explicitly reported message acceptance": "Сессия явно сообщила о приёме сообщения",
     "Unknown client report type": "Неизвестный тип клиентского отчёта",
     "{0} ({1}) · {2}\nStored {3} · seq {4}\nCLI session: {5} · channel: {6}": "{0} ({1}) · {2}\nСохранено {3} · seq {4}\nСессия CLI: {5} · канал: {6}",
@@ -1314,7 +1317,7 @@
   }
 
   function nativeEventLabel(type) {
-    const labels = {"session.started": "CLI session start reported", "session.ended": "CLI session end reported", "turn.started": "Turn start reported", "turn.completed": "Turn completion reported", "tool.started": "Tool start observed", "tool.completed": "Tool completion observed", "tool.failed": "Tool failure reported", "agent.waiting": "Adapter reports waiting", "inbox.offered": "Message offered to a CLI session", "inbox.accepted": "Session explicitly reported message acceptance"};
+    const labels = {"session.started": "CLI session start reported", "session.ended": "CLI session end reported", "turn.started": "Turn start reported", "turn.completed": "Turn completion reported", "tool.started": "Tool start observed", "tool.completed": "Tool completion observed", "tool.failed": "Tool failure reported", "agent.waiting": "Adapter reports waiting", "inbox.offered": "Message offered to a CLI session", "inbox.seen": "Session explicitly reported message viewed", "inbox.accepted": "Session explicitly reported message acceptance"};
     return Object.hasOwn(labels, type) ? tr(labels[type]) : null;
   }
 
@@ -1513,7 +1516,7 @@
   }
 
   function projectNativeCard(event) {
-    const labels = {"session.started": tr("CLI session started"), "session.ended": tr("CLI session ended"), "turn.started": tr("Turn started"), "turn.completed": tr("Turn completed"), "tool.started": tr("Tool started"), "tool.completed": tr("Tool completed"), "tool.failed": tr("Tool failed"), "agent.waiting": tr("Adapter waiting"), "inbox.offered": tr("Message offered to CLI"), "inbox.accepted": tr("CLI reported message acceptance")};
+    const labels = {"session.started": tr("CLI session started"), "session.ended": tr("CLI session ended"), "turn.started": tr("Turn started"), "turn.completed": tr("Turn completed"), "tool.started": tr("Tool started"), "tool.completed": tr("Tool completed"), "tool.failed": tr("Tool failed"), "agent.waiting": tr("Adapter waiting"), "inbox.offered": tr("Message offered to CLI"), "inbox.seen": tr("CLI reported message viewed"), "inbox.accepted": tr("CLI reported message acceptance")};
     const row = node("article", "native-activity-record");
     row.dataset.nativeId = event.id; row.dataset.channelId = event.channel_id; row.dataset.nativeType = event.event_type;
     row.dataset.actorId = event.actor_id; row.dataset.sessionId = event.session_id;
@@ -1525,6 +1528,7 @@
     appendOwned(details, () => (node("summary", "receipt-summary", () => (tr("Event identifiers")))), () => (node("p", "activity-meta", () => (tr("ID {0}\nAgent: {1} · channel: {2}\nCLI session: {3}{4}", () => (event.id), () => (event.actor_id), () => (event.channel_id), () => (event.session_id), () => (event.message_id ? tr("\nRelated message: {0}", () => (event.message_id)) : "")))))); appendOwned(row, () => (details));
     if (event.event_type === "turn.completed") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Turn completion does not confirm task completion or passing checks.")))));
     if (event.event_type === "inbox.offered") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Offered does not mean accepted by the model. Delivery and legacy receipts are tracked separately.")))));
+    if (event.event_type === "inbox.seen") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Viewed does not mean accepted or completed; legacy receipts are unchanged.")))));
     if (event.event_type === "inbox.accepted") appendOwned(row, () => (node("p", "native-boundary", () => (tr("An acceptance report is not proof of completion.")))));
     return row;
   }
@@ -1616,7 +1620,7 @@
   }
 
   function renderNativeActivity() {
-    const labels = {"session.started": tr("CLI session start reported"), "session.ended": tr("CLI session end reported"), "turn.started": tr("Turn start reported"), "turn.completed": tr("Turn completion reported"), "tool.started": tr("Tool start observed"), "tool.completed": tr("Tool completion observed"), "tool.failed": tr("Tool failure reported"), "agent.waiting": tr("Adapter reports waiting"), "inbox.offered": tr("Message offered to a CLI session"), "inbox.accepted": tr("Session explicitly reported message acceptance")};
+    const labels = {"session.started": tr("CLI session start reported"), "session.ended": tr("CLI session end reported"), "turn.started": tr("Turn start reported"), "turn.completed": tr("Turn completion reported"), "tool.started": tr("Tool start observed"), "tool.completed": tr("Tool completion observed"), "tool.failed": tr("Tool failure reported"), "agent.waiting": tr("Adapter reports waiting"), "inbox.offered": tr("Message offered to a CLI session"), "inbox.seen": tr("Session explicitly reported message viewed"), "inbox.accepted": tr("Session explicitly reported message acceptance")};
     const rows = [...state.nativeActivity.values()].sort((a, b) => number(b.seq) - number(a.seq)).map((event) => {
       const row = node("article", "native-activity-record"); row.dataset.nativeId = event.id; row.dataset.nativeType = event.event_type;
       appendOwned(row, () => (node("h3", "activity-title", () => (labels[event.event_type] || tr("Unknown client report type")))), () => (node("p", "native-provenance", () => (tr("Client-reported · not server-verified")))), () => (node("p", "activity-meta", () => (tr("{0} ({1}) · {2}\nStored {3} · seq {4}\nCLI session: {5} · channel: {6}", () => (displayName(event.actor_id)), () => (event.actor_id), () => (event.runtime), () => (dateText(event.created_at)), () => (event.seq), () => (event.session_id), () => (event.channel_id))))));
@@ -1624,6 +1628,7 @@
       if (event.message_id) appendOwned(row, () => (node("p", "activity-meta", () => (tr("Related message: {0}", () => (event.message_id))))));
       if (event.event_type === "turn.completed") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Turn completion does not confirm task completion or passing checks.")))));
       if (event.event_type === "inbox.offered") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Offered does not mean accepted by the model. Delivery and legacy receipts are tracked separately.")))));
+      if (event.event_type === "inbox.seen") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Viewed does not mean accepted or completed; legacy receipts are unchanged.")))));
       if (event.event_type === "inbox.accepted") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Attributed acceptance report, not a legacy receipt or proof of completion.")))));
       return row;
     });

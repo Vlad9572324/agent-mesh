@@ -84,9 +84,11 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         listing = self.server.handle(rpc(2, 'tools/list'))['result']['tools']
         names = {v['name'] for v in listing}
-        self.assertEqual(len(names), 13)
+        self.assertEqual(len(names), 15)
         self.assertIn('link_artifact_publish', names)
         self.assertIn('link_accept', names)
+        self.assertIn('link_seen', names)
+        self.assertIn('link_message', names)
         for item in listing:
             self.assertEqual(item['inputSchema']['type'], 'object')
             self.assertFalse(item['inputSchema']['additionalProperties'])
@@ -99,7 +101,7 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         self.assertEqual(self.server.handle(rpc(2, 'resources/list'))['error']['code'], -32601)
         self.assertEqual(self.server.handle(rpc(3, 'tools/call', {'name': 'exec'}))['error']['code'], -32602)
-        for identity, args in [(4, {'url': 'https://other'}), (5, {'limit': True}), (6, {'limit': 201})]:
+        for identity, args in [(4, {'url': 'https://other'}), (5, {'limit': True}), (6, {'limit': 201}), (7, {'include_seen': 1})]:
             response = self.server.handle(rpc(identity, 'tools/call', {'name': 'link_inbox', 'arguments': args}))
             self.assertTrue(response['result']['isError'])
         self.assertEqual(self.bridge.calls, [])
@@ -250,6 +252,28 @@ class PipeTests(unittest.TestCase):
         self.assertEqual(result.stdout, b'')
         self.assertEqual(result.stderr, b'{"error":"native_mcp_stopped"}\n')
         self.assertEqual(self.requests, [])
+
+    def test_full_message_seen_and_review_across_stdio_restarts(self):
+        self.api.messages[0]['body'] = '\x01' * 16384  # Worst-case JSON expansion remains bounded.
+        answers = self.run_pipe([initialize(), READY,
+            rpc(2, 'tools/call', {'name': 'link_inbox'}),
+            rpc(3, 'tools/call', {'name': 'link_message', 'arguments': {'message_id': 'message-1'}}),
+            rpc(4, 'tools/call', {'name': 'link_seen', 'arguments': {'message_id': 'message-1'}})])
+        read = answers[2]['result']['structuredContent']
+        self.assertEqual(read['message']['body'], self.api.messages[0]['body'])
+        self.assertFalse(read['seen'] or read['accepted'])
+        self.assertFalse(answers[3]['result']['structuredContent']['accepted'])
+        again = self.run_pipe([initialize(), READY,
+            rpc(2, 'tools/call', {'name': 'link_inbox'}),
+            rpc(3, 'tools/call', {'name': 'link_inbox', 'arguments': {'include_seen': True}}),
+            rpc(4, 'tools/call', {'name': 'link_message', 'arguments': {'message_id': 'message-1'}})],
+            extra_env={'AGENT_LINK_NATIVE_SESSION_ID': 'another-pipe-session'})
+        self.assertEqual(again[1]['result']['structuredContent']['messages'], [])
+        self.assertEqual(len(again[2]['result']['structuredContent']['messages']), 1)
+        self.assertTrue(again[3]['result']['structuredContent']['seen'])
+        self.assertFalse(again[3]['result']['structuredContent']['accepted'])
+        self.assertEqual({v['event_type'] for v in self.api.activity.values()}, {'inbox.offered', 'inbox.seen'})
+        self.assertFalse(any('/receipt' in path or '/heartbeat' in path for _, path in self.requests))
 
 
 if __name__ == '__main__':

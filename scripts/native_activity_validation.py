@@ -5,7 +5,7 @@ import re
 
 ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 EVENT_TYPES = frozenset(("session.started", "session.ended", "turn.started", "turn.completed",
-    "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.accepted"))
+    "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.seen", "inbox.accepted"))
 FIELDS = frozenset(("id", "seq", "channel_id", "actor_id", "client_id", "session_id", "runtime",
     "event_type", "tool_name", "message_id", "created_at", "provenance", "server_verified"))
 TIMESTAMP = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})\Z")

@@ -94,6 +94,8 @@ class FakeNativeAPI:
             query = parse_qs(urlsplit(path).query)
             after, limit = int(query["after_seq"][0]), int(query["limit"][0])
             return {"messages": [copy.deepcopy(m) for m in self.messages if m["seq"] > after][:limit]}
+        if method == "GET" and path.startswith("/v1/messages/"):
+            return {"message": copy.deepcopy(next(m for m in self.messages if m["id"] == path.split('/')[-1]))}
         if method == "POST" and path == "/v1/channels/c/activity":
             old = self.activity.get(body["client_id"])
             record = {"id": "event-" + body["client_id"], "channel_id": "c", "actor_id": "a",
@@ -337,6 +339,19 @@ class RealBridgeHookTests(unittest.TestCase):
             self.assertEqual(bridge.db.execute("SELECT count(*) FROM inbox WHERE accepted_at IS NOT NULL").fetchone()[0], 0)
         finally:
             bridge.close()
+
+    def test_seen_message_not_offered_by_hooks_in_new_session(self):
+        self.add_messages(1)
+        self.assertTrue(self.hook())
+        bridge = self.factory(str(self.config_path), SESSION)
+        try:
+            bridge.seen_message("m1")
+        finally:
+            bridge.close()
+        result = hooks.handle_hook(payload(tool_use_id="new-tool"), "codex", "new-native-session",
+                                   str(self.config_path), self.factory)
+        self.assertEqual(result, {})
+        self.assertNotIn("inbox.accepted", {v["event_type"] for v in self.api.activity.values()})
 
 
 class NativeHookFailureTests(unittest.TestCase):

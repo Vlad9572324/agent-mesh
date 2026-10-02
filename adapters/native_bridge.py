@@ -23,7 +23,7 @@ import uuid
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z')
 SHA = re.compile(r'[a-f0-9]{64}\Z')
 EVENT_TYPES = frozenset(('session.started', 'session.ended', 'turn.started', 'turn.completed',
-    'tool.started', 'tool.completed', 'tool.failed', 'agent.waiting', 'inbox.offered', 'inbox.accepted'))
+    'tool.started', 'tool.completed', 'tool.failed', 'agent.waiting', 'inbox.offered', 'inbox.seen', 'inbox.accepted'))
 TOOL_NAMES = frozenset(('Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch',
     'read_file', 'write_file', 'edit_file', 'apply_patch', 'exec_command', 'shell', 'command_execution',
     'file_change', 'update_plan', 'mcp', 'other'))
@@ -221,6 +221,11 @@ class NativeBridge:
                 row = self.db.execute("SELECT value FROM meta WHERE key='binding'").fetchone()
                 if row and row[0] != encoded:
                     raise NativeError('state_belongs_to_different_binding')
+                # Serialize upgrades with hooks/MCP opening the same old state.
+                columns = {row['name'] for row in self.db.execute('PRAGMA table_info(inbox)')}
+                for name, kind in (('seen_at', 'REAL'), ('seen_session', 'TEXT')):
+                    if name not in columns:
+                        self.db.execute(f'ALTER TABLE inbox ADD COLUMN {name} {kind}')
                 self.db.execute("INSERT OR IGNORE INTO meta VALUES('binding',?)", (encoded,))
                 for channel in self.config['channel_ids']:
                     self.db.execute('INSERT OR IGNORE INTO cursors(channel_id) VALUES(?)', (channel,))
@@ -364,15 +369,18 @@ class NativeBridge:
             more = more or len(page) == limit
         return {'fetched': fetched, 'pending': self._pending_count(allowed), 'has_more': more}
 
-    def _pending_count(self, allowed):
-        return sum(self.db.execute('SELECT count(*) FROM inbox WHERE channel_id=? AND accepted_at IS NULL', (channel,)).fetchone()[0]
+    def _pending_count(self, allowed, include_seen=True):
+        return sum(self.db.execute('SELECT count(*) FROM inbox WHERE channel_id=? AND accepted_at IS NULL AND (? OR seen_at IS NULL)',
+                                   (channel, include_seen)).fetchone()[0]
                    for channel in allowed)
 
-    def offer_inbox(self, context_budget=6000, minimum_interval=0):
+    def offer_inbox(self, context_budget=6000, minimum_interval=0, include_seen=False):
         if type(context_budget) is not int or not 512 <= context_budget <= 16000:
             raise NativeError('invalid_context_budget')
         if type(minimum_interval) is not int or not 0 <= minimum_interval <= 3600:
             raise NativeError('invalid_offer_interval')
+        if type(include_seen) is not bool:
+            raise NativeError('invalid_include_seen')
         allowed = self._authorize()
         result = {'messages': [], 'has_more': False, 'truncated': False, 'delivery': 'offered_not_accepted'}
         if not allowed:
@@ -383,8 +391,9 @@ class NativeBridge:
         marks = ','.join('?' for _ in allowed)
         rows = self.db.execute(f'''SELECT i.* FROM inbox i LEFT JOIN offers o
             ON o.message_id=i.id AND o.session_id=? WHERE i.accepted_at IS NULL
+            AND (? OR i.seen_at IS NULL)
             AND i.channel_id IN ({marks}) AND (?=0 OR o.offered_at IS NULL OR o.offered_at<=?)
-            ORDER BY i.seq,i.id LIMIT 200''', (self.session_id, *allowed, minimum_interval, now-minimum_interval)).fetchall()
+            ORDER BY i.seq,i.id LIMIT 200''', (self.session_id, include_seen, *allowed, minimum_interval, now-minimum_interval)).fetchall()
         offered = []
         for row in rows:
             if row['channel_id'] not in allowed:
@@ -402,7 +411,7 @@ class NativeBridge:
                 break
             result['messages'].append(item)
             offered.append(item['id'])
-        result['has_more'] = result['has_more'] or self._pending_count(allowed) > len(offered)
+        result['has_more'] = result['has_more'] or self._pending_count(allowed, include_seen) > len(offered)
         result['truncated'] = result['truncated'] or any(v['truncated'] for v in result['messages'])
         # Activity only names exactly the records included in the returned JSON.
         with self.atomic():
@@ -412,17 +421,45 @@ class NativeBridge:
                                 (self.session_id, message_id, now))
         return self.sanitize(result)
 
-    def accept_message(self, message_id):
+    def _current_inbox_message(self, message_id, *, write=False):
         self._identifier(message_id)
         allowed = self._authorize()
         row = self.db.execute('SELECT * FROM inbox WHERE id=?', (message_id,)).fetchone()
         if not row:
             raise NativeError('message_not_in_native_inbox')
-        self._channel(row['channel_id'], allowed, True)
+        self._channel(row['channel_id'], allowed, write)
         actual = self._request('GET', '/v1/messages/' + message_id).get('message', {})
-        if (actual.get('id') != message_id or actual.get('channel_id') != row['channel_id']
-                or self.config['agent_id'] not in actual.get('recipient_ids', []) or actual.get('author_id') == self.config['agent_id']):
+        if (type(actual) is not dict or actual.get('id') != message_id or actual.get('channel_id') != row['channel_id']
+                or type(actual.get('recipient_ids')) is not list or self.config['agent_id'] not in actual['recipient_ids']
+                or actual.get('author_id') == self.config['agent_id']):
             raise NativeError('message_no_longer_addressed')
+        if (not identifier(actual.get('author_id')) or type(actual.get('seq')) is not int or actual['seq'] != row['seq']
+                or len(actual['recipient_ids']) > 32 or not all(identifier(v) for v in actual['recipient_ids'])
+                or type(actual.get('body')) is not str or not actual['body'] or '\x00' in actual['body']
+                or len(actual['body'].encode('utf-8')) > 16384
+                or (actual.get('reply_to') is not None and not identifier(actual['reply_to']))):
+            raise NativeError('invalid_inbox_message')
+        value = self.sanitize({k: actual.get(k) for k in ('id', 'channel_id', 'seq', 'author_id', 'recipient_ids', 'reply_to', 'body')})
+        return row, value
+
+    def message(self, message_id):
+        """Read a complete addressed inbox message online, without acknowledgement."""
+        row, value = self._current_inbox_message(message_id)
+        return {'message': value, 'seen': row['seen_at'] is not None, 'accepted': row['accepted_at'] is not None,
+                'untrusted_peer_data': True}
+
+    def seen_message(self, message_id):
+        row, _ = self._current_inbox_message(message_id, write=True)
+        with self.atomic():
+            changed = self.db.execute('UPDATE inbox SET seen_at=?,seen_session=? WHERE id=? AND seen_at IS NULL',
+                                      (time.time(), self.session_id, message_id)).rowcount
+            if changed:
+                self._observe('inbox.seen', message_id=message_id, event_id=message_id)
+        return {'message_id': message_id, 'seen': True, 'accepted': row['accepted_at'] is not None,
+                'replayed': not bool(changed), 'legacy_receipt_changed': False}
+
+    def accept_message(self, message_id):
+        self._current_inbox_message(message_id, write=True)
         with self.atomic():
             changed = self.db.execute('UPDATE inbox SET accepted_at=?,accepted_session=? WHERE id=? AND accepted_at IS NULL',
                                       (time.time(), self.session_id, message_id)).rowcount
@@ -503,6 +540,7 @@ class NativeBridge:
         allowed = self._authorize()
         return {'agent_id': self.config['agent_id'], 'project_id': self.config['project_id'], 'runtime': self.config['runtime'],
                 'session_id': self.session_id, 'channel_ids': list(allowed), 'pending_messages': self._pending_count(allowed),
+                'unseen_messages': self._pending_count(allowed, include_seen=False),
                 'pending_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
                 'blocked_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0],
                 'auto_execution': False, 'legacy_heartbeat_changed': False}

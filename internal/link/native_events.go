@@ -54,7 +54,7 @@ func validNativeActivity(in nativeActivityInput) bool {
 		return false
 	}
 	switch in.EventType {
-	case "session.started", "session.ended", "turn.started", "turn.completed", "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.accepted":
+	case "session.started", "session.ended", "turn.started", "turn.completed", "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.seen", "inbox.accepted":
 	default:
 		return false
 	}

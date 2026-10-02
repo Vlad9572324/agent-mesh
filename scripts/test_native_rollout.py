@@ -24,6 +24,17 @@ class NativeActivityValidationTests(unittest.TestCase):
         self.assertEqual(check.validate_page(dict(activity=[event], has_more=False, next_after_seq=55),
                                             'test', 54, 2), {'event-1'})
 
+    def test_seen_is_a_recipient_message_report(self):
+        event = dict(id='seen-1', seq=1, channel_id='test', actor_id='test', client_id='seen-1',
+                     session_id='native-test', runtime='codex', event_type='inbox.seen', tool_name=None,
+                     message_id='message-1', created_at='2026-10-01T10:51:11Z',
+                     provenance='client_reported', server_verified=False)
+        page = dict(activity=[event], has_more=False, next_after_seq=1)
+        self.assertEqual(check.validate_page(page, 'test', 0, 2), {'seen-1'})
+        event['message_id'] = None
+        with self.assertRaises(ValueError):
+            check.validate_page(page, 'test', 0, 2)
+
 
 if __name__ == '__main__':
     unittest.main()
