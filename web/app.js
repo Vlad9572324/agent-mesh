@@ -7,6 +7,29 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    "Select a project with an available communication channel.": "Выберите проект с доступным каналом для общения.",
+    "Read and write: {0} channel(s). The connector starts in an empty folder on the agent’s computer.": "Чтение и запись: {0} каналов. Коннектор запускается в пустой папке на компьютере агента.",
+    "Select 1 to 8 channels for the new agent.": "Выберите хотя бы один канал для нового агента (не более 8).",
+    "Connection address: {0}": "Адрес подключения: {0}",
+    "Connection generation is unavailable. Configure the server’s public HTTPS address and CA certificate.": "Генератор подключения недоступен. Настройте публичный HTTPS-адрес и сертификат CA на сервере.",
+    "Awaiting connection": "Ожидает подключения",
+    "Connected": "Подключён",
+    "Expired": "Истекло",
+    "Revoked": "Отозвано",
+    "{0} · {1} · expires {2}": "{0} · {1} · действует до {2}",
+    "New command…": "Новая команда…",
+    "Revoke invitation…": "Отозвать приглашение…",
+    "No invitations yet.": "Приглашений пока нет.",
+    "Agent {0}. Use once before {1}.": "Агент {0}. Одноразовое подключение до {1}.",
+    "Generate a new command for {0}? Previous unused invitations for this agent will stop working. Lifetime: {1} hours.": "Сформировать новую команду для {0}? Прежние неиспользованные приглашения этого агента перестанут работать. Срок: {1} ч.",
+    "Revoke the unused invitation for {0}? The account and its configured permissions will remain.": "Отозвать неиспользованное приглашение для {0}? Учётная запись и настроенные права останутся.",
+    "New connection command generated.": "Новая команда подключения сформирована.",
+    "Invitation revoked.": "Приглашение отозвано.",
+    "Agent created. Copy the connection command shown once.": "Агент создан. Скопируйте команду подключения — она показывается один раз.",
+    "Command copied. Share it only with this agent.": "Команда скопирована. Передайте её только этому агенту.",
+    "Automatic copying is unavailable. Copy the selected command manually.": "Автоматическое копирование недоступно. Скопируйте выделенную команду вручную.",
+    "Onboarding invitations": "Приглашения для подключения",
+
     " {0} technical relationships hidden. Turn on “Show technical events” to view them.": " Технических связей скрыто: {0}. Включите «Показывать технические события», чтобы увидеть их.",
     "Only technical relationships are loaded for this entity. Turn on “Show technical events” to view them.": "Для этой сущности загружены только технические связи. Включите «Показывать технические события», чтобы увидеть их.",
     "{0} technical events hidden in this loaded window. No records were deleted; earlier events may be outside the window.": "Технических событий скрыто в загруженном окне: {0}. Записи не удалены; более ранние события могут находиться за пределами окна.",
@@ -712,6 +735,7 @@
     pendingMessage: null, pendingNote: null, sending: false, publishing: false,
     loginBusy: false, loading: false, dataReady: false, projectReady: false,
     admin: null, adminLoading: false, adminBusy: false, adminKey: "", adminKeyVersion: 0,
+    onboarding: null, onboardingCommand: "", onboardingVersion: 0, onboardingDownload: "",
     adminDelete: null, adminDeleteEpoch: 0, adminDeleteLoading: false, adminDeleteSubmitting: false,
     adminReadSeq: 0, adminWriteVersion: 0, adminLoadBackground: false,
     coordination: null, coordinationEpoch: 0, coordinationBusy: false, downloads: new Set(),
@@ -1055,9 +1079,10 @@
     setOwnedAttribute($("sidebar-toggle"), "aria-label", () => (open ? tr("Close navigation") : tr("Open navigation")));
   }
   function setAdminSection(section) {
-    if (!["accounts", "projects", "access", "diagnostics"].includes(section)) return;
+    if (!["onboarding", "accounts", "projects", "access", "diagnostics"].includes(section)) return;
     state.adminSection = section;
     const groups = {
+      onboarding: [$("admin-onboarding-panel")],
       accounts: [$("admin-principal-list").closest("section"), $("admin-principal-form").closest("section")],
       projects: [$("admin-project-list").closest("section"), $("admin-project-form").closest("section"), $("admin-channel-form").closest("section")],
       access: [$("admin-access-form").closest("section")],
@@ -2588,6 +2613,7 @@
   // Administration is owner-only in the UI; the server independently enforces it.
   // Mutation requests are explicit, single-shot requests, never queued or retried.
   function clearAdminKey() {
+    clearOnboardingResult();
     state.adminKey = ""; state.adminKeyVersion += 1;
     $("admin-issued-key").value = "";
     setText($("admin-key-target"), () => (""));
@@ -2620,9 +2646,10 @@
 
   function clearAdminData() {
     clearAdminKey(); clearAdminDelete(); state.admin = null; state.adminLoading = false; state.adminBusy = false;
+    state.onboarding = null;
     state.adminReadSeq += 1; state.adminLoadBackground = false;
-    for (const id of ["admin-principal-list", "admin-project-list", "admin-audit-list", "admin-delivery-list", "admin-access-agent", "admin-access-project", "admin-access-channel", "admin-channel-project"]) $(id).replaceChildren();
-    for (const id of ["admin-principal-form", "admin-project-form", "admin-channel-form", "admin-access-form"]) {
+    for (const id of ["admin-principal-list", "admin-project-list", "admin-audit-list", "admin-delivery-list", "admin-access-agent", "admin-access-project", "admin-access-channel", "admin-channel-project", "admin-onboarding-list", "admin-onboarding-project", "admin-onboarding-channels"]) $(id).replaceChildren();
+    for (const id of ["admin-principal-form", "admin-project-form", "admin-channel-form", "admin-access-form", "admin-onboarding-form"]) {
       $(id).reset();
       for (const input of $(id).querySelectorAll("input")) setOwnedValidity(input, () => (""));
     }
@@ -2691,6 +2718,7 @@
         ? tr("Before granting channel write access, explicitly grant write access to its parent project. Viewers cannot receive write access.")
         : tr("The change takes effect only after confirmation. The server rechecks permissions and records an audit entry.")));
     $("refresh-button").disabled = state.adminBusy || blockingAdminLoad() || $("admin-delete-dialog").open;
+    updateOnboardingControls(unavailable);
     updateDeleteControls();
   }
 
@@ -2784,7 +2812,7 @@
       if (!validTarget()) return;
       const fields = [["channels", tr("Channels")], ["messages", tr("Messages")], ["notes", tr("Notes")],
         ["receipts", tr("Receipts")], ["events", tr("Events")], ["project_members", tr("Project access grants")], ["channel_members", tr("Channel access grants")]];
-      for (const [key, label] of [["tasks", tr("Tasks")], ["task_runs", tr("Task run records")], ["task_events", tr("Task events")], ["memory", tr("Memory entries")], ["memory_versions", tr("Memory versions")], ["artifacts", tr("Artifacts")], ["artifact_bytes", tr("Artifact bytes")], ["sessions", tr("Sessions")], ["native_activity", tr("CLI activity reports")]]) {
+      for (const [key, label] of [["onboarding_invitations", tr("Onboarding invitations")], ["tasks", tr("Tasks")], ["task_runs", tr("Task run records")], ["task_events", tr("Task events")], ["memory", tr("Memory entries")], ["memory_versions", tr("Memory versions")], ["artifacts", tr("Artifacts")], ["artifact_bytes", tr("Artifact bytes")], ["sessions", tr("Sessions")], ["native_activity", tr("CLI activity reports")]]) {
         if (Object.hasOwn(preview.counts || {}, key)) fields.push([key, label]);
       }
       if (preview.project?.id !== project.id || !Number.isSafeInteger(preview.project.lifecycle_version) || preview.project.lifecycle_version < 0 ||
@@ -2899,6 +2927,7 @@
     }));
     if (!list(state.admin.deliveries).length) appendOwned($("admin-delivery-list"), () => (node("p", "empty-state", () => (tr("No pending or uncertain deliveries in this snapshot.")))));
     $("admin-delivery-truncated").hidden = !state.admin.deliveriesTruncated;
+    renderOnboarding();
     updateAdminControls();
   }
 
@@ -2916,13 +2945,15 @@
     state.adminLoading = true; state.adminLoadBackground = background && Boolean(state.admin);
     if (!state.adminLoadBackground) { updateAdminControls(); connection(tr("Loading the administrative snapshot…")); }
     try {
-      const [overview, audit, deliveries] = await Promise.all([
+      const [overview, audit, deliveries, onboarding] = await Promise.all([
         api("/v1/admin/overview"), api("/v1/admin/audit?limit=100"), api("/v1/admin/deliveries?limit=100"),
+        api("/v1/admin/onboarding").catch(error => { if (error.status === 404) return {enabled: false, invitations: []}; throw error; }),
       ]);
       if (!current(context) || state.view !== "admin" || readSeq !== state.adminReadSeq || writeVersion !== state.adminWriteVersion) return false;
       if (!Array.isArray(overview.principals) || !Array.isArray(overview.projects) || !Array.isArray(overview.channels)) throw new Error("Invalid admin overview");
       state.admin = {...overview, audit: list(audit.entries), auditTruncated: audit.truncated === true,
         deliveries: list(deliveries.deliveries), deliveriesTruncated: deliveries.truncated === true};
+      state.onboarding = onboarding;
       state.projects = activeAdminProjects();
       if (state.project) {
         const selected = list(overview.projects).find((project) => project.id === state.project.id);
@@ -2995,6 +3026,102 @@
     }
   }
 
+  function clearOnboardingResult() {
+    state.onboardingCommand = ""; state.onboardingVersion += 1;
+    $("admin-onboarding-command").value = "";
+    setText($("admin-onboarding-target"), () => (""));
+    setText($("admin-onboarding-copy-status"), () => (""));
+    $("admin-onboarding-repository").removeAttribute("href");
+    if (state.onboardingDownload) { URL.revokeObjectURL(state.onboardingDownload); state.onboardingDownload = ""; }
+    if ($("admin-onboarding-dialog").open) $("admin-onboarding-dialog").close();
+  }
+
+  const selectedOnboardingChannels = () => [...$("admin-onboarding-channels").querySelectorAll("input:checked")].map(input => input.value);
+
+  function renderOnboardingChannels(reset = false) {
+    const selected = new Set(reset ? [] : selectedOnboardingChannels());
+    const projectId = $("admin-onboarding-project").value;
+    const channels = list(state.admin?.channels).filter(channel => channel.project_id === projectId);
+    replaceContent("admin-onboarding-channels", ...channels.map(channel => {
+      const label = node("label", "onboarding-channel"), input = node("input"), text = node("span", "", () => (`${channel.name} (${channel.id})`));
+      input.type = "checkbox"; input.value = channel.id; input.checked = selected.has(channel.id);
+      input.dataset.focusKey = `onboarding-channel:${channel.id}`;
+      input.addEventListener("change", updateAdminControls);
+      appendOwned(label, () => input, () => text); return label;
+    }));
+    if (!channels.length) appendOwned($("admin-onboarding-channels"), () => node("p", "field-help", () => tr("Select a project with an available communication channel.")));
+  }
+
+  function updateOnboardingControls(unavailable) {
+    const disabled = unavailable || state.onboarding?.enabled !== true;
+    for (const control of $("admin-onboarding-form").querySelectorAll("input,select,button")) control.disabled = disabled;
+    const selected = selectedOnboardingChannels();
+    for (const input of $("admin-onboarding-channels").querySelectorAll("input")) input.disabled = disabled || (!input.checked && selected.length >= 8);
+    $("admin-onboarding-submit").disabled = disabled || !$("admin-onboarding-project").value || !selected.length || selected.length > 8;
+    for (const button of $("admin-onboarding-list").querySelectorAll("button")) button.disabled = unavailable || (button.dataset.onboardingAction === "reissue" && disabled);
+    setText($("admin-onboarding-summary"), () => selected.length
+      ? tr("Read and write: {0} channel(s). The connector starts in an empty folder on the agent’s computer.", () => selected.length)
+      : tr("Select 1 to 8 channels for the new agent."));
+  }
+
+  function renderOnboarding() {
+    const config = state.onboarding;
+    setText($("admin-onboarding-availability"), () => config?.enabled === true
+      ? tr("Connection address: {0}", () => config.public_url)
+      : tr("Connection generation is unavailable. Configure the server’s public HTTPS address and CA certificate."));
+    adminOptions("admin-onboarding-project", activeAdminProjects(), tr("Select an active project"));
+    if (!$("admin-onboarding-project").value) {
+      const projects = activeAdminProjects();
+      if (projects.some(project => project.id === state.project?.id)) $("admin-onboarding-project").value = state.project.id;
+      else if (projects.length === 1) $("admin-onboarding-project").value = projects[0].id;
+    }
+    renderOnboardingChannels();
+    const labels = {pending: tr("Awaiting connection"), claimed: tr("Connected"), expired: tr("Expired"), revoked: tr("Revoked")};
+    replaceContent("admin-onboarding-list", ...list(config?.invitations).map(invite => {
+      const row = node("article", "admin-record"); row.dataset.invitationId = invite.id;
+      appendOwned(row, () => node("h4", "", () => invite.agent_id),
+        () => node("p", "field-help", () => tr("{0} · {1} · expires {2}", () => labels[invite.status] || invite.status, () => invite.runtime, () => dateText(invite.expires_at))),
+        () => node("p", "field-help", () => `${invite.project_id} · ${list(invite.channel_ids).join(", ")}`));
+      const inactive = list(state.admin?.principals).some(principal => principal.id === invite.agent_id && principal.kind === "agent" && principal.key_active !== true);
+      const actions = node("div", "admin-actions");
+      for (const [action, label] of [["reissue", tr("New command…")], ["revoke", tr("Revoke invitation…")]]) {
+        if (action === "revoke" ? invite.status !== "pending" : invite.status === "claimed" || !inactive) continue;
+        const button = node("button", "secondary-button", () => label); button.type = "button"; button.dataset.onboardingAction = action;
+        button.dataset.focusKey = `onboarding:${invite.id}:${action}`;
+        button.addEventListener("click", () => void onboardingAction(invite, action)); appendOwned(actions, () => button);
+      }
+      appendOwned(row, () => actions); return row;
+    }));
+    if (!list(config?.invitations).length) appendOwned($("admin-onboarding-list"), () => node("p", "field-help", () => tr("No invitations yet.")));
+    $("admin-onboarding-truncated").hidden = config?.truncated !== true;
+  }
+
+  function showOnboardingResult(result) {
+    const origin = new URL(result.public_url), repository = new URL(result.repository);
+    if (origin.protocol !== "https:" || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/" ||
+        repository.protocol !== "https:" || repository.username || repository.password ||
+        !/^sha256\/\/[A-Za-z0-9+/]{43}=$/.test(result.spki_pin) || !/^[a-f0-9]{64}$/.test(result.token) ||
+        !result.invitation?.agent_id || !result.invitation?.expires_at) throw new Error("Invalid onboarding response");
+    const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
+    const pipeline = 'curl -fkSs --proto "=https" --connect-timeout 10 --max-time 60 --pinnedpubkey "$2" "$1/connect/install.sh" | bash -s -- "$@"';
+    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}`;
+    $("admin-onboarding-command").value = state.onboardingCommand;
+    $("admin-onboarding-repository").href = repository.href;
+    const {agent_id: agentId, expires_at: expiresAt} = result.invitation;
+    setText($("admin-onboarding-target"), () => tr("Agent {0}. Use once before {1}.", () => agentId, () => dateText(expiresAt)));
+    $("admin-onboarding-dialog").showModal(); $("admin-onboarding-copy").focus();
+  }
+
+  async function onboardingAction(invite, action) {
+    if (!isOwner() || state.adminBusy || blockingAdminLoad() || !["reissue", "revoke"].includes(action)) return;
+    const question = action === "reissue"
+      ? tr("Generate a new command for {0}? Previous unused invitations for this agent will stop working. Lifetime: {1} hours.", () => invite.agent_id, () => $("admin-onboarding-expiry").value)
+      : tr("Revoke the unused invitation for {0}? The account and its configured permissions will remain.", () => invite.agent_id);
+    if (!window.confirm(question)) return;
+    await adminMutation(`/v1/admin/onboarding/${pathId(invite.id)}/${action}`, "POST", action === "reissue" ? {expires_in_hours: Number($("admin-onboarding-expiry").value)} : {},
+      action === "reissue" ? tr("New connection command generated.") : tr("Invitation revoked."), action === "reissue" ? showOnboardingResult : undefined);
+  }
+
   async function adminKeyAction(principal, action) {
     if (!isOwner() || !["agent", "viewer"].includes(principal.kind) || state.adminBusy || blockingAdminLoad()) return;
     const rotate = action === "rotate-key";
@@ -3040,7 +3167,40 @@
   for (const button of $("admin-section-nav").querySelectorAll("button")) button.addEventListener("click", () => setAdminSection(button.dataset.adminSection));
   setAdminSection("accounts");
   $("nav-admin").addEventListener("click", () => { if (state.view !== "admin") void selectAdmin(); });
-  for (const id of ["admin-principal-form", "admin-project-form", "admin-channel-form"]) {
+  $("admin-onboarding-project").addEventListener("change", () => { renderOnboardingChannels(true); updateAdminControls(); });
+  $("admin-onboarding-form").addEventListener("submit", event => {
+    event.preventDefault();
+    if ($("admin-onboarding-submit").disabled || !validAdminForm("admin-onboarding-form")) return;
+    const body = {id: $("admin-onboarding-id").value.trim(), name: $("admin-onboarding-name").value.trim(),
+      project_id: $("admin-onboarding-project").value, channel_ids: selectedOnboardingChannels(),
+      runtime: $("admin-onboarding-runtime").value, expires_in_hours: Number($("admin-onboarding-expiry").value)};
+    void adminMutation("/v1/admin/onboarding", "POST", body, tr("Agent created. Copy the connection command shown once."), showOnboardingResult);
+  });
+  $("admin-onboarding-close").addEventListener("click", clearOnboardingResult);
+  $("admin-onboarding-dialog").addEventListener("cancel", event => { event.preventDefault(); clearOnboardingResult(); });
+  $("admin-onboarding-dialog").addEventListener("close", () => { if (!$("admin-onboarding-dialog").open) clearOnboardingResult(); });
+  $("admin-onboarding-copy").addEventListener("click", async () => {
+    if (!isOwner() || !state.onboardingCommand || !$("admin-onboarding-dialog").open) return;
+    const version = state.onboardingVersion;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(state.onboardingCommand);
+      if (version === state.onboardingVersion && state.onboardingCommand) setText($("admin-onboarding-copy-status"), () => tr("Command copied. Share it only with this agent."));
+    } catch {
+      if (version !== state.onboardingVersion || !state.onboardingCommand) return;
+      $("admin-onboarding-command").focus(); $("admin-onboarding-command").select();
+      setText($("admin-onboarding-copy-status"), () => tr("Automatic copying is unavailable. Copy the selected command manually."));
+    }
+  });
+  $("admin-onboarding-download").addEventListener("click", () => {
+    if (!isOwner() || !state.onboardingCommand || !$("admin-onboarding-dialog").open) return;
+    if (state.onboardingDownload) URL.revokeObjectURL(state.onboardingDownload);
+    const url = URL.createObjectURL(new Blob(["#!/usr/bin/env bash\nset -euo pipefail\n" + state.onboardingCommand + "\n"], {type: "text/x-shellscript"}));
+    state.onboardingDownload = url;
+    const link = node("a"); link.href = url; link.download = "connect.sh"; appendOwned(document.body, () => link); link.click(); link.remove();
+    setTimeout(() => { URL.revokeObjectURL(url); if (state.onboardingDownload === url) state.onboardingDownload = ""; }, 1000);
+  });
+  for (const id of ["admin-principal-form", "admin-project-form", "admin-channel-form", "admin-onboarding-form"]) {
     $(id).addEventListener("input", (event) => { if (event.target instanceof HTMLInputElement) setOwnedValidity(event.target, () => ("")); });
   }
   $("admin-principal-form").addEventListener("submit", (event) => {

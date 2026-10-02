@@ -511,3 +511,17 @@ dialog::backdrop { background: #15293875; }
   .admin-form > .primary-button { width: 100%; }
   .admin-count-grid { grid-template-columns: minmax(0,1fr); }
 }
+
+/* Agent connection wizard keeps its scope and one-time command together. */
+.onboarding-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; max-width:850px; }
+.onboarding-form > div > label { display:block; margin-bottom:6px; }
+.onboarding-form .admin-full-width { grid-column:1 / -1; }
+.onboarding-channels { display:grid; gap:8px; }
+.onboarding-form .onboarding-channel { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:7px; cursor:pointer; }
+.onboarding-form .onboarding-channel:has(input:checked) { background:#edf5fb; border-color:#aac7dc; }
+.onboarding-form .onboarding-channel input { width:18px; height:18px; min-height:0; margin:0; padding:0; flex:0 0 auto; }
+.onboarding-channel span { overflow-wrap:anywhere; }
+#admin-onboarding-dialog { max-width:760px; }
+#admin-onboarding-command { font-family:monospace; font-size:12px; background:#f0f4f7; overflow-wrap:anywhere; }
+#admin-onboarding-list { margin-top:14px; }
+@media(max-width:640px) { .onboarding-form { grid-template-columns:minmax(0,1fr); } }
