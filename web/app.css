@@ -40,6 +40,10 @@ fieldset { min-inline-size: 0; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible,
 select:focus-visible, summary:focus-visible { outline: 3px solid #33a79b; outline-offset: 3px; }
 input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
+.technical-event-controls { margin-top: 14px; }
+.technical-event-toggle { display: inline-flex; align-items: center; gap: 9px; min-height: 36px; font-size: 13px; line-height: 1.6; cursor: pointer; }
+.technical-event-toggle input[type=checkbox] { width: 17px; height: 17px; margin: 0; flex: 0 0 auto; }
+.technical-event-notice:empty { display: none; }
 h1, h2, h3, h4 { overflow-wrap: anywhere; }
 .app-shell { grid-template-columns: 228px minmax(0,1fr); }
 .sidebar { height: 100vh; max-height: 100dvh; padding: 27px 16px 0; color: #dce5ee; scrollbar-width: thin; scrollbar-color: #415260 transparent; }

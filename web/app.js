@@ -7,6 +7,13 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    "{0} technical events hidden in this loaded window. No records were deleted; earlier events may be outside the window.": "Технических событий скрыто в загруженном окне: {0}. Записи не удалены; более ранние события могут находиться за пределами окна.",
+    "All event types are shown in this loaded window. Earlier events may be outside the window.": "В загруженном окне показаны все типы событий. Более ранние события могут находиться за пределами окна.",
+    "Only technical events are loaded. Turn on “Show technical events” to view them.": "Загружены только технические события. Включите «Показывать технические события», чтобы увидеть их.",
+    "{0} technical entities hidden in this loaded sample. Counts above include them; select their type or show technical events to view them.": "Технических сущностей скрыто в загруженной выборке: {0}. Счётчики выше учитывают их; выберите нужный тип или включите показ технических событий.",
+    "All matching entity types are shown in this loaded sample. Entities outside the sample are not shown.": "В загруженной выборке показаны все подходящие типы сущностей. Сущности вне выборки не показаны.",
+    "Only technical entities match in this loaded sample. Select their type or show technical events to view them.": "В загруженной выборке подходят только технические сущности. Выберите их тип или включите показ технических событий.",
+    "{0} reports loaded; {1} visible. {2}Up to 200 most recently loaded reports are retained. {3}The cursor also includes messages and receipts; it is not a completed-task count.": "Загружено отчётов: {0}; показано: {1}. {2}Сохраняются до 200 последних загруженных отчётов. {3}Курсор также учитывает сообщения и подтверждения; это не число выполненных задач.",
     "Selected project": "Выбранный проект",
     "Message {0}": "Сообщение {0}",
     "Delivery status · {0}": "Статус доставки · {0}",
@@ -709,6 +716,9 @@
     overview: null, adminSection: "accounts", accessRecheckUntil: 0,
     projectNative: null, projectNativeEpoch: 0,
     projectMap: null, projectMapEpoch: 0,
+    // Display preference lasts for this page session, across views and accounts.
+    // It never changes data, transport cursors, credentials, or browser storage.
+    showTechnicalEvents: false,
   };
   const EVENTS_PAGE = 25;
   const MESSAGES_PAGE = 100;
@@ -718,6 +728,18 @@
   const PROJECT_NATIVE_LIMIT = 100;
   const PROJECT_NATIVE_MAX = 200;
   const PROJECT_NATIVE_FRESH_MS = 5 * 60 * 1000;
+  const ROUTINE_NATIVE_TYPES = new Set(["session.started", "session.ended", "turn.started", "turn.completed", "tool.started", "tool.completed", "inbox.offered", "agent.waiting"]);
+  const TECHNICAL_TOGGLES = ["project-native-technical", "native-technical", "activity-technical", "project-map-technical"];
+  const nativeEventVisible = event => state.showTechnicalEvents || !ROUTINE_NATIVE_TYPES.has(event.event_type);
+  const mapEntityVisible = (item, selectedType) => state.showTechnicalEvents || Boolean(selectedType) || (item.type !== "receipt" && !(item.type === "native" && ROUTINE_NATIVE_TYPES.has(item.meta?.type)));
+  const channelMessageSeq = channel => number(Object.hasOwn(channel, "latest_message_seq") ? channel.latest_message_seq : channel.latest_seq);
+
+  function renderTechnicalNotice(id, hidden, map = false) {
+    $(id).dataset.hiddenCount = String(hidden);
+    setText($(id), () => (map
+      ? hidden ? tr("{0} technical entities hidden in this loaded sample. Counts above include them; select their type or show technical events to view them.", () => hidden) : tr("All matching entity types are shown in this loaded sample. Entities outside the sample are not shown.")
+      : state.showTechnicalEvents ? tr("All event types are shown in this loaded window. Earlier events may be outside the window.") : tr("{0} technical events hidden in this loaded window. No records were deleted; earlier events may be outside the window.", () => hidden)));
+  }
   const MAP_TYPES = {project: tr("Projects"), agent: tr("Participants"), channel: tr("Channels"), message: tr("Messages"), receipt: tr("Receipts"), task: tr("Tasks"), run: tr("Task runs"), "task-event": tr("Events / review"), artifact: tr("Artifacts"), memory: tr("Memory"), "memory-version": tr("Memory versions"), note: tr("Notes"), session: tr("Session leases"), native: tr("CLI reports")};
   const MAP_META = {project_id: tr("Project"), agent_id: tr("Participant"), kind: tr("Account type"), channel_id: tr("Channel"), author_id: tr("Author"), actor_id: tr("Report author"), reply_to: tr("Reply to message"), recipient_ids: tr("Recipients"), seq: tr("Channel sequence"), created_at: tr("Created"), updated_at: tr("Updated"), message_id: tr("Message"), session_id: tr("Session ID from this record"), delivered_at: tr("Delivery reported"), accepted_at: tr("Acceptance reported"), uncertain_at: tr("Uncertainty recorded"), type: tr("Event type"), runtime: "Runtime", run_id: tr("Run / execution ID from this record"), role: tr("Role"), expires_at: tr("Lease expiry"), closed_at: tr("Closed"), task_id: tr("Task"), owner_id: tr("Assignee"), reviewer_id: tr("Independent reviewer"), created_by: tr("Created by"), current_run_id: tr("Current task run"), state: tr("Published state"), version: tr("Version"), review_request_id: tr("Review request"), verification_status: tr("External verification report"), artifact_ids: tr("Explicit artifact references"), size_bytes: tr("Bytes"), memory_id: tr("Memory entry"), updated_by: tr("Version author"), source_message_id: tr("Source message"), verdict: tr("Reviewer decision"), evidence_artifact_id: tr("Verification artifact")};
   const COORDINATION_VIEWS = {tasks: tr("Tasks and review"), memory: tr("Project memory"), artifacts: tr("Artifacts"), sessions: tr("Sessions")};
@@ -911,7 +933,8 @@
     for (const id of ["project-switcher", "channel-list", "agent-list", "message-list", "activity-list", "memory-list", "recipient-list"]) $(id).replaceChildren();
     $("reply-to").replaceChildren(node("option", "", () => (tr("New message"))));
     $("reply-to").firstChild.value = "";
-    for (const id of ["channel-description", "channel-feed-name", "activity-scope", "notes-destination", "note-publish-target", "composer-identity", "updated-at"]) setText($(id), () => (""));
+    for (const id of ["channel-description", "channel-feed-name", "activity-scope", "activity-technical-notice", "notes-destination", "note-publish-target", "composer-identity", "updated-at"]) setText($(id), () => (""));
+    $("activity-technical-notice").dataset.hiddenCount = "0";
     setText($("project-name"), () => ("Agent Mesh"));
     setText($("current-channel"), () => (tr("Select a project")));
     setText($("message-count"), () => ("0"));
@@ -1201,13 +1224,16 @@
 
   function renderEvents() {
     const labels = {"message.created": tr("Message stored"), "receipt.delivered": tr("Delivery confirmed"), "receipt.accepted": tr("Acceptance confirmed"), "receipt.uncertain": tr("Uncertainty recorded"), "native.activity": tr("CLI activity report stored · details in a separate tab")};
-    const events = [...state.events.values()].sort((a, b) => number(b.seq) - number(a.seq));
+    const loaded = [...state.events.values()].sort((a, b) => number(b.seq) - number(a.seq));
+    const events = loaded.filter(event => state.showTechnicalEvents || event.kind !== "native.activity");
+    const hidden = loaded.length - events.length;
     replaceContent("activity-list", ...events.map((event) => {
       const row = node("article", "activity-row");
       appendOwned(row, () => (node("h3", "activity-title", () => (labels[event.kind] || event.kind))), () => (node("p", "activity-meta", () => (tr("#{0} · {1} · seq {2}\nEntity: {3}", () => (state.channel?.name || event.channel_id), () => (dateText(event.created_at)), () => (event.seq), () => (event.entity_id || "—"))))));
       return row;
     }));
-    if (!events.length) appendOwned($("activity-list"), () => (node("p", "empty-state", () => (state.loading ? tr("Loading events…") : state.dataReady ? tr("No events received for this channel yet.") : tr("Events have not been received yet.")))));
+    if (!events.length) appendOwned($("activity-list"), () => (node("p", "empty-state", () => (state.loading ? tr("Loading events…") : hidden ? tr("Only technical events are loaded. Turn on “Show technical events” to view them.") : state.dataReady ? tr("No events received for this channel yet.") : tr("Events have not been received yet.")))));
+    renderTechnicalNotice("activity-technical-notice", hidden);
     setText($("activity-scope"), () => (state.channel ? tr("Only #{0}. Showing up to 200 events received in this view.", () => (state.channel.name)) : tr("No channel selected.")));
   }
 
@@ -1229,7 +1255,8 @@
     state.projectMap = null; state.projectMapEpoch += 1;
     setText($("project-map-live-title"), () => tr("Selected project"));
     for (const id of ["project-map-counts", "project-map-entities", "project-map-detail", "project-map-relations"]) $(id).replaceChildren();
-    for (const id of ["project-map-status", "project-map-boundary", "project-map-list-status", "project-map-relations-status"]) setText($(id), () => (""));
+    for (const id of ["project-map-status", "project-map-boundary", "project-map-list-status", "project-map-relations-status", "project-map-technical-notice"]) setText($(id), () => (""));
+    $("project-map-technical-notice").dataset.hiddenCount = "0";
     delete $("project-map-detail").dataset.entityKey;
     $("project-map-type").value = ""; $("project-map-search").value = "";
     clearError("project-map-error");
@@ -1443,13 +1470,16 @@
     replaceContent("project-map-type", all, ...Object.entries(MAP_TYPES).map(([type, label]) => { const option = node("option", "", () => (label)); option.value = type; return option; }));
     $("project-map-type").value = data.type;
     const query = data.query.trim().toLocaleLowerCase(localeName());
-    const matches = list(snapshot?.nodes).filter(item => (!data.type || item.type === data.type) && (!query || `${mapNodeLabel(item)} ${item.label} ${item.id}`.toLocaleLowerCase(localeName()).includes(query)));
+    const matching = list(snapshot?.nodes).filter(item => (!data.type || item.type === data.type) && (!query || `${mapNodeLabel(item)} ${item.label} ${item.id}`.toLocaleLowerCase(localeName()).includes(query)));
+    const matches = matching.filter(item => mapEntityVisible(item, data.type));
+    const hidden = matching.length - matches.length;
     const shown = matches.slice(0, 100);
     if (!shown.some(item => item.key === data.selectedKey)) data.selectedKey = (shown.find(item => item.type === "project") || shown[0])?.key || "";
     const cards = shown.map(item => mapEntityButton(item));
-    if (!cards.length) cards.push(node("p", "empty-state", () => (!snapshot ? data.error ? tr("Data is unconfirmed; a zero count has not been established.") : tr("Loading metadata…") : query ? tr("No matches in the loaded snapshot. Search does not cover entities outside the sample.") : tr("No entities of this type in the loaded sample."))));
+    if (!cards.length) cards.push(node("p", "empty-state", () => (!snapshot ? data.error ? tr("Data is unconfirmed; a zero count has not been established.") : tr("Loading metadata…") : hidden ? tr("Only technical entities match in this loaded sample. Select their type or show technical events to view them.") : query ? tr("No matches in the loaded snapshot. Search does not cover entities outside the sample.") : tr("No entities of this type in the loaded sample."))));
     replaceContent("project-map-entities", ...cards);
     setText($("project-map-list-status"), () => (snapshot ? tr("Listing {0} of {1} matching snapshot entities.{2}", () => (shown.length), () => (matches.length), () => (matches.length > 100 ? tr(" Select a type or refine the search: the list is limited to 100 rows.") : "")) : ""));
+    renderTechnicalNotice("project-map-technical-notice", hidden, true);
     renderProjectMapDetail(data, shown.find(item => item.key === data.selectedKey));
   }
 
@@ -1461,6 +1491,7 @@
   function clearNativeActivity() {
     state.nativeActivity.clear(); state.nativeSeq = 0; state.nativeReady = false; state.nativeMore = false; state.nativeWindowAfter = 0;
     $("native-activity-list").replaceChildren(); setText($("native-activity-scope"), () => ("")); setText($("native-history-notice"), () => (""));
+    setText($("native-technical-notice"), () => ""); $("native-technical-notice").dataset.hiddenCount = "0";
   }
 
   // Project activity has its own newest-first cursor, never the shared channel seq.
@@ -1471,7 +1502,8 @@
     for (const [id, label] of [["project-native-actor", tr("All available agents")], ["project-native-channel", tr("All available channels")]]) {
       const option = node("option", "", () => (label)); option.value = ""; $(id).replaceChildren(option); $(id).disabled = true;
     }
-    for (const id of ["project-native-scope", "project-native-status", "project-native-last-event"]) setText($(id), () => (""));
+    for (const id of ["project-native-scope", "project-native-status", "project-native-last-event", "project-native-technical-notice"]) setText($(id), () => (""));
+    $("project-native-technical-notice").dataset.hiddenCount = "0";
     $("project-native-last-event").dataset.freshness = "unknown";
     $("project-native-more").hidden = true; $("project-native-more").disabled = true;
     clearError("project-native-error");
@@ -1558,11 +1590,13 @@
       $(id).value = value; $(id).disabled = !state.projectReady;
     }
     setText($("project-native-scope"), () => (tr("Project “{0}” · {1} · {2}. {3}", () => (state.project.name), () => (data.channelId ? tr("selected channel") : tr("all available channels")), () => (data.actorId ? tr("selected agent") : tr("all authors of permitted events")), () => (data.notice))));
-    const rows = data.rows.map(projectNativeCard);
-    if (!rows.length) rows.push(node("p", "empty-state", () => (data.error ? tr("Feed read is unconfirmed. See the error above; absence of events has not been established.") : data.ready ? tr("No CLI reports in the selected scope yet. This does not mean the agent has stopped: the adapter may not publish events, or the filter may match no reports.") : tr("Reading the project CLI feed…"))));
+    const visible = data.rows.filter(nativeEventVisible), hidden = data.rows.length - visible.length;
+    const rows = visible.map(projectNativeCard);
+    if (!rows.length) rows.push(node("p", "empty-state", () => (data.error ? tr("Feed read is unconfirmed. See the error above; absence of events has not been established.") : hidden ? tr("Only technical events are loaded. Turn on “Show technical events” to view them.") : data.ready ? tr("No CLI reports in the selected scope yet. This does not mean the agent has stopped: the adapter may not publish events, or the filter may match no reports.") : tr("Reading the project CLI feed…"))));
     replaceContent("project-native-list", ...rows);
     setText($("project-native-error"), () => (data.error)); $("project-native-error").hidden = !data.error;
-    setText($("project-native-status"), () => (tr("{0}{1}{2} Live refresh rereads a window of up to 200 events; this is not the entire archive.", () => (data.loading ? tr("Updating the window… ") : ""), () => (data.error ? tr("Refresh is unconfirmed. ") : ""), () => (data.ready ? tr("Showing {0} events, newest first. {1}{2}", () => (data.rows.length), () => (data.at ? tr("Snapshot: {0}. ", () => (dateText(data.at))) : ""), () => (data.hasMore ? data.rows.length >= PROJECT_NATIVE_MAX ? tr("The 200-event limit has been reached. Earlier events remain on the server; refine the filters.") : tr("Earlier events are available.") : tr("No earlier events in this snapshot."))) : tr("The first snapshot has not been received yet.")))));
+    setText($("project-native-status"), () => (tr("{0}{1}{2} Live refresh rereads a window of up to 200 events; this is not the entire archive.", () => (data.loading ? tr("Updating the window… ") : ""), () => (data.error ? tr("Refresh is unconfirmed. ") : ""), () => (data.ready ? tr("Showing {0} events, newest first. {1}{2}", () => (visible.length), () => (data.at ? tr("Snapshot: {0}. ", () => (dateText(data.at))) : ""), () => (data.hasMore ? data.rows.length >= PROJECT_NATIVE_MAX ? tr("The 200-event limit has been reached. Earlier events remain on the server; refine the filters.") : tr("Earlier events are available.") : tr("No earlier events in this snapshot."))) : tr("The first snapshot has not been received yet.")))));
+    renderTechnicalNotice("project-native-technical-notice", hidden);
     $("project-native-more").hidden = !data.ready || !data.hasMore;
     $("project-native-more").disabled = data.loading || Boolean(data.error) || data.rows.length >= PROJECT_NATIVE_MAX;
     setText($("project-native-more"), () => (data.rows.length >= PROJECT_NATIVE_MAX ? tr("Limit: 200 events") : tr("Load earlier events")));
@@ -1621,7 +1655,9 @@
 
   function renderNativeActivity() {
     const labels = {"session.started": tr("CLI session start reported"), "session.ended": tr("CLI session end reported"), "turn.started": tr("Turn start reported"), "turn.completed": tr("Turn completion reported"), "tool.started": tr("Tool start observed"), "tool.completed": tr("Tool completion observed"), "tool.failed": tr("Tool failure reported"), "agent.waiting": tr("Adapter reports waiting"), "inbox.offered": tr("Message offered to a CLI session"), "inbox.seen": tr("Session explicitly reported message viewed"), "inbox.accepted": tr("Session explicitly reported message acceptance")};
-    const rows = [...state.nativeActivity.values()].sort((a, b) => number(b.seq) - number(a.seq)).map((event) => {
+    const loaded = [...state.nativeActivity.values()].sort((a, b) => number(b.seq) - number(a.seq));
+    const visible = loaded.filter(nativeEventVisible), hidden = loaded.length - visible.length;
+    const rows = visible.map((event) => {
       const row = node("article", "native-activity-record"); row.dataset.nativeId = event.id; row.dataset.nativeType = event.event_type;
       appendOwned(row, () => (node("h3", "activity-title", () => (labels[event.event_type] || tr("Unknown client report type")))), () => (node("p", "native-provenance", () => (tr("Client-reported · not server-verified")))), () => (node("p", "activity-meta", () => (tr("{0} ({1}) · {2}\nStored {3} · seq {4}\nCLI session: {5} · channel: {6}", () => (displayName(event.actor_id)), () => (event.actor_id), () => (event.runtime), () => (dateText(event.created_at)), () => (event.seq), () => (event.session_id), () => (event.channel_id))))));
       if (event.tool_name) appendOwned(row, () => (node("p", "native-tool-name", () => (tr("Tool: {0}", () => (event.tool_name))))));
@@ -1632,10 +1668,11 @@
       if (event.event_type === "inbox.accepted") appendOwned(row, () => (node("p", "native-boundary", () => (tr("Attributed acceptance report, not a legacy receipt or proof of completion.")))));
       return row;
     });
-    if (!rows.length) rows.push(node("p", "empty-state", () => (state.nativeReady ? tr("No CLI reports in this channel’s loaded window.") : tr("Reading activity for the selected channel…"))));
+    if (!rows.length) rows.push(node("p", "empty-state", () => (hidden ? tr("Only technical events are loaded. Turn on “Show technical events” to view them.") : state.nativeReady ? tr("No CLI reports in this channel’s loaded window.") : tr("Reading activity for the selected channel…"))));
     replaceContent("native-activity-list", ...rows);
     setText($("native-activity-scope"), () => (state.channel ? tr("Only #{0} ({1}). Authorship is determined by the sender’s personal key.", () => (state.channel.name), () => (state.channel.id)) : tr("No channel selected.")));
-    setText($("native-history-notice"), () => (tr("{0} reports in the feed. {1}Up to 200 most recently loaded reports are retained. {2}The cursor also includes messages and receipts; it is not a completed-task count.", () => (state.nativeActivity.size), () => (state.nativeWindowAfter > 0 ? tr("The initial window covers the last 200 channel cursor steps, not the entire archive. ") : ""), () => (state.nativeMore ? tr("Reading the next page… ") : ""))));
+    setText($("native-history-notice"), () => (tr("{0} reports loaded; {1} visible. {2}Up to 200 most recently loaded reports are retained. {3}The cursor also includes messages and receipts; it is not a completed-task count.", () => (loaded.length), () => (visible.length), () => (state.nativeWindowAfter > 0 ? tr("The initial window covers the last 200 channel cursor steps, not the entire archive. ") : ""), () => (state.nativeMore ? tr("Reading the next page… ") : ""))));
+    renderTechnicalNotice("native-technical-notice", hidden);
   }
 
   async function nativeActivitySnapshot(context, channelId) {
@@ -1809,7 +1846,7 @@
     else if (selectedChannel) state.channel = selectedChannel;
     if (!["notes", "admin", "overview", "project-native", "project-map"].includes(state.view) && !isCoordination() && !state.channel) state.channel = incoming[0] || null;
     for (const channel of incoming) {
-      const latest = number(channel.latest_seq);
+      const latest = channelMessageSeq(channel);
       if (!state.channelSeen.has(channel.id)) state.channelSeen.set(channel.id, latest);
       else if (latest > state.channelSeen.get(channel.id) && (state.channel?.id !== channel.id || isCoordination() || ["overview", "project-native", "project-map"].includes(state.view))) state.channelUpdates.add(channel.id);
       if (state.channel?.id === channel.id && ["chat", "activity", "native"].includes(state.view)) {
@@ -3119,6 +3156,11 @@
   $("tab-chat").addEventListener("click", () => setView("chat"));
   $("tab-activity").addEventListener("click", () => setView("activity"));
   $("tab-native").addEventListener("click", () => setView("native"));
+  for (const id of TECHNICAL_TOGGLES) $(id).addEventListener("change", () => {
+    state.showTechnicalEvents = $(id).checked;
+    for (const toggle of TECHNICAL_TOGGLES) $(toggle).checked = state.showTechnicalEvents;
+    renderEvents(); renderNativeActivity(); renderProjectNative(); renderProjectMap();
+  });
   for (const tab of ["chat", "activity", "native"]) $(`tab-${tab}`).addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
