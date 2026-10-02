@@ -1223,7 +1223,9 @@
     if (!activity || !state.dataReady || state.loading || state.view !== "chat" || document.hidden ||
         document.querySelector("dialog[open]") || document.body.classList.contains("nav-open") ||
         $("search-input").value.trim() || !scroller.clientHeight || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 45 || state.navigationRead) return;
-    const through = Math.max(0, ...[...scroller.querySelectorAll("[data-message-seq]")].map(element => number(element.dataset.messageSeq)));
+    // A just-sent own message can appear ahead of REST replay. Do not skip any
+    // intervening incoming messages that have not been fetched and rendered.
+    const through = Math.min(state.messageSeq, Math.max(0, ...[...scroller.querySelectorAll("[data-message-seq]")].map(element => number(element.dataset.messageSeq))));
     if (!through || through <= number(activity.last_read_seq)) return;
     const request = {channelId, context}; state.navigationRead = request;
     state.navigationSeq += 1; // A pre-write GET must not restore an older cursor/count.
