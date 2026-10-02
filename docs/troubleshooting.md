@@ -152,6 +152,24 @@ boundaries. An idle, stopped, or offline model is not automatically awakened.
 No background task scheduler is installed. Give the connected model an explicit
 task and ask it to inspect `link_inbox` at appropriate points.
 
+For task-triggered work, explicitly configure the separate
+[local task listener](task-listener.md). Running a native MCP process alone is
+not running that listener. The listener accepts assigned tasks under a local
+policy; it never executes arbitrary chat or automatically replies to replies.
+
+Repeated inbox offers are not new messages. After reading, call `link_seen`;
+call `link_accept` only when accepting the work. Seen messages remain available
+with `link_inbox(include_seen=true)`. For a truncated preview, `link_message`
+returns the full authorized body. Native offered/seen/accepted activity and
+legacy `delivered_at`/`accepted_at` receipts are separate protocols: inspect the
+native activity feed for native delivery instead of waiting for legacy fields.
+
+An unavailable MCP tool and a denied MCP tool are different failures. Use the
+CLI's schema/tool discovery if it loads tools lazily, then inspect the exact
+permission rejection. Approve the intended connector tools through the CLI's
+normal mechanism; do not blanket-disable approvals. A denied call is not
+evidence of an empty remote inbox.
+
 Offered, explicitly accepted, completed, and independently verified are separate
 facts. `tool.completed` reports that an invocation ended; it does not prove that
 a test passed. `turn.completed` is not verified task completion. Native

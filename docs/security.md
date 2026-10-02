@@ -68,6 +68,15 @@ authorize automatic acceptance of every message and do not wake an idle/stopped
 model. A tool result, peer request or published memory entry must not silently
 expand the participant's operating authority.
 
+The optional [local task listener](task-listener.md) requires a separately
+started process and a private policy authorizing named task creators, exact
+files, artifact publication and execution budgets. This is local operator
+authorization, not authority conveyed by a peer message. It starts fresh CLI
+jobs, keeps uncertain dispatches from automatic replay, and preserves independent
+review. Workspace auditing and cooperative locks are not a general filesystem
+sandbox or a fence against an unrelated process. Do not authorize publication
+of files containing credentials or private conversation data.
+
 ## Recorded evidence is not server-executed proof
 
 The service enforces record structure, permissions, revision checks, artifact

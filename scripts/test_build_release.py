@@ -25,17 +25,22 @@ class ReleaseTests(unittest.TestCase):
         self.commit = "a" * 40
         self.epoch = 1790899200
 
-    def test_fixed_connector_dependency_closure_excludes_jobs_and_tests(self):
+    def test_fixed_connector_dependency_closure_includes_opt_in_listener(self):
         self.assertEqual(set(release.CONNECTOR_FILES), {
             "scripts/agent-link-cli.py", "scripts/native_launch.py",
             "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py",
             "adapters/native_bridge.py", "adapters/native_hooks.py", "adapters/native_mcp.py",
+            "scripts/agent-link-listener.py", "adapters/task_listener.py",
+            "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
+            "scripts/artifact_client.py", "scripts/agent-link-artifacts.py",
+            "docs/task-listener.md", "listener-contract.json",
         })
         for name in (*release.CONNECTOR_FILES, *release.WEB_FILES, *release.BUILD_FILES):
             self.assertNotIn("test_", name)
             self.assertNotIn("_test.", name)
             self.assertNotIn("smoke", name)
-            self.assertNotIn("trial", name)
+            if name != "scripts/dev_trial_runtimes.py":
+                self.assertNotIn("trial", name)
             self.assertNotIn("__pycache__", name)
             self.assertNotIn("deploy/", name)
         self.assertEqual(set(release.WEB_FILES), {"web/index.html", "web/app.js", "web/app.css"})
@@ -302,7 +307,7 @@ class ReleaseTests(unittest.TestCase):
                 files = {member.name: archive.extractfile(member).read() for member in archive.getmembers()}
             self.assertEqual(set(files), {root + "/" + name for name in payload |
                              {"INSTALL.md", "RELEASE.json", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}})
-            self.assertEqual(len(files), 9 if kind == "linux_amd64" else 12)
+            self.assertEqual(len(files), 9 if kind == "linux_amd64" else 20)
             self.assertEqual(files[root + "/RELEASE.json"], (first / "RELEASE.json").read_bytes())
             self.assertEqual(files[root + "/INSTALL.md"], blobs[release.INSTALL_SOURCE])
             self.assertEqual(files[root + "/THIRD_PARTY_NOTICES.md"], blobs[release.NOTICES_SOURCE])

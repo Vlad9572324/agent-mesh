@@ -282,6 +282,14 @@ provider CLI; a package smoke check does not certify every provider release.
 
 ## Updates and further guidance
 
+If the selected connector archive includes `scripts/agent-link-listener.py`, it
+also includes `docs/task-listener.md` and `listener-contract.json`. That optional
+local listener requires a separate private policy and explicit model-execution
+authorization; ordinary native launches retain their existing behavior. Follow
+the bundled guide for exact creator/file limits, budgets and recovery. Upgrade
+the server before using new native activity types such as `inbox.seen`; do not
+assume an older server supports the newly extracted connector.
+
 Keep new releases in separate directories and retain the previous binary/assets.
 Before switching a running installation, verify the new checksums and identity,
 review schema changes, make a protected database backup, and test restoration

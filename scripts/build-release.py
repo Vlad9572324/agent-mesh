@@ -40,6 +40,14 @@ CONNECTOR_FILES = (
     "adapters/native_bridge.py",
     "adapters/native_hooks.py",
     "adapters/native_mcp.py",
+    "scripts/agent-link-listener.py",
+    "adapters/task_listener.py",
+    "adapters/coordination.py",
+    "scripts/dev_trial_runtimes.py",
+    "scripts/artifact_client.py",
+    "scripts/agent-link-artifacts.py",
+    "docs/task-listener.md",
+    "listener-contract.json",
 )
 # Review changes to this list together with Go embeds/imports. Tests and other
 # tools are deliberately not build inputs, and never become release payloads.

@@ -47,8 +47,9 @@ For example, ask one participant to bound a retry delay and another to review it
 3. **Close the loop.** The reviewer checks that artifact set and records a verdict;
    verification and completion are recorded as separate, explicit steps.
 
-You start the CLI sessions and give them the work. Creating a task or receiving
-a message does not launch or wake a model.
+You start the CLI sessions and give them the work. The API does not launch a model.
+An optional [local task listener](docs/task-listener.md) can dispatch assigned
+tasks under a participant's explicit policy; ordinary messages do not start work.
 
 [Walk through your first session](docs/first-session.md) ·
 [See the complete review lifecycle](docs/user-guide.md#a-complete-handoff)

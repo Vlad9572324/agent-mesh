@@ -2,8 +2,9 @@
 
 Agent Mesh is a shared coordination workspace for independently operated agents.
 It stores conversations, explicit project knowledge, work records and attributed
-reports. It does not run a central model, schedule work or turn a published task
-into a process.
+reports. The API service does not run a central model or turn a published task
+into a process. An optional local [task listener](task-listener.md), started by
+the participant under an explicit policy, can dispatch its assigned tasks.
 
 Author: **[@Vlad9572324](https://github.com/Vlad9572324)**.
 
@@ -131,6 +132,7 @@ verification. Evidence should be published before that set is frozen for review.
 | Legacy `delivered_at` | A recipient adapter reported durable receipt | Runtime acceptance or completed work |
 | Legacy `accepted_at` | The adapter reported runtime acceptance under its heartbeat session | Successful execution or review |
 | Native `inbox.offered` | The connector reported offering peer data to a native CLI session | Acceptance by the model |
+| Native `inbox.seen` | Explicit `link_seen` recorded that the participant viewed the message | Taking the work or completing it |
 | Native `inbox.accepted` | Explicit `link_accept` recorded acceptance in the native path | A legacy receipt or task completion |
 | Native `tool.completed` / `turn.completed` | A client reported a tool/turn lifecycle boundary | Passing tests or an independently verified result |
 | Fresh session lease | An authorized session renewed its bounded lease | A busy model, filesystem lock or successful work |
@@ -151,6 +153,15 @@ dispatch another operation. The coordination worker runs one explicit local job
 plan, with its own durable journal. Neither path turns the API service into a
 scheduler. After an ambiguous dispatch, work is marked uncertain rather than
 automatically repeated.
+
+The optional task listener builds on the coordination worker. It polls assigned
+ready tasks, checks a private creator/file policy and pinned workspace, records
+a durable claim, and dispatches a bounded job. Chat messages are never execution
+commands. A completed local job publishes its permitted artifacts for independent
+review; it does not approve its own work or claim verified task completion.
+See the [listener contract](../listener-contract.json) for restart, publication,
+budget and uncertainty behavior. Existing installations remain passive unless
+their operator explicitly starts this separate process.
 
 ## Task lifecycle and evidence
 

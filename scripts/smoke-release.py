@@ -35,7 +35,11 @@ CONNECTOR_FILES = frozenset({"scripts/agent-link-cli.py", "scripts/native_launch
                              "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py",
                              "adapters/native_bridge.py", "adapters/native_hooks.py",
                              "adapters/native_mcp.py", "INSTALL.md", "LICENSE", "NOTICE",
-                             "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
+                             "THIRD_PARTY_NOTICES.md", "RELEASE.json",
+                             "scripts/agent-link-listener.py", "adapters/task_listener.py",
+                             "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
+                             "scripts/artifact_client.py", "scripts/agent-link-artifacts.py",
+                             "docs/task-listener.md", "listener-contract.json"})
 VERSION_RE = r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?"
 SCHEMA_RE = r"release_smoke_[0-9a-f]{32}"
 MAX_ARCHIVE = 128 * 1024 * 1024
@@ -280,18 +284,20 @@ class Smoke:
                 info.get("go_version") == self.metadata["builder_version"] and
                 info.get("goos") == "linux" and info.get("goarch") == "amd64", "binary identity mismatch")
         self.report["version_verified"] = True
-        for name in ("agent-link-cli.py", "agent-link-hook.py", "agent-link-mcp.py"):
+        for name in ("agent-link-cli.py", "agent-link-hook.py", "agent-link-mcp.py",
+                     "agent-link-listener.py", "agent-link-artifacts.py"):
             output = self.command([sys.executable, "-E", "-s", "-B", str(connectors / "scripts" / name), "--help"])
             require(b"usage:" in output.lower(), "connector help missing")
             self.report["connector_help_checks"] += 1
         # Explicitly load only packaged modules, never installed or checkout copies.
         code = ("import importlib,pathlib,sys; root=pathlib.Path(sys.argv[1]); "
                 "sys.path[:0]=[str(root/'scripts'),str(root/'adapters')]; "
-                "names=('native_launch','native_bridge','native_hooks','native_mcp'); "
+                "names=('native_launch','native_bridge','native_hooks','native_mcp',"
+                "'task_listener','coordination','artifact_client','dev_trial_runtimes'); "
                 "mods=[importlib.import_module(name) for name in names]; "
                 "assert all(pathlib.Path(m.__file__).resolve().is_relative_to(root) for m in mods)")
         self.command([sys.executable, "-I", "-B", "-c", code, str(connectors)])
-        self.report["connector_imports"] = 4
+        self.report["connector_imports"] = 8
 
     def setup_database(self, source):
         self.config = parse_test_dsn(read_regular(source, 16384, private=True).decode("utf-8").strip())
