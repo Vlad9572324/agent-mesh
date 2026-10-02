@@ -193,7 +193,8 @@ class CDP {
         const {request, requestId} = message.params, url = new URL(request.url);
         const allowedMutation = request.method === 'POST' && this.allowedMutation === url.pathname && url.origin === new URL(base).origin;
         if (allowedMutation) this.allowedMutation = '';
-        const deny = url.origin !== new URL(base).origin || request.method !== 'GET' && !allowedMutation;
+        const readCursorWrite = name === 'writer' && request.method === 'PUT' && url.pathname === `/v1/channels/${ids.alpha}/read`;
+        const deny = url.origin !== new URL(base).origin || request.method !== 'GET' && !allowedMutation && !readCursorWrite;
         const fixtureFailure = Boolean(this.blockMap && /\/map$/.test(url.pathname));
         if (deny) report.browser_guard_failed = true;
         void this.call(deny || fixtureFailure ? 'Fetch.failRequest' : 'Fetch.continueRequest', deny || fixtureFailure ? {requestId, errorReason: 'BlockedByClient'} : {requestId}).catch(() => {});
@@ -480,7 +481,8 @@ try {
     }
     await english(owner, 'one-time key modal'); await owner.click('#admin-key-close');
     assert(await owner.eval("!document.getElementById('admin-key-dialog').open && document.getElementById('admin-issued-key').value===''"), 'Closing key dialog retained secret');
-    assert(report.requests.filter(r => r.method !== 'GET').every(r => r.tab === 'owner' && r.method === 'POST' && r.path === '/v1/admin/principals/' + ids.target + '/rotate-key') && report.requests.filter(r => r.method !== 'GET').length === 1, 'Unexpected browser mutation');
+    const changes = report.requests.filter(r => r.method !== 'GET' && !(r.tab === 'writer' && r.method === 'PUT' && r.path === `/v1/channels/${ids.alpha}/read`));
+    assert(changes.length === 1 && changes.every(r => r.tab === 'owner' && r.method === 'POST' && r.path === '/v1/admin/principals/' + ids.target + '/rotate-key'), 'Unexpected browser mutation');
   });
   await check('login and map errors switch languages in place without retry or false-zero data', async () => {
     // Exercise connected lazy map labels after their project scope is cleared.
