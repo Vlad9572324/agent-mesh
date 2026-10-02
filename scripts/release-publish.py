@@ -115,7 +115,8 @@ class Publisher:
         self.report = {"success": False, "version": args.version, "source_commit": args.expected_commit,
                        "repository_id": self.repository_id, "image_repository": self.image_repository,
                        "phase": "inputs", "draft_created": False, "assets_verified": 0,
-                       "digest_pull_verified": False, "package_private_verified": False,
+                       "digest_pull_verified": False, "package_visibility_verified": False,
+                       "expected_package_visibility": package_guard.EXPECTED_VISIBILITY,
                        "release_published": False}
 
     def api(self, method, path, value=None, *, expected=200):
@@ -169,7 +170,7 @@ class Publisher:
         require(registry_missing(status, raw), "registry did not prove version tag absence")
 
     def check_package(self, *, allow_missing=False):
-        self.report["package_private_verified"] = package_guard.check_package(
+        self.report["package_visibility_verified"] = package_guard.check_package(
             self.args.repository, self.repository_id, self.token, allow_missing=allow_missing)
 
     def create_draft(self):

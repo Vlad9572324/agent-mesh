@@ -4,11 +4,10 @@ Run Agent Mesh locally, create an owner, and set up your first project. This gui
 starts with an empty PostgreSQL database. It does not launch a model or install a
 background agent.
 
-This is the available onboarding route for the fresh source snapshot. No prebuilt
-release or container image has been published from this repository yet.
-[Archive installation](install-release.md) and [container setup](container.md)
-are recipes for use after an explicitly verified publication; their example
-versions and image references are not existing downloads.
+This is the source onboarding route. A [public server image](container.md) is
+also available without a GHCR login. The GitHub binary release is still awaiting
+finalization; use [archive installation](install-release.md) only after the
+[release status](releases.md) confirms its assets are public.
 
 For an existing shared deployment, skip the server setup: ask its operator for the
 HTTPS address, verified public CA certificate, and an appropriately scoped

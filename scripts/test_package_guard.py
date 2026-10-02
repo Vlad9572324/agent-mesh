@@ -12,7 +12,7 @@ SPEC = importlib.util.spec_from_file_location("package_guard_tested", Path(__fil
 guard = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(guard)
 REPOSITORY = {"id": 1234, "full_name": "owner/agent-mesh"}
-PACKAGE = {"name": "agent-mesh-server", "package_type": "container", "visibility": "private",
+PACKAGE = {"name": "agent-mesh-server", "package_type": "container", "visibility": "public",
            "repository": REPOSITORY}
 
 
@@ -29,7 +29,7 @@ class PackageGuardTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(guard.PackageError):
                 guard.repository_identity(value)
 
-    def test_existing_private_package_requires_exact_repository_id(self):
+    def test_existing_public_package_requires_exact_repository_id(self):
         with mock.patch.object(guard, "api_get", side_effect=[(200, REPOSITORY), (200, PACKAGE)]) as api:
             self.assertTrue(guard.check_package("owner/agent-mesh", "1234", "PRIVATE"))
         self.assertEqual([call.args[0] for call in api.call_args_list],
@@ -48,12 +48,38 @@ class PackageGuardTests(unittest.TestCase):
     def test_same_url_different_repository_id_never_adopts_legacy_package(self):
         for package in (dict(PACKAGE, repository={"id": 9999, "full_name": "owner/agent-mesh"}),
                         dict(PACKAGE, repository={"id": 1234, "full_name": "owner/archive"}),
-                        dict(PACKAGE, visibility="public"), dict(PACKAGE, name="agent-mesh"),
+                        dict(PACKAGE, visibility="private"), dict(PACKAGE, name="agent-mesh"),
                         dict(PACKAGE, repository=None)):
             with self.subTest(package=package), mock.patch.object(guard, "api_get", side_effect=[
                     (200, REPOSITORY), (200, package)]):
                 with self.assertRaisesRegex(guard.PackageError, "immutable repository ID"):
                     guard.check_package("owner/agent-mesh", "1234", "PRIVATE", allow_missing=True)
+
+    def test_expected_visibility_is_public_only_not_either_visibility(self):
+        self.assertEqual(guard.EXPECTED_VISIBILITY, "public")
+        for visibility in ("private", "internal", "PUBLIC", "", None):
+            with self.subTest(visibility=visibility), mock.patch.object(guard, "api_get", side_effect=[
+                    (200, REPOSITORY), (200, dict(PACKAGE, visibility=visibility))]):
+                with self.assertRaisesRegex(guard.PackageError, "public package associated"):
+                    guard.check_package("owner/agent-mesh", "1234", "PRIVATE", allow_missing=True)
+
+    def test_cli_reports_explicit_public_policy_without_private_success_claim(self):
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/agent-mesh", "GITHUB_REPOSITORY_ID": "1234",
+                                         "GITHUB_TOKEN": "PRIVATE_TOKEN"}, clear=True), \
+                mock.patch.object(guard, "api_get", side_effect=[(200, REPOSITORY), (200, PACKAGE)]), \
+                contextlib.redirect_stdout(out):
+            self.assertEqual(guard.main(["--repository", "owner/agent-mesh", "--repository-id", "1234"]), 0)
+        report = json.loads(out.getvalue())
+        self.assertEqual(report["expected_package_visibility"], "public")
+        self.assertTrue(report["package_visibility_verified"])
+        self.assertNotIn("package_private_verified", report)
+        self.assertNotIn("PRIVATE_TOKEN", out.getvalue())
+
+    def test_candidate_workflow_reports_the_same_explicit_visibility_policy(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/container.yml").read_text()
+        self.assertIn("expected_package_visibility='public', package_visibility_verified=True", workflow)
+        self.assertNotIn("package_private_verified", workflow)
 
     def test_missing_package_is_allowed_only_before_push_and_after_identity_check(self):
         for allow_missing in (False, True):

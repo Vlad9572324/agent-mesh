@@ -2,10 +2,10 @@
 
 [Documentation](README.md) · [Install a release](install-release.md) · [Release notes](releases.md)
 
-This fresh source repository has no published release or container image yet.
-The checked-in workflows provide the release machinery, not publication evidence.
-The prepared candidate is `v0.1.0-rc.2`, targeting Linux amd64 only; successful
-publication and remote verification must be recorded before claiming availability.
+The public `v0.1.0-rc.2` server image is verified, while the GitHub binary Release
+is still awaiting finalization. See [release status](releases.md) for the actual
+run and digest evidence. Packaging targets Linux amd64 only; workflow definitions
+alone do not establish successful publication.
 New version tags use the hosted
 [automatic release workflow](#automatic-version-tag-releases). Its manual
 dispatch is a **dry run only**. The separate
@@ -13,8 +13,10 @@ dispatch is a **dry run only**. The separate
 its manual, commit-tagged GHCR publication path.
 
 Publication requires appropriate repository permissions. Source visibility and
-package access are separate: the new `agent-mesh-server` GHCR package is kept
-private by default. No workflow changes visibility, deploys a service, or changes
+package access are separate: the new `agent-mesh-server` GHCR package must be
+**public**, with its exact package name/type and immutable repository ID/name
+verified. Private or internal visibility is not accepted for this distribution.
+No workflow changes visibility, deploys a service, or changes
 an operator's running version. Start with a publication-free dry run against a
 reviewed commit from this repository's fresh history.
 
@@ -140,12 +142,14 @@ The publisher proceeds in this order:
    hashes with the tested local files.
 4. Push the matching version-qualified image, pull its digest, and verify the
    pulled binary's exact release/source identity.
-5. Recheck the live source, draft identity, canonical asset metadata, and private
-   package association; publish the draft **last** after every check succeeds.
+5. Recheck the live source, draft identity, canonical asset metadata, public
+   package visibility and exact repository association; publish the draft
+   **last** after every check succeeds.
 
 There is no automatic overwrite, asset replacement, tag movement, deletion, or
-package-visibility change. The package policy remains private independently of
-source visibility; report actual checks separately from defaults. This workflow does not make
+package-visibility change. The required public-package policy is checked
+independently of source visibility; report actual checks rather than assuming
+defaults. This workflow does not make
 the release transaction atomic across GitHub Releases and GHCR.
 
 ### Failed runs and retries
@@ -353,15 +357,17 @@ exercises its documented database-backed scenarios, not the entire Go database
 or race suite. Do not describe this workflow as replacing those broader checks.
 
 Before dispatching publication, review the source commit, workflow diff, image
-contents, Compose changes, and private-package access. After dispatch, inspect
+contents, Compose changes, and the explicit public-package policy. After dispatch, inspect
 validation and publication separately and record the run URL, exact source
 commit, candidate version, full image reference, and digest. Confirm package
-visibility/access remains private. Download/pull verification must be reported
+visibility is public and the package belongs to the exact current repository.
+Download/pull verification must be reported
 only after it actually succeeds; a checked-in workflow is not publication proof.
 
-Operator pull authentication differs from Git source authentication. Use the
-[container guide](container.md#1-authenticate-to-the-private-registry) for the
-supported private pull path, then [prepare fresh operator state](container.md#3-prepare-new-private-state)
+The public image requires no GHCR login. The
+[container guide](container.md#1-public-pulls-and-optional-private-fork-authentication)
+keeps optional private-fork authentication separate, then describes
+[fresh operator state](container.md#3-prepare-new-private-state)
 only on an explicitly selected host. Package publication itself performs no
 owner bootstrap, LAN TLS installation, autostart setup, production rollout, or
 live database migration.

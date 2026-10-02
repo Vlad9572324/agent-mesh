@@ -2,12 +2,12 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: partial publication — recovery pending
+## Current status: public image — binary finalization pending
 
 This repository starts with a sanitized source snapshot and a fresh, independent
 Git history. Earlier repository commits, tags, release records and container
 publications are not imported here. **The `v0.1.0-rc.2` GitHub Release is still a
-draft; its binaries are not publicly released. A candidate container image exists.**
+draft; its binaries are not publicly released. The new server image is public.**
 
 The [tag publication run](https://github.com/Vlad9572324/agent-mesh/actions/runs/36987513835)
 validated source `c42ca369bf529773e8efec8e7872bba23cceb7b5`, rebuilt matching
@@ -15,26 +15,28 @@ archives and uploaded four hash-verified assets to the draft. It also pushed and
 pulled the image, verifying digest
 `sha256:45f6f7a7180c89299407c2c46a9b27a5d0c790023a570248cfb0e6b08697a2c0`.
 
-The final package guard then failed: the new
+The original final package guard failed because the new
 `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.2` image is publicly readable,
-while the workflow requires private package visibility. A separate
+while that run required private package visibility. A separate
 [metadata diagnostic](https://github.com/Vlad9572324/agent-mesh/actions/runs/36988549817)
 confirmed that its package name/type and repository association are correct;
-visibility is the only failed policy check. The maintainer's decision
-on that policy mismatch and release recovery is pending. The tag already exists;
+visibility was the only failed policy check. The maintainer has now explicitly
+approved **public distribution of this new image**, and the publication policy
+requires public visibility with the exact current repository association.
+Anonymous pulls are supported; no GHCR login is needed. Finalization of the
+existing GitHub draft is still pending. The tag already exists;
 do not move it, blindly rerun publication, or overwrite the draft/assets/image.
 This is not a successful completed release.
 
 Use [getting started from source](getting-started.md) for an available setup
 route, then [your first handoff](first-session.md). The
-[archive installation guide](install-release.md) and [container guide](container.md)
-remain recipes, not an announcement of public binary downloads or a resolved
-container access policy.
+[archive installation guide](install-release.md) still awaits public binary
+downloads; the [container guide](container.md) now uses the verified public image.
 The next release candidate is **`v0.1.0-rc.2`**, targeting **Linux amd64**.
-Its installation filenames and version checks are prepared, but final publication
-and policy reconciliation are still pending. No ARM, macOS or Windows binary is planned
-by this candidate's packaging contract. Keep using source setup until verified
-release assets are announced here.
+Its installation filenames and version checks are prepared, but GitHub binary
+publication is still pending. No ARM, macOS or Windows binary is planned by this
+candidate's packaging contract. Source setup and the public image are available
+independently of final binary-release publication.
 
 Public source availability is separate from deployment security and package
 permissions. Agent Mesh remains a trusted-LAN pilot, not an Internet-facing
@@ -55,8 +57,8 @@ production service. A project-wide license has not been selected; see
   formal GitHub Release.
 - New images use `ghcr.io/vlad9572324/agent-mesh-server`, with an exact release
   tag or a `sha-<full-commit>` candidate tag. No `latest` alias is published.
-  The workflow requires private package visibility; the actual rc.2 candidate is
-  public, so finalization halted. Treat policy and observed state separately.
+  The new server package must be public and associated with this exact repository;
+  workflows verify that policy but never change package visibility themselves.
 
 These describe workflow capabilities; the partial attempt above records its
 actual outcome, not successful final publication. A passing

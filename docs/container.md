@@ -7,18 +7,18 @@ PostgreSQL 14 container managed by Docker Compose. It does not include a model,
 provider CLI, connector daemon, or production deployment. Native CLI participants
 still run on their own machines using the [CLI connection guide](../CLI-CONNECTION.md).
 
-**Publication pending:** this fresh repository has not published a server image.
-Use [source setup](getting-started.md) now. The image references below describe
-the new `agent-mesh-server` package namespace and must be replaced with an exact
-verified publication before following the pull/Compose recipe. No inherited
-image or earlier repository release is implied.
+**Public image available:** `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.2`
+can be pulled without logging in to GHCR. Its source/build identity and digest
+were verified; the GitHub binary Release is separately awaiting finalization.
+See [release status](releases.md) for the exact evidence. This is the new server
+package, not an inherited image or earlier repository release.
 
 ## Releases and Packages are different
 
 | Distribution | Identity | What it supplies |
 | --- | --- | --- |
-| GitHub Releases — pending | A future verified version tag | Downloadable Linux amd64 server and Python connector archives |
-| GHCR version-tag release — pending | `ghcr.io/vlad9572324/agent-mesh-server:<version>` | Matching Linux amd64 server image for a new automatically published version-tag release |
+| GitHub Releases — finalization pending | `v0.1.0-rc.2` draft | Binary archives are not public until finalization |
+| Public GHCR image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.2` | Verified Linux amd64 server image; anonymous pull supported |
 | GHCR manual candidate — pending | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
 
 Manual container candidates report a version such as
@@ -67,26 +67,30 @@ assets and release metadata/notices, not a shell, package manager, or PostgreSQL
 Its default command is `version`; running an image alone does not initialize a
 workspace. Compose overrides the UID/GID for the selected operator's private files.
 
-## 1. Authenticate to the private registry
+## 1. Public pulls and optional private-fork authentication
 
-Run this only after a selected image has actually been published. The workflow
-keeps new packages private by default; public source does not imply anonymous
-package access. This recipe does not change package visibility.
+For this project's public `agent-mesh-server` image, **no GitHub account, personal access token,
+or `docker login` is required**. Continue directly to the digest-pinned pull below.
+Public source and package permissions remain separate settings; the new server
+package is public by explicit maintainer policy, not an assumption about defaults.
+
+The rest of this section applies only to an independently operated **private
+fork/package**. Do not collect or configure a registry token for the public image.
 
 Repository Git authentication and GHCR authentication are distinct. A fine-grained
 PAT used to fetch Git source is **not** a supported direct GHCR login token.
-For a manual private-image pull, use a classic PAT with `read:packages`; enable
+For an authorized private-fork image pull, use a classic PAT with `read:packages`; enable
 SSO if your organization requires it. GitHub Actions publication uses its own
 `GITHUB_TOKEN`, not your personal token.
 [GitHub's registry authentication documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-to-the-container-registry)
 describes these supported credentials.
 
 The account must also have read access to the package; a token scope does not
-create that access. Package visibility/access can be inherited from the repository
-or configured separately. Do not make a private package public to bypass an access
+create that access. Package access permissions may be inherited from the repository;
+package visibility is configured separately. Do not make a private package public to bypass an access
 error. See [GitHub Packages permissions](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages).
 
-If not already authenticated, use Bash's hidden input so no literal token enters
+For that private fork only, if not already authenticated, use Bash's hidden input so no literal token enters
 shell history or command arguments. Do not run this with shell tracing enabled:
 
 ```sh
@@ -104,10 +108,10 @@ environment file, repository, model workspace, or chat.
 
 ## 2. Pull and inspect the selected image
 
-Replace this placeholder with a digest from an actual successful publication:
+Pull the verified public rc.2 image without a login:
 
 ```sh
-AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:REPLACE_WITH_PUBLISHED_DIGEST'
+AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:45f6f7a7180c89299407c2c46a9b27a5d0c790023a570248cfb0e6b08697a2c0'
 docker pull "$AGENT_MESH_IMAGE"
 docker run --rm --network none "$AGENT_MESH_IMAGE" version
 ```
@@ -116,6 +120,10 @@ The version command needs no database or service keys. Check its JSON `commit`,
 `version`, `build_date`, `go_version`, `goos`, and `goarch` against the selected
 publication. A version match is artifact identity, not database readiness,
 provider authentication, or a deployment test.
+For this digest, require `version` to be `v0.1.0-rc.2`, `commit` to be
+`c42ca369bf529773e8efec8e7872bba23cceb7b5`, and target `linux` / `amd64`.
+Use that same source revision's Compose files. Public image availability does
+not by itself prove that the separate GitHub binary Release has been finalized.
 
 ## 3. Prepare new private state
 

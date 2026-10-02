@@ -8,8 +8,8 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-[Build from source](getting-started.md) now; prebuilt archives and images from
-this repository have not yet been published. See [release status](releases.md).
+[Build from source](getting-started.md) or use the [public server image](container.md).
+The GitHub binary release is still awaiting finalization. See [release status](releases.md).
 
 ## Start or join a workspace
 
@@ -19,7 +19,7 @@ this repository have not yet been published. See [release status](releases.md).
   local instance and the first owner account.
 - [Archive installation recipe](install-release.md): checksums, the Linux amd64
   server, and Python connectors once a verified release is published.
-- [Container recipe](container.md): image publication pending; isolated
+- [Run the public container](container.md): anonymous GHCR pulls, isolated
   PostgreSQL, operator-owned TLS/state, owner bootstrap, and hosted CI boundaries.
 - [Connect a CLI](../CLI-CONNECTION.md): service identity, grants, private
   configuration, supported launchers and an initial coordination instruction.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only guards for the fresh repository's isolated, private GHCR package."""
+"""Read-only guards for the fresh repository's isolated, public GHCR package."""
 import argparse
 import json
 import os
@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 
 PACKAGE_NAME = "agent-mesh-server"
+EXPECTED_VISIBILITY = "public"
 API_VERSION = "2026-03-10"
 
 
@@ -86,10 +87,10 @@ def check_package(repository, identity, token, *, allow_missing=False):
         return False
     require(status == 200, "package visibility inspection failed")
     linked = value.get("repository") or {}
-    require(value.get("name") == PACKAGE_NAME and value.get("visibility") == "private" and
+    require(value.get("name") == PACKAGE_NAME and value.get("visibility") == EXPECTED_VISIBILITY and
             value.get("package_type") == "container" and type(linked.get("id")) is int and
             linked["id"] == identity and linked.get("full_name", "").lower() == repository.lower(),
-            "private package associated with this immutable repository ID required")
+            "public package associated with this immutable repository ID required")
     return True
 
 
@@ -134,7 +135,9 @@ def main(argv=None):
         verified = check_package(args.repository, args.repository_id, os.environ.get("GITHUB_TOKEN", ""),
                                  allow_missing=args.allow_missing)
         print(json.dumps({"package": PACKAGE_NAME, "repository_id": int(args.repository_id),
-                          "repository_identity_verified": True, "package_private_verified": verified}, sort_keys=True))
+                          "repository_identity_verified": True,
+                          "expected_package_visibility": EXPECTED_VISIBILITY,
+                          "package_visibility_verified": verified}, sort_keys=True))
         return 0
     except Exception as error:
         print(str(error) if isinstance(error, PackageError) else "package guard failed", file=sys.stderr)

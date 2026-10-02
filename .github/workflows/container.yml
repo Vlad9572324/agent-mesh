@@ -203,14 +203,15 @@ jobs:
           assert actual['go_version'] == 'go1.23.6'
           assert actual['goos'] == 'linux' and actual['goarch'] == 'amd64'
           proof = dict(actual, digest=os.environ['EXPECTED_DIGEST_REF'], digest_pull_verified=True,
-                       repository_id=int(os.environ['GITHUB_REPOSITORY_ID']), package_private_verified=True)
+                       repository_id=int(os.environ['GITHUB_REPOSITORY_ID']),
+                       expected_package_visibility='public', package_visibility_verified=True)
           (pathlib.Path(os.environ['RUNNER_TEMP']) / 'published-image.json').write_text(json.dumps(proof, sort_keys=True) + '\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('### Published container candidate\n\n')
               summary.write('Commit: `' + actual['commit'] + '`\n\n')
               summary.write('Version: `' + actual['version'] + '` (not a formal release)\n\n')
               summary.write('Digest: `' + os.environ['EXPECTED_DIGEST_REF'] + '`\n\n')
-              summary.write('Private package ownership was verified against this immutable repository ID. No visibility changes were requested.\n')
+              summary.write('Public package visibility and ownership were verified against this immutable repository ID. The workflow does not change package visibility.\n')
           PY
       - name: Preserve non-sensitive publication evidence
         if: always()

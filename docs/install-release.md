@@ -1,9 +1,11 @@
 <!-- release-install-version: v0.1.0-rc.2 -->
 # Archive installation recipe
 
-**Availability:** start with the
+**Binary-release finalization is pending.** Start with the
 [source guide](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/getting-started.md)
-until this repository publishes a verified release. In this source document,
+or the [public server image](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/container.md)
+until the GitHub Release is finalized. A public image does not make draft binary
+assets publicly downloadable. In this source document,
 `v0.1.0-rc.2` is an example version, not a download announcement. Versioned
 filenames and tag-pinned documentation links below apply only when that exact
 version has been published. The packager substitutes the chosen version when

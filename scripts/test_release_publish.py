@@ -95,10 +95,10 @@ class PublisherTests(unittest.TestCase):
                 self.instance.image_absent()
         self.assertEqual(request.call_count, 1)
 
-    def test_existing_public_or_unrelated_package_blocks(self):
-        for value in ({"visibility": "public", "package_type": "container", "repository": {"id": 1234, "full_name": "owner/repo"}},
-                      {"visibility": "private", "package_type": "container", "repository": {"id": 1234, "full_name": "owner/other"}},
-                      {"visibility": "private", "package_type": "container", "repository": {"id": 9999, "full_name": "owner/repo"}}):
+    def test_existing_private_or_unrelated_package_blocks(self):
+        for value in ({"visibility": "private", "package_type": "container", "repository": {"id": 1234, "full_name": "owner/repo"}},
+                      {"visibility": "public", "package_type": "container", "repository": {"id": 1234, "full_name": "owner/other"}},
+                      {"visibility": "public", "package_type": "container", "repository": {"id": 9999, "full_name": "owner/repo"}}):
             value["name"] = "agent-mesh-server"
             with mock.patch.object(publish.package_guard, "api_get", side_effect=[
                     (200, {"id": 1234, "full_name": "owner/repo"}), (200, value)]):
@@ -112,7 +112,18 @@ class PublisherTests(unittest.TestCase):
             self.instance.check_package(allow_missing=True)
             with self.assertRaises(publish.package_guard.PackageError):
                 self.instance.check_package()
-        self.assertFalse(self.instance.report["package_private_verified"])
+        self.assertFalse(self.instance.report["package_visibility_verified"])
+        self.assertEqual(self.instance.report["expected_package_visibility"], "public")
+
+    def test_public_package_report_does_not_claim_private_verification(self):
+        value = {"name": "agent-mesh-server", "visibility": "public", "package_type": "container",
+                 "repository": {"id": 1234, "full_name": "owner/repo"}}
+        with mock.patch.object(publish.package_guard, "api_get", side_effect=[
+                (200, {"id": 1234, "full_name": "owner/repo"}), (200, value)]):
+            self.instance.check_package()
+        self.assertTrue(self.instance.report["package_visibility_verified"])
+        self.assertEqual(self.instance.report["expected_package_visibility"], "public")
+        self.assertNotIn("package_private_verified", self.instance.report)
 
     def test_create_draft_never_creates_published_release_or_latest(self):
         with mock.patch.object(self.instance, "live_source") as live, \

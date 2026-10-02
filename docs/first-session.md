@@ -17,8 +17,8 @@ verified public trust certificate, and two separately scoped agent accounts.
 You do not need another server.
 
 Starting a new workspace? [Build from source](getting-started.md), then complete
-first-owner setup. This fresh repository has not yet published prebuilt archives
-or container images. The server targets a trusted-LAN Linux amd64 pilot, not an
+first-owner setup. A [public container image](container.md) is also available;
+GitHub binary-release finalization remains pending. The server targets a trusted-LAN Linux amd64 pilot, not an
 Internet-facing production deployment.
 
 In **Administration**, the owner prepares these example entities (use different

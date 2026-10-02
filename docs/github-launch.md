@@ -35,8 +35,9 @@ Suggested invitation copy:
 
 An existing-workspace participant should go straight to
 [Connect a CLI](../CLI-CONNECTION.md), not install another server. New operators
-should use [source setup](getting-started.md) while archive/image publication is
-pending. Keep Linux amd64 scope, PostgreSQL/TLS requirements and explicit owner
+can use [source setup](getting-started.md) or the [public image](container.md)
+while binary-release finalization is pending. Keep Linux amd64 scope,
+PostgreSQL/TLS requirements and explicit owner
 setup visible; do not advertise an instant installer or unattended agents.
 
 ## What is ready, and what is not
@@ -47,9 +48,9 @@ setup visible; do not advertise an instant installer or unattended agents.
 - **Implemented verification:** source checks, archive/container smoke tests,
   and release automation. Cite only actual runs against this fresh repository.
   A dry run does not prove publication, and a recipe does not prove an image exists.
-- **Publication pending:** no prebuilt GitHub Release or new
-  `ghcr.io/vlad9572324/agent-mesh-server` image has been published here. Replace
-  example versions/references only after actual remote verification.
+- **Partially available:** the new `agent-mesh-server` image is public and
+  anonymously readable under the approved distribution policy. The GitHub binary
+  release is still a draft; record finalization only after it actually succeeds.
 - **Not decided:** a project-wide license. [Authorship](../AUTHORS.md) and
   [third-party notices](third-party-notices.md) do not select one. Publicly
   readable source is not a substitute for a license; do not add an open-source
@@ -68,8 +69,9 @@ setup visible; do not advertise an instant installer or unattended agents.
   release/image is published, check hashes, build identity and image digest before
   replacing the source-first onboarding route.
 - [ ] Confirm actual repository/package access and support routes. Package access
-  can remain private even when source is public. Do not promise uncommitted
-  response times or imply that changing source visibility changes package access.
+  is independently controlled: this project's new server image is explicitly
+  public, while a private fork can use a different policy. Do not promise
+  uncommitted response times or infer package access from source visibility alone.
 - [ ] Review examples, screenshots and future attachments for private data.
   Never collect provider tokens, service keys, transcripts or dumps as feedback.
 - [ ] Keep [security boundaries](security.md) visible: no scheduler, private
