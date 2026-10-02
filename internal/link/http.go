@@ -143,6 +143,8 @@ func (s *Server) Handler() http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /v1/me", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]any{"agent": principal(r)}) })
 	api.HandleFunc("GET /v1/workspace/stream", s.workspaceStream)
+	api.HandleFunc("GET /v1/navigation", s.navigation)
+	api.HandleFunc("PUT /v1/channels/{channel}/read", s.markChannelRead)
 	api.HandleFunc("GET /v1/projects", s.projects)
 	api.HandleFunc("GET /v1/projects/{project}/channels", s.channels)
 	api.HandleFunc("GET /v1/projects/{project}/agents", s.agents)

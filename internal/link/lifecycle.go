@@ -121,6 +121,7 @@ type deletionCounts struct {
 	Sessions              int64 `json:"sessions"`
 	NativeActivity        int64 `json:"native_activity"`
 	OnboardingInvitations int64 `json:"onboarding_invitations"`
+	NavigationReads       int64 `json:"navigation_reads"`
 }
 
 func (s *Server) adminDeletionPreview(w http.ResponseWriter, r *http.Request) {
@@ -151,8 +152,9 @@ func (s *Server) adminDeletionPreview(w http.ResponseWriter, r *http.Request) {
  (SELECT COALESCE(sum(size_bytes),0) FROM link_artifacts WHERE project_id=$1),
  (SELECT count(*) FROM execution_sessions WHERE project_id=$1),
  (SELECT count(*) FROM native_activity na JOIN channels c ON c.id=na.channel_id WHERE c.project_id=$1),
- (SELECT count(*) FROM onboarding_invitations WHERE project_id=$1)`, p.ID).Scan(&counts.Channels, &counts.Messages, &counts.Notes, &counts.Receipts, &counts.Events, &counts.ProjectMembers, &counts.ChannelMembers,
-		&counts.Tasks, &counts.TaskRuns, &counts.TaskEvents, &counts.Memory, &counts.MemoryVersions, &counts.Artifacts, &counts.ArtifactBytes, &counts.Sessions, &counts.NativeActivity, &counts.OnboardingInvitations)
+ (SELECT count(*) FROM onboarding_invitations WHERE project_id=$1),
+ (SELECT count(*) FROM navigation_reads nr JOIN channels c ON c.id=nr.channel_id WHERE c.project_id=$1)`, p.ID).Scan(&counts.Channels, &counts.Messages, &counts.Notes, &counts.Receipts, &counts.Events, &counts.ProjectMembers, &counts.ChannelMembers,
+		&counts.Tasks, &counts.TaskRuns, &counts.TaskEvents, &counts.Memory, &counts.MemoryVersions, &counts.Artifacts, &counts.ArtifactBytes, &counts.Sessions, &counts.NativeActivity, &counts.OnboardingInvitations, &counts.NavigationReads)
 	if err != nil {
 		internal(w)
 		return

@@ -65,6 +65,9 @@ SELECT json_build_object(
  'self',json_build_array(me.id,me.name,me.kind),
  'projects',COALESCE((SELECT json_agg(p ORDER BY p.id) FROM visible_projects p),'[]'::json),
  'channels',COALESCE((SELECT json_agg(c ORDER BY c.id) FROM visible_channels c),'[]'::json),
+ 'navigation_reads',COALESCE((SELECT json_agg(json_build_array(nr.channel_id,nr.last_read_seq) ORDER BY nr.channel_id)
+                              FROM navigation_reads nr JOIN visible_channels c ON c.id=nr.channel_id
+                              WHERE nr.principal_id=me.id),'[]'::json),
  'principals',COALESCE((SELECT json_agg(p ORDER BY p.id) FROM visible_principals p),'[]'::json),
  'notes',COALESCE((SELECT json_agg(n ORDER BY n.project_id) FROM (
                     SELECT notes.project_id,count(*) AS note_count,max(notes.id) AS max_id,max(notes.created_at) AS latest_at
