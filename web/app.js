@@ -7,6 +7,7 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    "Key issued": "Ключ выдан",
     "GUI read positions": "Отметки прочтения в интерфейсе",
     "{0} unread": "{0} непрочитанных",
     "All caught up": "Всё прочитано",
@@ -3180,7 +3181,7 @@
       else if (projects.length === 1) $("admin-onboarding-project").value = projects[0].id;
     }
     renderOnboardingChannels();
-    const labels = {pending: tr("Awaiting connection"), claimed: tr("Connected"), expired: tr("Expired"), revoked: tr("Revoked")};
+    const labels = {pending: tr("Awaiting connection"), claimed: tr("Key issued"), expired: tr("Expired"), revoked: tr("Revoked")};
     replaceContent("admin-onboarding-list", ...list(config?.invitations).map(invite => {
       const row = node("article", "admin-record"); row.dataset.invitationId = invite.id;
       appendOwned(row, () => node("h4", "", () => invite.agent_id),
