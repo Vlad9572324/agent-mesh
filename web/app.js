@@ -3279,7 +3279,9 @@
     const body = {id: $("admin-onboarding-id").value.trim(), name: $("admin-onboarding-name").value.trim(),
       project_id: $("admin-onboarding-project").value, channel_ids: selectedOnboardingChannels(),
       runtime: $("admin-onboarding-runtime").value, expires_in_hours: Number($("admin-onboarding-expiry").value)};
-    void adminMutation("/v1/admin/onboarding", "POST", body, tr("Agent created. Copy the connection command shown once."), showOnboardingResult);
+    void adminMutation("/v1/admin/onboarding", "POST", body, tr("Agent created. Copy the connection command shown once."), result => {
+      showOnboardingResult(result); $("admin-onboarding-id").value = ""; $("admin-onboarding-name").value = "";
+    });
   });
   $("admin-onboarding-close").addEventListener("click", clearOnboardingResult);
   $("admin-onboarding-dialog").addEventListener("cancel", event => { event.preventDefault(); clearOnboardingResult(); });
