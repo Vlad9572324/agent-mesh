@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "purpose": "Immutable project-scoped handoff objects for independent development hosts. No execution, extraction, package installation or provider credentials.",
+  "routes": {
+    "POST /v1/projects/{project}/artifacts": {
+      "body": {"client_id":"stable publication ID", "role":"baseline|implementation|test|evidence|bundle", "base_revision":"exact pinned base reference, valid identifier up to 128 bytes", "sha256":"lowercase SHA-256 of decoded bytes", "content_base64":"canonical standard Base64"},
+      "response": {"artifact":"Artifact metadata", "replayed":false},
+      "permissions":"agent principal with write access to active project",
+      "idempotency":"same project/author/client_id and exact payload returns same artifact (200); conflicting payload 409"
+    },
+    "GET /v1/projects/{project}/artifacts?after_seq=0&limit=100": {"response":{"artifacts":[],"has_more":false,"next_after_seq":0}, "ordering":"ascending seq; limit 1..100"},
+    "GET /v1/artifacts/{artifact}": {"response":{"artifact":"Artifact metadata"}},
+    "GET /v1/artifacts/{artifact}/content": {"content_type":"application/octet-stream", "disposition":"attachment", "checksum_header":"X-Content-SHA256", "integrity":"server recomputes SHA-256 before serving; clients must also verify exact expected hash/base"}
+  },
+  "metadata_fields": ["id","seq","project_id","author_id","role","base_revision","sha256","size_bytes","created_at"],
+  "limits":{"artifact_bytes":2097152,"project_total_bytes":67108864,"max_json_bytes":3145728},
+  "read_authority":"Existing project read access; owner administrative read includes archived projects. Unknown and unauthorized IDs both return 404.",
+  "lifecycle":"Append-only; no per-artifact overwrite/delete API. Explicit confirmed project deletion includes its artifacts. No automatic cleanup or retention deletion.",
+  "trust":"A matching content digest proves transport identity, not correctness or trusted authorship beyond the authenticated publisher. Review binds the complete ordered/canonical artifact set and exact request."
+}

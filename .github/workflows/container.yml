@@ -1,0 +1,224 @@
+name: Container CI
+run-name: Container CI · ${{ github.event_name }} · ${{ github.sha }}
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full 40-character main commit reviewed for publication
+        required: true
+        type: string
+
+# Fork PRs never receive package-write authority. There is no tag/release trigger,
+# pull_request_target, self-hosted runner, deployment, or arbitrary checkout input.
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GOTOOLCHAIN: local
+  GOFLAGS: -mod=readonly
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Fence manual publication to the reviewed main commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main ]]
+            [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]]
+          fi
+      # Official upstream release SHAs verified against actions/* tag refs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.23.6'
+          cache: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Fetch verified public Go modules, then test offline
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+          GOPROXY=off GOSUMDB=off go vet ./...
+          GOPROXY=off GOSUMDB=off go test ./...
+      - name: Portable Python, browser helpers, and documentation checks
+        run: |
+          python3 -B -m unittest discover -s adapters -p 'test_*.py'
+          python3 -B -m unittest discover -s scripts -p 'test_*.py'
+          python3 -B -m unittest discover -s deploy/compose -p 'test_*.py'
+          python3 -B -m unittest discover -s tests -p 'test_operator_targets.py'
+          node --check web/app.js
+          node tests/i18n_runtime.mjs
+          node tests/branding.mjs
+          node scripts/check-docs.mjs
+          node tests/operator_config.mjs
+          node --test tests/live_operator_config.mjs
+          node --test tests/local_process_owner.mjs
+          node tests/privacy_gate.mjs
+          node scripts/check-privacy.mjs
+      - name: Offline build from the clean committed source
+        run: |
+          python3 -B scripts/build-release.py \
+            --version "v0.1.0-rc.2-container.${GITHUB_SHA:0:12}" \
+            --output "$RUNNER_TEMP/agent-mesh-release"
+      - name: Real Docker Compose HTTPS and PostgreSQL 14 smoke
+        run: |
+          python3 -B scripts/container-smoke.py \
+            --release-dir "$RUNNER_TEMP/agent-mesh-release" \
+            --expected-commit "$GITHUB_SHA" \
+            --source "$GITHUB_REPOSITORY" \
+            --image "agent-mesh-ci:sha-$GITHUB_SHA" \
+            | tee "$RUNNER_TEMP/container-smoke.json"
+          {
+            echo '### Hosted Linux amd64 container smoke'
+            echo '```json'
+            cat "$RUNNER_TEMP/container-smoke.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve non-sensitive smoke evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: container-validation-${{ github.sha }}
+          path: ${{ runner.temp }}/container-smoke.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.23.6'
+          cache: false
+      - name: Rebuild exact committed candidate without trusting PR artifacts
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+          python3 -B scripts/build-release.py \
+            --version "v0.1.0-rc.2-container.${GITHUB_SHA:0:12}" \
+            --output "$RUNNER_TEMP/agent-mesh-release"
+      - name: Smoke the exact local image that will be pushed
+        run: |
+          python3 -B scripts/container-smoke.py \
+            --release-dir "$RUNNER_TEMP/agent-mesh-release" \
+            --expected-commit "$GITHUB_SHA" \
+            --source "$GITHUB_REPOSITORY" \
+            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/agent-mesh-server:sha-$GITHUB_SHA" \
+            --keep-image | tee "$RUNNER_TEMP/container-smoke.json"
+          {
+            echo '### Publication candidate smoke'
+            echo '```json'
+            cat "$RUNNER_TEMP/container-smoke.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish once to the commit tag, then verify digest pull
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +x
+          umask 077
+          publication_config="$(mktemp -d "$RUNNER_TEMP/agent-mesh-ghcr.XXXXXXXX")"
+          export DOCKER_CONFIG="$publication_config"
+          cleanup_auth() {
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            rm -f -- "$publication_config/config.json" "$publication_config/manifest.json" "$publication_config/manifest.error"
+            rmdir -- "$publication_config"
+          }
+          trap cleanup_auth EXIT
+          registry_token="$GHCR_TOKEN"
+          unset GHCR_TOKEN
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/agent-mesh-server:sha-$GITHUB_SHA"
+          GITHUB_TOKEN="$registry_token" python3 -B scripts/package-guard.py --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" --allow-missing
+          printf '%s' "$registry_token" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          if docker manifest inspect "$image" >"$publication_config/manifest.json" 2>"$publication_config/manifest.error"; then
+            echo 'Refusing to overwrite an existing commit tag.' >&2
+            exit 1
+          fi
+          # Fail closed: authentication, authorization, and network errors do not
+          # establish absence. No :latest or release-version tag is ever pushed.
+          if ! grep -Eq '^(manifest unknown|no such manifest: ghcr\.io/)' "$publication_config/manifest.error"; then
+            echo 'Registry did not confirm an absent manifest; refusing publication.' >&2
+            exit 1
+          fi
+          docker push "$image"
+          GITHUB_TOKEN="$registry_token" python3 -B scripts/package-guard.py --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID"
+          unset registry_token
+          digest_ref="$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")"
+          [[ "$digest_ref" == "${image%:*}@sha256:"* ]]
+          [[ "$digest_ref" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$ ]]
+          docker pull "$digest_ref"
+          docker run --rm --network none "$digest_ref" --version > "$RUNNER_TEMP/published-version.json"
+          export EXPECTED_DIGEST_REF="$digest_ref"
+          python3 - <<'PY'
+          import json, os, pathlib
+          release = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'agent-mesh-release/RELEASE.json').read_text())
+          actual = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'published-version.json').read_text())
+          assert actual['commit'] == os.environ['GITHUB_SHA'] == release['source_commit']
+          assert actual['version'] == release['version']
+          assert actual['build_date'] == release['build_date']
+          assert actual['go_version'] == 'go1.23.6'
+          assert actual['goos'] == 'linux' and actual['goarch'] == 'amd64'
+          proof = dict(actual, digest=os.environ['EXPECTED_DIGEST_REF'], digest_pull_verified=True,
+                       repository_id=int(os.environ['GITHUB_REPOSITORY_ID']), package_private_verified=True)
+          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'published-image.json').write_text(json.dumps(proof, sort_keys=True) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('### Published container candidate\n\n')
+              summary.write('Commit: `' + actual['commit'] + '`\n\n')
+              summary.write('Version: `' + actual['version'] + '` (not a formal release)\n\n')
+              summary.write('Digest: `' + os.environ['EXPECTED_DIGEST_REF'] + '`\n\n')
+              summary.write('Private package ownership was verified against this immutable repository ID. No visibility changes were requested.\n')
+          PY
+      - name: Preserve non-sensitive publication evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: container-publication-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/container-smoke.json
+            ${{ runner.temp }}/published-image.json
+          if-no-files-found: ignore
+          retention-days: 7

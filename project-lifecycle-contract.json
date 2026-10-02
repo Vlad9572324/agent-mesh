@@ -1,0 +1,24 @@
+{
+  "scope": "Owner-only project archive/restore and explicitly confirmed hard deletion. No existing pilot project is to be archived/deleted during rollout; tests use isolated databases and newly created fixtures.",
+  "project_fields": "Project adds archived_at:null|RFC3339 and lifecycle_version:nonnegative integer. Additive migration preserves existing data and keys, active projects start version0.",
+  "archive_semantics": [
+    "GET /v1/projects lists active projects only for every identity. Admin overview includes all projects and lifecycle fields.",
+    "Archived project content is readable only by owner via existing read APIs; owner GUI can open archived history from administration. Ordinary agent/viewer direct project/channel/message/event/notes reads and writes return404 while archived, existing ordinary SSE closes on its authorization recheck. Owner cannot send agent messages/receipts/heartbeat.",
+    "Archive preserves all content and memberships; restore reinstates prior scope permissions, increments lifecycle_version on actual state transition. Repeated archive/restore of the same state returns the existing project without changing version or duplicating audit.",
+    "Admin new channel and membership edits targeting an archived project return409; key/principal management remains separate. Global heartbeat is not project execution and may continue. Already-dispatched external work is not killed or undone."
+  ],
+  "routes": {
+    "POST /v1/admin/projects/{project}/archive": "{} ->200 {project}; owner transaction, exclusive management lock, archived_at server clock, lifecycle_version+1, atomic project.archive audit",
+    "POST /v1/admin/projects/{project}/restore": "{} ->200 {project}; owner transaction, clear archived_at, lifecycle_version+1, atomic project.restore audit",
+    "GET /v1/admin/projects/{project}/deletion-preview": "200 {project,counts:{channels,messages,notes,receipts,events,project_members,channel_members},can_delete:boolean}; owner-only consistent read, can_delete iff archived",
+    "DELETE /v1/admin/projects/{project}": "{confirm_id:exact project ID,expected_version:integer from preview} ->200 {deleted:true,project_id}; archived required409, wrong ID400, stale lifecycle version409, unknown/deleted404. Delete only target project's notes/receipts/messages/events/channels/memberships/project in one transaction; retain project.delete audit. Never delete principals, keys or unrelated data."
+  },
+  "retired_ids": "Hard deletion keeps content-free tombstones for the deleted project ID and its channel IDs. Creation of any retired project/channel ID returns409. This prevents an old adapter's queued messages or cursor from silently binding to a new unrelated project with the same channel ID. These minimal IDs and audit survive deletion; not deleted conversation data.",
+  "safety": [
+    "Use existing owner transactional reauth/management locks; serialize all lifecycle state transitions against agent writes, ACL edits and key revocation. Recheck project state after acquiring lock. Failed audit/FK/validation rolls back deletion and tombstones atomically.",
+    "Cross-project references that violate application invariants must cause refusal/rollback, never cascade to or null out unrelated data. Existing projects and channels are not implicitly deleted by any bootstrap operation.",
+    "GUI archive/restore has explicit confirmation. Hard-delete dialog fetches preview, displays scope/counts and requires typing exact ID, uses preview lifecycle_version, no automatic DELETE retry, no direct deletion of active projects. Clear dialog target/version on close/logout/auth loss; no stale callback may delete another selection.",
+    "The app cannot restore hard-deleted content. Database backups and already-delivered copies on other agents are not erased by this endpoint; UI and docs must not promise secure erasure.",
+    "Ordinary users get403 on lifecycle admin endpoints and cannot infer archived project existence through ordinary APIs. Owner sees active+archived lifecycle clearly."
+  ]
+}

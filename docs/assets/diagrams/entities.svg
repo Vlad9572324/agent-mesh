@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1080" viewBox="0 0 1120 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Mesh entities and scope boundaries</title>
+  <desc id="desc">Six clusters explain accounts and access grants; channel messages and receipts; tasks, runs and review events; memory versions and notes; immutable artifacts; and independent legacy heartbeat, execution lease and native CLI report identities. Project-shared records are distinct from channel-restricted records. Arrows show defined relationship types, not a live project snapshot.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#16766b"/></marker>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#213247}.title{font-size:34px;font-weight:700}.subtitle{font-size:20px;fill:#526277}.heading{font-size:25px;font-weight:700}.body{font-size:19px;fill:#42546b}.small{font-size:17px;fill:#526277}.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.5px;fill:#16766b}.card{fill:#fff;stroke:#d3dfe8;stroke-width:2}.node{fill:#e9f5f1;stroke:#b8d8d0;stroke-width:1.5}.label{font-size:20px;font-weight:700;fill:#126458}.line{fill:none;stroke:#16766b;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1120" height="1080" rx="20" fill="#f3f6fa"/>
+  <text class="eyebrow" x="48" y="43">AGENT MESH / ENTITY MODEL</text>
+  <text class="title" x="48" y="86">A project is shared context, not one process.</text>
+  <text class="subtitle" x="48" y="119">Defined relationship types below; real maps show only authorized, loaded records.</text>
+  <rect x="48" y="149" width="1024" height="57" rx="10" fill="#213247"/>
+  <text x="72" y="184" style="font-size:21px;fill:#fff">Project access scopes shared data. Channel access is an additional boundary.</text>
+
+  <rect class="card" x="48" y="235" width="498" height="235" rx="16"/>
+  <text class="eyebrow" x="72" y="268">01 / IDENTITY + PERMISSION</text>
+  <text class="heading" x="72" y="304">Accounts and grants</text>
+  <text class="body" x="72" y="343">Service key → stable account</text>
+  <text class="body" x="72" y="373">Account → project grant → project</text>
+  <text class="body" x="72" y="403">Account → channel grant → channel</text>
+  <text class="small" x="72" y="441">Owner administration and audit are separate.</text>
+
+  <rect class="card" x="574" y="235" width="498" height="235" rx="16"/>
+  <text class="eyebrow" x="598" y="268">02 / CHANNEL-SCOPED</text>
+  <text class="heading" x="598" y="304">Conversation and delivery</text>
+  <text class="body" x="598" y="343">Project → channel → messages</text>
+  <text class="body" x="598" y="373">Message → recipients + receipt records</text>
+  <text class="body" x="598" y="403">Message → optional same-channel reply</text>
+  <text class="small" x="598" y="441">Durable channel events point to changed records.</text>
+
+  <rect class="card" x="48" y="495" width="498" height="249" rx="16"/>
+  <text class="eyebrow" x="72" y="528">03 / PROJECT-SHARED</text>
+  <text class="heading" x="72" y="564">Work and review history</text>
+  <rect class="node" x="72" y="592" width="110" height="46" rx="8"/>
+  <rect class="node" x="229" y="592" width="110" height="46" rx="8"/>
+  <rect class="node" x="386" y="592" width="135" height="46" rx="8"/>
+  <text class="label" x="127" y="622" text-anchor="middle">Task</text>
+  <text class="label" x="284" y="622" text-anchor="middle">Runs</text>
+  <text class="label" x="453" y="622" text-anchor="middle">Events</text>
+  <path class="line" d="M184 615H226"/>
+  <path class="line" d="M341 615H383"/>
+  <text class="body" x="72" y="673">Assignee and reviewer reference accounts.</text>
+  <text class="body" x="72" y="703">A review request is a typed task event.</text>
+  <text class="small" x="72" y="730">Runs/events explicitly reference artifact sets.</text>
+
+  <rect class="card" x="574" y="495" width="498" height="249" rx="16"/>
+  <text class="eyebrow" x="598" y="528">04 / PROJECT-SHARED</text>
+  <text class="heading" x="598" y="564">Published knowledge</text>
+  <rect class="node" x="598" y="592" width="140" height="46" rx="8"/>
+  <rect class="node" x="806" y="592" width="242" height="46" rx="8"/>
+  <text class="label" x="668" y="622" text-anchor="middle">Memory</text>
+  <text class="label" x="927" y="622" text-anchor="middle">Immutable versions</text>
+  <path class="line" d="M740 615H803"/>
+  <text class="body" x="598" y="673">Notes are separate immutable publications.</text>
+  <text class="body" x="598" y="703">Optional note source → permitted message</text>
+  <text class="small" x="598" y="730">Memory selection does not establish task usage.</text>
+
+  <rect class="card" x="48" y="769" width="498" height="237" rx="16"/>
+  <text class="eyebrow" x="72" y="802">05 / PROJECT-SHARED</text>
+  <text class="heading" x="72" y="839">Artifacts and external evidence</text>
+  <text class="body" x="72" y="879">Immutable bytes + publisher + role</text>
+  <text class="body" x="72" y="909">Pinned base revision + content digest</text>
+  <text class="body" x="72" y="939">Review binds the exact full artifact set.</text>
+  <text class="small" x="72" y="978">Matching hashes are not parent/child links.</text>
+
+  <rect class="card" x="574" y="769" width="498" height="237" rx="16"/>
+  <text class="eyebrow" x="598" y="802">06 / INDEPENDENT RUNTIME RECORDS</text>
+  <text class="heading" x="598" y="839">Three separate session IDs</text>
+  <text class="body" x="598" y="879">Legacy heartbeat → receipt ownership</text>
+  <text class="body" x="598" y="909">Execution lease → account + channel</text>
+  <text class="body" x="598" y="939">Native report → actor + channel</text>
+  <text class="small" x="598" y="978">Matching session/run IDs do not create links.</text>
+
+  <text class="small" x="48" y="1047">Authorship references accounts. No automatic task–memory, native–lease or lease–task-run relationship is implied.</text>
+</svg>

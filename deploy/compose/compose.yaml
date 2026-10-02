@@ -1,0 +1,139 @@
+# Local rootful Docker, Linux/amd64. Prepare fresh private state with prepare.py.
+# Passwords and keys are bind-mounted private files, never Compose environment.
+x-app: &app
+  image: ${AGENT_MESH_IMAGE:?run prepare.py to select an explicit image}
+  platform: linux/amd64
+  user: "${AGENT_MESH_UID:?run prepare.py}:${AGENT_MESH_GID:?run prepare.py}"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  networks: [backend]
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    # PostgreSQL 14.24 bookworm index verified against Docker Hub 2026-10-01.
+    image: postgres:14-bookworm@sha256:dcc2ca942d8518144f387a0c2630188427835f984caaed0418b986928e761809
+    platform: linux/amd64
+    user: "${AGENT_MESH_UID:?run prepare.py}:${AGENT_MESH_GID:?run prepare.py}"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/agent-mesh/postgres-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      PGDATA: /var/lib/postgresql/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=0700,uid=${AGENT_MESH_UID},gid=${AGENT_MESH_GID}
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,mode=0700,uid=${AGENT_MESH_UID},gid=${AGENT_MESH_GID}
+    volumes:
+      - type: bind
+        source: ${AGENT_MESH_STATE:?run prepare.py}/pgdata
+        target: /var/lib/postgresql/data
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_MESH_STATE}/postgres-password
+        target: /run/agent-mesh/postgres-password
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_MESH_STATE}/app-password
+        target: /run/agent-mesh/app-password
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./init-app.sh
+        target: /docker-entrypoint-initdb.d/10-agent-mesh.sh
+        read_only: true
+        bind: {create_host_path: false}
+    # TCP stays closed while the official entrypoint initializes the fresh DB.
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, postgres]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks: [backend]
+    # Deliberately no host-published PostgreSQL port.
+
+  app:
+    <<: *app
+    restart: unless-stopped
+    # Current Docker publishes host ports only through a non-internal gateway
+    # network. Keep this frontend app-only; DB and bootstrap stay on backend.
+    networks: [frontend, backend]
+    command:
+      - serve
+      - --database-url-file
+      - /run/agent-mesh/database-url
+      - --listen
+      - 0.0.0.0:8766
+      - --tls-cert
+      - /run/agent-mesh/server.crt
+      - --tls-key
+      - /run/agent-mesh/server.key
+      - --web-dir
+      - /opt/agent-mesh/web
+    ports:
+      - target: 8766
+        published: "${AGENT_MESH_PORT:-8766}"
+        host_ip: ${AGENT_MESH_BIND_IP:-127.0.0.1}
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${AGENT_MESH_STATE}/database-url
+        target: /run/agent-mesh/database-url
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_MESH_STATE}/server.crt
+        target: /run/agent-mesh/server.crt
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_MESH_STATE}/server.key
+        target: /run/agent-mesh/server.key
+        read_only: true
+        bind: {create_host_path: false}
+
+  # Explicit one-off only: --profile init run --rm bootstrap-owner.
+  # This creates no demo projects, channels or agents, and never replaces a key.
+  bootstrap-owner:
+    <<: *app
+    profiles: [init]
+    restart: "no"
+    command:
+      - bootstrap-owner
+      - --database-url-file
+      - /run/agent-mesh/database-url
+      - --owner-id
+      - owner
+      - --owner-name
+      - Owner
+      - --key-out
+      - /run/agent-mesh/owner/owner.json
+    volumes:
+      - type: bind
+        source: ${AGENT_MESH_STATE}/database-url
+        target: /run/agent-mesh/database-url
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_MESH_STATE}/owner
+        target: /run/agent-mesh/owner
+        bind: {create_host_path: false}
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    internal: true

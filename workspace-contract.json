@@ -1,0 +1,33 @@
+{
+  "name": "Agent Mesh permission-filtered workspace invalidation",
+  "route": "GET /v1/workspace/stream",
+  "authentication": "Authorization: Bearer individual service key; no query-token or cookie authentication. Same authenticated router and TLS requirement as other data routes.",
+  "response": {
+    "content_type": "text/event-stream",
+    "event": "workspace",
+    "data": {"revision": "opaque lowercase 64-character SHA-256 hex string"},
+    "initial": "Send a revision immediately, including for an authorized principal with no memberships.",
+    "poll": "Reauthenticate and recompute current authorized state from one SQL statement snapshot approximately every second; send a hint only when its fingerprint differs.",
+    "keepalive": "A comment frame after approximately 10 seconds without a revision hint.",
+    "limits": "30-minute stream lifetime; each database snapshot has a 5-second timeout, each write a 10-second deadline. Reconnect and refetch REST after failures.",
+    "cursor": "No durable event ID, replay, event count, or change log. Last-Event-ID and query cursors are ignored. Every reconnect emits a current initial revision. Intermediate states may coalesce."
+  },
+  "visibility": {
+    "ordinary": "Active projects with an explicit project grant; channels additionally require an explicit channel grant. Include own effective write access, REST-visible channel member IDs, project lifecycle, readable channel cursors, visible project-note metadata, and principal status visible through the existing project agents shared-channel rule. Status freshness changing at 30 seconds changes the fingerprint without another write.",
+    "owner": "All projects including archived, all channels and principals, grant inventory, key-active booleans, audit append metadata and pending/uncertain delivery metadata, matching owner read/admin authority.",
+    "isolation": "Unrelated hidden projects, channels, principals, notes, grants and audit additions do not change an ordinary principal's fingerprint. No global revision is used. Shared principal status is already globally visible through allowed project-agent views.",
+    "revocation": "Each snapshot authenticates the key and derives current role/ACL; invalid/revoked keys close even idle streams. Grant changes alter the filtered snapshot without requiring a currently selected channel."
+  },
+  "channel_addition": {
+    "route": "GET /v1/projects/{project}/channels",
+    "field": "latest_seq",
+    "type": "integer",
+    "meaning": "Current channels.cursor for each already-authorized result only. Advances for messages and receipt/event changes; it is not an unread-message count. Existing project/channel ACL filtering is unchanged."
+  },
+  "boundaries": [
+    "The SSE data object contains only revision. No raw keys, key hashes, message/note bodies, IDs, status or audit payloads are sent in hints.",
+    "Fingerprint input consists of minimal current REST-visible metadata; no schema changes, triggers, durable workspace log, heartbeat updates or audit writes are added.",
+    "Clients treat hints as cache invalidations and re-fetch ordinary REST data with normal authorization. A hint is not proof of message delivery, model wake, task completion, or an unread-message count.",
+    "Current-state fingerprints may return to an earlier value and do not guarantee observation of every intervening mutation. Existing durable per-channel REST event logs remain separate."
+  ]
+}

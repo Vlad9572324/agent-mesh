@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1060" viewBox="0 0 1120 1060" role="img" aria-labelledby="title desc">
+  <title id="title">Delivery and task reporting are separate protocols</title>
+  <desc id="desc">Legacy delivery proceeds from stored message to delivered receipt to accepted receipt. Native inbox offered and accepted reports form a separate path. Neither starts the task lifecycle automatically. A task is explicitly declared running, an artifact set is submitted and reviewed, and completion may be reported only with approval and passed external verification. Changes, uncertainty and cancellation require explicit events; the server does not execute work.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#16766b"/></marker>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#213247}.title{font-size:34px;font-weight:700}.subtitle{font-size:20px;fill:#526277}.heading{font-size:25px;font-weight:700}.body{font-size:19px;fill:#42546b}.small{font-size:17px;fill:#526277}.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.5px;fill:#16766b}.card{fill:#fff;stroke:#d3dfe8;stroke-width:2}.node{fill:#e9f5f1;stroke:#b8d8d0;stroke-width:1.5}.label{font-size:21px;font-weight:700;fill:#126458}.line{fill:none;stroke:#16766b;stroke-width:2.5;marker-end:url(#arrow)}.wire{font-size:15px;font-weight:700;fill:#16766b}
+    </style>
+  </defs>
+  <rect width="1120" height="1060" rx="20" fill="#f3f6fa"/>
+  <text class="eyebrow" x="48" y="43">AGENT MESH / LIFECYCLE</text>
+  <text class="title" x="48" y="86">Received, accepted and completed are different.</text>
+  <text class="subtitle" x="48" y="119">Every arrow below is an explicit publication, receipt or permitted state transition.</text>
+
+  <rect class="card" x="48" y="154" width="1024" height="291" rx="16"/>
+  <text class="heading" x="72" y="196">Delivery reports</text>
+  <text class="small" x="72" y="227">Legacy path: recipient reports are bound to its fresh heartbeat session.</text>
+  <rect class="node" x="72" y="251" width="280" height="72" rx="10"/>
+  <rect class="node" x="420" y="251" width="280" height="72" rx="10"/>
+  <rect class="node" x="768" y="251" width="280" height="72" rx="10"/>
+  <text class="label" x="212" y="280" text-anchor="middle">Stored message</text>
+  <text class="small" x="212" y="306" text-anchor="middle">Server accepted publication</text>
+  <text class="label" x="560" y="280" text-anchor="middle">Delivered</text>
+  <text class="small" x="560" y="306" text-anchor="middle">Adapter durably received it</text>
+  <text class="label" x="908" y="280" text-anchor="middle">Accepted</text>
+  <text class="small" x="908" y="306" text-anchor="middle">Runtime acceptance reported</text>
+  <path class="line" d="M354 288H417"/>
+  <path class="line" d="M702 288H765"/>
+  <line x1="72" y1="346" x2="1048" y2="346" stroke="#d3dfe8"/>
+  <text class="body" x="72" y="381">Native path: inbox offered → explicit link_accept → native acceptance report</text>
+  <text class="small" x="72" y="413">Separate from legacy receipts. Offering peer context does not wake an idle model or prove work.</text>
+
+  <rect x="48" y="467" width="1024" height="47" rx="9" fill="#213247"/>
+  <text x="560" y="497" text-anchor="middle" style="fill:#fff;font-size:20px;font-weight:700">There is no automatic delivery → execution → completion transition.</text>
+
+  <rect class="card" x="48" y="537" width="1024" height="468" rx="16"/>
+  <text class="heading" x="72" y="579">Reported task lifecycle</text>
+  <text class="small" x="72" y="610">Roles, versions, run IDs and the complete artifact set are checked by the server.</text>
+  <rect class="node" x="72" y="643" width="204" height="77" rx="10"/>
+  <rect class="node" x="329" y="643" width="204" height="77" rx="10"/>
+  <rect class="node" x="586" y="643" width="204" height="77" rx="10"/>
+  <rect class="node" x="843" y="643" width="205" height="77" rx="10"/>
+  <text class="label" x="174" y="674" text-anchor="middle">Ready</text>
+  <text class="small" x="174" y="701" text-anchor="middle">Definition created</text>
+  <text class="label" x="431" y="674" text-anchor="middle">Running</text>
+  <text class="small" x="431" y="701" text-anchor="middle">Assignee declares run</text>
+  <text class="label" x="688" y="674" text-anchor="middle">Artifacts ready</text>
+  <text class="small" x="688" y="701" text-anchor="middle">Full set submitted</text>
+  <text class="label" x="945" y="674" text-anchor="middle">Review pending</text>
+  <text class="small" x="945" y="701" text-anchor="middle">Exact request + set</text>
+  <path class="line" d="M278 682H326"/>
+  <path class="line" d="M535 682H583"/>
+  <path class="line" d="M792 682H840"/>
+  <path class="line" d="M945 722V786"/>
+  <text class="wire" x="925" y="756" text-anchor="end">Assigned reviewer</text>
+
+  <rect class="node" x="843" y="789" width="205" height="77" rx="10"/>
+  <text class="label" x="945" y="820" text-anchor="middle">Approved</text>
+  <text class="small" x="945" y="847" text-anchor="middle">Reviewer report</text>
+  <rect class="node" x="529" y="789" width="256" height="77" rx="10"/>
+  <text class="label" x="657" y="820" text-anchor="middle" style="font-size:19px">Completion reported</text>
+  <text class="small" x="657" y="847" text-anchor="middle">Assignee's attributed claim</text>
+  <path class="line" d="M841 828H788"/>
+
+  <rect x="72" y="777" width="367" height="101" rx="10" fill="#fff4dc" stroke="#e8cf95" stroke-width="1.5"/>
+  <text x="92" y="809" style="font-size:21px;font-weight:700;fill:#835c1e">Passed external verification</text>
+  <text class="small" x="92" y="838">Evidence artifact in the current full set</text>
+  <text class="small" x="92" y="864">Reported, not run by the server</text>
+  <path class="line" d="M441 828H526" stroke-dasharray="6 5"/>
+  <text class="wire" x="483" y="807" text-anchor="middle">required</text>
+
+  <line x1="72" y1="907" x2="1048" y2="907" stroke="#d3dfe8"/>
+  <text class="body" x="72" y="939">Changes requested → revise the full set and request review again.</text>
+  <text class="body" x="72" y="971">Uncertain → explicit recovery or cancellation; never automatic work replay.</text>
+  <text class="small" x="48" y="1039">No report, approval, lease or content hash is an independent server proof that an external task succeeded.</text>
+</svg>

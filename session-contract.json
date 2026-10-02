@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "purpose": "Separate account identity, runtime session presence and task role; no filesystem fencing and no replacement of the legacy heartbeat/receipt lease.",
+  "list": {
+    "method": "GET", "path": "/v1/projects/{project}/sessions",
+    "response": {"sessions": "ExecutionSession[]", "truncated": "boolean; latest 200 with unclosed unexpired entries first"},
+    "visibility": "Owner sees all project sessions including archived projects; other callers require an active project grant and a grant on each session's channel. Viewer cannot mutate."
+  },
+  "create": {
+    "method": "POST", "path": "/v1/projects/{project}/sessions",
+    "body": {"session_id": "client-generated unique ID", "channel_id": "writable channel in project", "run_id": "bounded run or listener-generation ID", "task_role": "listener|writer|tester|reviewer", "runtime": "nonempty <=64 UTF-8 bytes", "model": "<=128 UTF-8 bytes; empty means unknown", "activity": "<=512 UTF-8 bytes", "ttl_seconds": "integer 10..120", "max_duration_seconds": "integer 30..3600 and >=ttl_seconds"},
+    "response": {"session": "ExecutionSession", "replayed": "boolean"},
+    "status": "201 new; 200 exact idempotent replay without lease extension; 409 different payload or eight active sessions already owned by principal"
+  },
+  "renew": {"method": "POST", "path": "/v1/projects/{project}/sessions/{session}/renew", "body": {"activity": "<=512 UTF-8 bytes"}, "response": {"session": "ExecutionSession"}, "rules": "Own principal only with fresh write ACL/key; expired/closed sessions cannot revive; expiry capped by immutable deadline."},
+  "close": {"method": "POST", "path": "/v1/projects/{project}/sessions/{session}/close", "body": {}, "response": {"session": "ExecutionSession"}, "rules": "Own principal only; idempotently set closed_at. Does not kill a local process or alter legacy presence."},
+  "ExecutionSession": {
+    "session_id": "string", "agent_id": "string", "project_id": "string", "channel_id": "string",
+    "run_id": "string", "task_role": "listener|writer|tester|reviewer", "runtime": "string", "model": "string", "activity": "string",
+    "ttl_seconds": "integer", "max_duration_seconds": "integer", "created_at": "UTC timestamp", "last_seen_at": "UTC timestamp",
+    "expires_at": "UTC timestamp", "deadline_at": "UTC timestamp", "closed_at": "UTC timestamp or null",
+    "freshness": "fresh|stale|closed; revoked key/ACL or archived project makes unclosed presence stale"
+  },
+  "integration": {"schema": "sessionsSchema embedded sessions_schema.sql, execute inside Store.Migrate transaction", "routes": "s.sessionRoutes(api)", "live_helper": "sessionLive(ctx, querier, project, channel, agent, sessionID) bool; caller still authorizes its current key and task ACL", "workspace": "Hash only execution_sessions joined to visible_channels, include lifecycle/timestamps and discrete freshness; never a global session counter."},
+  "legacy_receipts": "New execution session IDs are not accepted by legacy /messages/{id}/receipts; coordination task/report protocol must use its own session binding, not displace principals.session_id."
+}

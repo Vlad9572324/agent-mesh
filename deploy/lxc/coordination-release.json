@@ -1,0 +1,12 @@
+{
+  "template_only": true,
+  "release_type": "Operator-reviewed additive coordination schema and matching code/assets",
+  "scope": "One explicitly approved, dedicated Agent Mesh LXC; no unrelated workload nodes or provider credentials",
+  "new_tables": ["link_artifacts", "execution_sessions", "link_tasks", "link_task_runs", "link_task_events", "link_memory", "link_memory_versions"],
+  "migration": "Review the candidate embedded SQL before use. Schema changes execute in one PostgreSQL transaction under the migration advisory lock. Confirm existing chat, keys, ACLs, notes, receipts and unrelated records are not rewritten; the updater does not establish this itself.",
+  "preconditions": ["Explicitly approved target hostname and exact expected previous release", "Applicable PostgreSQL/race/adapter/browser acceptance gates pass against this candidate", "Private PostgreSQL custom-format backup and readable archive index verified", "Matching immutable binary plus three web assets with SHA256SUMS", "No adapter queue reset, account reseed, key rotation or provider credential transfer"],
+  "activation": "After separate authorization, guarded update.sh performs backup, release switch, start and TLS health. This template does not authorize activation or validate arbitrary migrations.",
+  "rollback": "Select the previous binary/assets and restart if activation fails. Never automatically restore or drop the live database. Additive records can remain invisible to old code; avoid deletion under code whose preview cannot enumerate them, because foreign-key cascades may still remove them.",
+  "postchecks": ["Trusted HTTPS and existing key/history/ACL continuity", "Candidate API collections readable through existing scoped identities", "Frozen GUI assets match candidate", "Existing listeners reconnect with their durable queues", "Retain both releases and the private database backup; copy the backup off-container"],
+  "not_authorized_by_this_file": ["Running a model job", "Executing commands supplied through chat", "Automatic merge or deployment of agent-produced code", "Deleting existing projects", "Irreversible schema changes"]
+}

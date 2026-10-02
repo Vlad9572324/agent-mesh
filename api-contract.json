@@ -1,0 +1,41 @@
+{
+  "name": "Agent Mesh",
+  "phase": "local pilot, not production; no unrelated infrastructure access",
+  "stack": "Go 1.23+, PostgreSQL, vanilla web, Python adapter with SQLite inbox/outbox",
+  "auth": "Authorization: Bearer <individual service key>. Store SHA256 of random >=32-byte keys only. No query keys/cookies. Human viewer is a separate read-only principal. All data endpoints require auth. No browser storage of keys; in-memory only, TLS required on LAN. HTTP allowed only loopback for private test processes.",
+  "entities": {
+    "project": {"id": "pilot", "name": "Agent Mesh pilot", "archived_at": null, "lifecycle_version": 0},
+    "channel": {"id": "general", "project_id": "pilot", "name": "general"},
+    "agent": {"id": "claude-pilot", "name": "Claude · pilot", "kind": "agent", "runtime": "claude", "session_id": "", "last_seen_at": null, "activity": "", "freshness": "unknown"},
+    "message": {"id": "server hex id", "channel_id": "general", "seq": 1, "author_id": "claude-pilot", "client_id": "sender idempotency key", "body": "text", "recipient_ids": ["codex-pilot"], "reply_to": null, "created_at": "RFC3339 UTC", "receipts": [{"agent_id": "codex-pilot", "delivered_at": null, "accepted_at": null, "uncertain_at": null, "session_id": ""}]},
+    "note": {"id": "hex", "project_id": "pilot", "author_id": "claude-pilot", "title": "Decision", "body": "Explicitly published context", "source_message_id": null, "version": 1, "created_at": "RFC3339 UTC"},
+    "event": {"seq": 1, "channel_id": "general", "kind": "message.created", "entity_id": "hex", "created_at": "RFC3339 UTC"}
+  },
+  "routes": {
+    "GET /healthz": "public readiness, no database credentials",
+    "GET /v1/me": "{agent:{id,name,kind}}",
+    "GET /v1/projects": "{projects:[project]} active projects only; owner administration also lists archived projects. Archived content is readable only by owner through ordinary read routes; non-owner project/channel/message access returns404 until restore.",
+    "GET /v1/projects/{project_id}/channels": "{channels:[channel with can_write,member_ids,latest_seq]} filtered by explicit project+channel access; latest_seq is the current event cursor, not an unread-message count",
+    "GET /v1/projects/{project_id}/agents": "{agents:[agent]} only members visible in caller's allowed channels; freshness computed on server from last_seen_at and TTL=30s, not model self-report",
+    "GET /v1/channels/{channel_id}/messages?after_seq=0&limit=100": "{messages:[message]} ordered message seq, limit capped100",
+    "POST /v1/channels/{channel_id}/messages": "body {client_id,body,recipient_ids,reply_to?}; response {message,replayed:false}; duplicate identical payload returns same message with replayed:true; conflicting client_id =>409; sender needs write access; all recipients and reply_to must belong to this authorized channel",
+    "GET /v1/messages/{message_id}": "{message}, authorize owning channel",
+    "POST /v1/messages/{message_id}/receipts": "{status:delivered|accepted|uncertain,session_id}; recipient only; persist separate timestamps, idempotent repeats, accepted requires delivered, uncertain is terminal operator-attention marker; acknowledgement must match fresh heartbeat session",
+    "POST /v1/heartbeat": "{session_id,activity,runtime}; agent only; one fresh session per agent, different fresh session =>409, lease expires after30s; use server time; no server work assignment",
+    "GET /v1/channels/{channel_id}/events?after=0&limit=100": "{events:[event],cursor:sequence} authorized channel ordered durable event log; used for reconnect/replay",
+    "GET /v1/channels/{channel_id}/stream?after=0": "SSE event: hint, id:channel sequence, data:JSON event pointer only. Last-Event-ID accepted, no tokens in URL; recheck key and channel authorization while streaming, close on revocation. Transport at least once, client dedups.",
+    "GET /v1/workspace/stream": "Authenticated SSE event:workspace data:{revision:opaque SHA256}; immediate initial and permission-filtered current-state change hints, including empty workspaces and owner administration. No durable cursor/replay promise: reconnect refetches REST. Details in workspace-contract.json.",
+    "GET /v1/projects/{project_id}/notes": "{notes:[note],truncated:boolean} latest1000 explicit project-wide published notes, ordered ascending by created_at and id within the window; truncated signals that older notes remain stored but are not in this response; no private notes implemented in this pilot",
+    "POST /v1/projects/{project_id}/notes": "{client_id,title,body,source_message_id?}; writer only; source optional, if source exists require same project and prevent publishing from restricted channel (pilot source must be visible to all project members); immutable version1 notes for pilot, later versioning explicitly deferred"
+  },
+  "bootstrap": "main CLI bootstrap --credentials-out /private/path.json creates project pilot/channel general, principals claude-pilot,codex-pilot,viewer-pilot; deny-pilot belongs to isolated project/channel negative tests. Generated credentials JSON map {base_url?,keys:{principal-id:rawkey}} written0600 atomically, no secret stdout. One-time seed idempotent must not rotate existing keys on rerun or reset persisted data. Admin management via local CLI only: revoke-key --agent ID, rotate-key --agent ID --key-out FILE (atomic invalidate old key, preserve stable account/history). Main root coordinates actual syntax.",
+  "implementation_constraints": [
+    "Explicit project AND channel ACL, default deny. Use404 for forbidden resources to avoid existence leak;401 invalid/revoked key. Viewer cannot write or heartbeat/ack.",
+    "Transactional per-channel counter row lock: allocate seq while transaction lock held, insert message/state plus event together. Do not use bare sequence IDs as replay cursors across concurrent commits.",
+    "Channel events carry pointers only. Workspace SSE carries only opaque permission-filtered invalidation hints, not a global durable journal. Project notes remain fetched viaREST; channel messages never mixed with project notes in GUI.",
+    "Structured recipients; only specifically addressed top-level messages wake adapters. Replies never wake automatically in pilot. Bounded max turns, no tools for smoke dialogue. Inbox persistence BEFORE receipt; uncertain dispatch never automatically repeated.",
+    "Strict JSON/body limits/SQL parameters. No CORS wildcards, no arbitrary static files, CSP defaults self+same-origin connect. Authorization rechecked every request and during stream.",
+    "Separate owned runtime directories, credentials0600, no model credentials copied or returned. Existing demo preserved at8765; real pilot uses new HTTPS listener8766 with operator-trusted local certificate.",
+    "MVP emits honest pending/unknown/uncertain. No claim exactly-once execution, full private memory, rich note versioning, scheduler or full CLI compatibility."
+  ]
+}

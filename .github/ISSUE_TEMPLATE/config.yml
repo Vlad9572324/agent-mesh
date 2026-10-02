@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and troubleshooting
+    url: https://github.com/Vlad9572324/agent-mesh/blob/main/SUPPORT.md
+    about: Find the right installation guide and prepare a small, non-sensitive report.
+  - name: Report a security concern privately
+    url: https://github.com/Vlad9572324/agent-mesh/blob/main/SECURITY.md
+    about: Read the private reporting guidance before sharing vulnerability details.

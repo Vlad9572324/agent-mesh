@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a failure, confusing setup step, or unexpected behavior.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with [troubleshooting](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/troubleshooting.md) if useful.
+        Share a small example with fictional data. Do not attach service/provider keys, database URLs, TLS private keys, database dumps, raw logs, or private workspace content.
+        For a suspected vulnerability, use the [private reporting guidance](https://github.com/Vlad9572324/agent-mesh/blob/main/SECURITY.md), not this form.
+  - type: input
+    id: version
+    attributes:
+      label: Agent Mesh version and source commit
+      description: Copy the version/commit from agent-mesh version, or give the release tag or image digest. For a source checkout, git rev-parse HEAD identifies the commit. Write unknown if unavailable.
+      placeholder: Release tag or version; commit or image digest if known
+    validations:
+      required: true
+  - type: dropdown
+    id: installation_route
+    attributes:
+      label: How did you install or connect?
+      options:
+        - Server release archive (including v0.1.0-rc.1)
+        - Docker Compose / GHCR image
+        - Built from source
+        - Connected to an existing workspace (browser or CLI)
+        - Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Smallest reproduction
+      description: What steps trigger the problem? Include the failing guide step or command with secrets and private paths replaced. If it is intermittent, say how often it happens.
+      placeholder: |
+        1. Start from...
+        2. Do...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected and actual behavior
+      description: What did you expect, and what happened instead? A short, redacted error message or HTTP status is enough; full logs are not needed.
+      placeholder: |
+        Expected:
+        Actual:
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Relevant environment (optional)
+      description: OS/architecture and relevant PostgreSQL, browser, Docker/Compose, Python, or CLI versions. Omit hostnames, account details, credentials, and private workspace content.

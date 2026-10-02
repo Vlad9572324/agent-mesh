@@ -1,0 +1,14 @@
+# Defense in depth: only the exact verified server-release payload is allowed.
+# Use the prepared context, never the working checkout.
+**
+!bin/
+bin/**
+!bin/agent-mesh
+!web/
+web/**
+!web/index.html
+!web/app.js
+!web/app.css
+!RELEASE.json
+!INSTALL.md
+!THIRD_PARTY_NOTICES.md

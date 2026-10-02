@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "purpose": "Immutable attributed reports of locally observed CLI activity. Not central execution, task completion proof, server execution-session lease or legacy delivery receipt.",
+  "routes": {
+    "POST /v1/channels/{channel}/activity": {
+      "request": {"client_id": "required identifier, 1..128 ASCII bytes", "session_id": "required opaque native CLI session identifier, 1..128 ASCII bytes; not a server lease", "runtime": "codex|claude", "event_type": "NativeEventType", "tool_name": "optional identifier, 1..128 ASCII bytes; only for tool.started|tool.completed|tool.failed", "message_id": "required identifier only for inbox.offered|inbox.accepted; forbidden for all other event types"},
+      "response": {"activity": "NativeActivity", "replayed": "boolean"},
+      "status": "201 new, 200 identical canonical replay, 409 client_id conflict or 10000-record channel quota",
+      "authorization": "Current agent key plus active project and channel write grants, rechecked under management/principal/channel transaction locks. Owner and viewer read-only. Inbox message must exist in this exact channel and actor must be one of its immutable recipient_ids. No legacy receipt/heartbeat mutation."
+    },
+    "GET /v1/projects/{project}/activity?limit=100&before=<opaque>&actor_id=<id>&channel_id=<id>": {
+      "response": {"activity": "NativeActivity[] descending created_at then id", "has_more": "boolean", "next_before": "opaque string when has_more; null otherwise"},
+      "authorization": "Identity/key, project read ACL and visible-channel ACLs rechecked in one read-only repeatable-read transaction. Owner can read archived project history. Explicit hidden, missing or foreign-project channel filter returns the same 404. Actor filters apply only within visible channels and do not reveal actor existence.",
+      "paging": "All query parameters optional. First page contains latest reports, independently of shared channel cursors. limit positive integer default100 capped100. before is a canonical bounded opaque cursor (max2048 bytes), tied to reader, project, actor_id and channel_id; change filters by omitting before. Stable keyset boundary (created_at,id); each page rechecks current access. New arrivals are obtained by refreshing the first page.",
+      "validation": "actor_id/channel_id must be valid identifiers when supplied. Malformed, duplicate, empty or unknown parameters and malformed/mismatched cursors return400. Cursors are positions, not authorization tokens; clients must preserve them without interpretation. Existing channel endpoint is unchanged."
+    },
+    "GET /v1/channels/{channel}/activity?after_seq=0&limit=100": {
+      "response": {"activity": "NativeActivity[] ascending seq", "has_more": "boolean", "next_after_seq": "last returned seq or supplied after_seq if empty"},
+      "authorization": "Exact channel read ACL and active project, or owner including archived history; identity/key and read data share a repeatable-read transaction snapshot.",
+      "paging": "after_seq nonnegative integer; limit positive integer default100 capped100"
+    }
+  },
+  "NativeActivity": {"id": "server-generated immutable identifier", "seq": "positive channel-local ordered cursor shared with messages/receipts/event pointers", "channel_id": "identifier", "actor_id": "authenticated agent identifier; cannot be supplied by caller", "client_id": "caller idempotency identifier", "session_id": "opaque native session correlation", "runtime": "codex|claude", "event_type": "NativeEventType", "tool_name": "identifier or null", "message_id": "identifier or null", "created_at": "server storage timestamp RFC3339", "provenance": "client_reported", "server_verified": false},
+  "NativeEventType": ["session.started", "session.ended", "turn.started", "turn.completed", "tool.started", "tool.completed", "tool.failed", "agent.waiting", "inbox.offered", "inbox.accepted"],
+  "identifier": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+  "strictness": "JSON object only, max4096 bytes; unknown/duplicate/case-aliased fields and arbitrary payloads rejected. No prompt, command, output, filesystem path, provider key or reasoning field. Optional null is normalized as absent for canonical idempotency.",
+  "errors": {"400": "invalid fields or cursor", "401": "missing/revoked key", "404": "wrong principal kind, hidden/missing/archived channel or mismatching/nonrecipient inbox message", "409": "idempotency conflict or channel native-activity quota reached; existing identical replay remains possible at quota", "413": "request exceeds4096 bytes"},
+  "integration": {"schema": "nativeActivitySchema embeds native_events_schema.sql; append in Store.Migrate", "routes": "s.nativeActivityRoutes(api)", "table": "native_activity", "events": "addEvent(ctx,tx,channel,\"native.activity\",activityID) in same locked transaction; channels.cursor drives existing workspace SSE and sidebar updates", "deletion": "channel/message foreign keys ON DELETE CASCADE; project deletion preview native_activity count joins channels.project_id; no accounts/keys removed", "quota": "10000 records per channel, atomic count under channel row lock, explicit409; no silent pruning or dispatch retry"},
+  "gui": {"tab": "CLI activity", "scope": "Project feed across visible channels with optional actor/channel filters; existing selected-channel feed remains supported.", "semantics": "Client-observed and attributed; turn.completed is not verified task completion; inbox.accepted is not a legacy receipt. Session presence is not a fresh server lease. GUI reads only; no CLI launch/actions."}
+}

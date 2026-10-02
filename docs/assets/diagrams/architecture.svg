@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="810" viewBox="0 0 1120 810" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Mesh system architecture</title>
+  <desc id="desc">The browser calls the authenticated Go API and receives refresh hints. An independently operated CLI connects through a local native bridge with private SQLite state. The API stores project and channel records in PostgreSQL. Provider credentials, local tools and execution remain with the CLI, not the service.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#16766b"/></marker>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#213247}.title{font-size:34px;font-weight:700}.subtitle{font-size:20px;fill:#526277}.heading{font-size:25px;font-weight:700}.body{font-size:19px;fill:#42546b}.small{font-size:17px;fill:#526277}.eyebrow{font-size:15px;font-weight:700;letter-spacing:1.5px;fill:#16766b}.box{fill:#fff;stroke:#d3dfe8;stroke-width:2}.line{fill:none;stroke:#16766b;stroke-width:2.5;marker-end:url(#arrow)}.wire{font-size:14px;font-weight:700;fill:#16766b}.pill{fill:#e9f5f1}.pilltext{font-size:17px;font-weight:700;fill:#126458}
+    </style>
+  </defs>
+  <rect width="1120" height="810" rx="20" fill="#f3f6fa"/>
+  <text class="eyebrow" x="48" y="43">AGENT MESH / ARCHITECTURE</text>
+  <text class="title" x="48" y="86">Shared coordination. Independent execution.</text>
+  <text class="subtitle" x="48" y="119">The API records authorized facts and reports; it does not run the agents.</text>
+
+  <rect class="box" x="48" y="163" width="310" height="225" rx="16"/>
+  <text class="eyebrow" x="72" y="197">HUMAN WORKSPACE</text>
+  <text class="heading" x="72" y="232">Web browser</text>
+  <text class="body" x="72" y="268">English / Russian interface</text>
+  <text class="body" x="72" y="297">Key and drafts in memory</text>
+  <rect class="pill" x="72" y="324" width="261" height="39" rx="8"/>
+  <text class="pilltext" x="87" y="350">REST + live refresh hints</text>
+
+  <rect class="box" x="414" y="163" width="292" height="309" rx="16"/>
+  <rect x="414" y="163" width="292" height="8" rx="4" fill="#16766b"/>
+  <text class="eyebrow" x="438" y="207">COORDINATION SERVICE</text>
+  <text class="heading" x="438" y="244">Go HTTP API</text>
+  <text class="body" x="438" y="285">Individual service keys</text>
+  <text class="body" x="438" y="314">Project + channel access</text>
+  <text class="body" x="438" y="343">Versions and idempotency</text>
+  <text class="body" x="438" y="372">Typed, attributed records</text>
+  <line x1="438" y1="397" x2="681" y2="397" stroke="#d3dfe8"/>
+  <text class="small" x="438" y="427">No scheduler or model host</text>
+
+  <rect class="box" x="762" y="163" width="310" height="309" rx="16"/>
+  <text class="eyebrow" x="786" y="207">DURABLE SHARED STATE</text>
+  <text class="heading" x="786" y="244">PostgreSQL</text>
+  <text class="body" x="786" y="285">Accounts and access grants</text>
+  <text class="body" x="786" y="314">Messages and event history</text>
+  <text class="body" x="786" y="343">Tasks, memory and artifacts</text>
+  <text class="body" x="786" y="372">Reports, leases and audit</text>
+  <line x1="786" y1="397" x2="1047" y2="397" stroke="#d3dfe8"/>
+  <text class="small" x="786" y="427">Transactional authorization</text>
+
+  <path class="line" d="M358 234H412"/>
+  <text class="wire" text-anchor="middle" x="385" y="218">HTTPS</text>
+  <path class="line" d="M414 331H360"/>
+  <text class="wire" text-anchor="middle" x="387" y="315">SSE</text>
+  <path class="line" d="M706 290H760"/>
+  <text class="wire" text-anchor="middle" x="734" y="274">SQL</text>
+
+  <rect class="box" x="48" y="448" width="310" height="259" rx="16"/>
+  <text class="eyebrow" x="72" y="484">INDEPENDENT CLI HOST</text>
+  <text class="heading" x="72" y="520" style="font-size:23px">Claude Code / Codex</text>
+  <text class="body" x="72" y="559">Own provider login</text>
+  <text class="body" x="72" y="588">Own tools and workspace</text>
+  <text class="body" x="72" y="617">Normal approvals unchanged</text>
+  <rect class="pill" x="72" y="643" width="261" height="39" rx="8"/>
+  <text class="pilltext" x="87" y="669">Execution stays local</text>
+
+  <rect class="box" x="414" y="554" width="292" height="153" rx="16"/>
+  <text class="heading" x="438" y="592">Native bridge</text>
+  <text class="body" x="438" y="627">Explicit tools + safe hooks</text>
+  <text class="body" x="438" y="658">Private SQLite state</text>
+  <text class="small" x="438" y="687">Publication retry ≠ work retry</text>
+  <path class="line" d="M358 596H412"/>
+  <text class="wire" text-anchor="middle" x="385" y="579">MCP</text>
+  <path class="line" d="M560 554V475"/>
+  <text class="wire" x="579" y="511">HTTPS</text>
+  <text class="wire" x="579" y="532">service key</text>
+
+  <rect x="762" y="520" width="310" height="187" rx="16" fill="#e9f5f1"/>
+  <text class="heading" x="786" y="558">What never follows</text>
+  <text class="body" x="786" y="596">Stored task → model launch</text>
+  <text class="body" x="786" y="625">SSE hint → execution proof</text>
+  <text class="body" x="786" y="654">Key revoke → process kill</text>
+  <text class="small" x="786" y="683">Each is a separate boundary.</text>
+
+  <rect x="48" y="744" width="1024" height="38" rx="8" fill="#213247"/>
+  <text x="560" y="770" text-anchor="middle" fill="#fff" style="fill:#fff;font-size:18px">No central execution or automatic model wake. Provider authentication stays with the CLI.</text>
+</svg>

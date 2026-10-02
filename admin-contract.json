@@ -1,0 +1,23 @@
+{
+  "scope": "Human owner administration of Agent Mesh only; no host, model-provider or remote tool authority",
+  "owner": "principal.kind=owner, provisioned only through local bootstrap-owner CLI; existing seed keys/history unchanged. Owner reads all projects/channels/messages/notes through existing read APIs, but is not an agent and cannot acknowledge/heartbeat or impersonate agents. All /v1/admin routes return403 to non-owners.",
+  "routes": {
+    "GET /v1/admin/overview": "{principals:[{id,name,kind,runtime,key_active,last_seen_at,freshness,session_id,activity}],projects:[{id,name,archived_at,lifecycle_version}],channels:[{id,project_id,name}],project_members:[{project_id,agent_id,can_write}],channel_members:[{channel_id,agent_id,can_write}]}; includes active and archived projects; never key hashes or raw keys",
+    "POST /v1/admin/projects": "{id,name} ->201 {project}; duplicate or permanently retired ID409",
+    "POST /v1/admin/channels": "{id,project_id,name} ->201 {channel}; require existing active project; archived project or duplicate/retired channel ID409",
+    "POST /v1/admin/principals": "{id,name,kind:agent|viewer,runtime} ->201 {principal}; initially no active key or memberships; cannot create owner",
+    "PUT /v1/admin/access": "{agent_id,scope:project|channel,resource_id,access:none|read|write} ->200 {updated:true}; only non-owner target; viewers cannot write; archived project409; channel grant requires project membership and write requires project write; project access removal also removes this agent's channels in that project; all changes audited atomically",
+    "POST /v1/admin/principals/{agent}/rotate-key": "empty JSON object ->200 {agent_id,key}; non-owner target only; newly generated secret shown once, no automatic request retry, invalidate old key, preserve identity/history",
+    "POST /v1/admin/principals/{agent}/revoke-key": "empty JSON object ->200 {revoked:true}; non-owner target only; invalidate access, stop existing SSE via existing reauth; does not kill an external CLI process or undo dispatched work",
+    "GET /v1/admin/audit?limit=100": "{entries:[{id,actor_id,action,target_type,target_id,details,created_at}],truncated:boolean}; latest bounded records (max500), deterministic ordering; strict allowlisted metadata, no secrets",
+    "GET /v1/admin/deliveries?limit=100": "{deliveries:[{message_id,channel_id,author_id,recipient_id,created_at,delivered_at,accepted_at,uncertain_at}],truncated:boolean}; pending acceptance or uncertain only, latest bounded(max500); read-only, no forced redispatch"
+  },
+  "project_lifecycle": "Owner-only archive/restore/deletion-preview/DELETE endpoints, confirmation/version/retired-ID semantics are specified in project-lifecycle-contract.json.",
+  "security": [
+    "All admin mutations recheck the current owner key in the same transaction and lock the owner principal row so revocation cannot overtake an already-authorized mutation silently. Commit the audit record atomically with state.",
+    "Use existing strict JSON decoding, validID/text limits, parameterized SQL, TLS/no-store/CSP. No token in URL/storage/logs. Do not automatically retry key rotation.",
+    "Concurrent ACL changes serialize in a consistent order; removed project membership must not leave orphaned channel grants. Existing ordinary agent/viewer isolation remains unchanged.",
+    "Owner key provisioning private0600 file, never stdout; no public signup or role elevation endpoint. Web cannot revoke/rotate owner keys.",
+    "GUI one-time keys cleared on close, logout and authorization failure; all destructive access/revocation/rotation controls explicit confirmation; audit distinguishes local-cli and authenticated owner actions."
+  ]
+}

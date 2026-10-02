@@ -1,0 +1,10 @@
+# DOCUMENTATION TEMPLATE ONLY. Never issue a deployment certificate unchanged.
+# In a private operator-owned copy, replace the reserved IP/DNS below with the
+# explicitly approved target SANs. Retain loopback SANs only for local checks.
+[server]
+basicConstraints=critical,CA:false
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+subjectAltName=IP:192.0.2.10,IP:127.0.0.1,DNS:agent-mesh.example,DNS:localhost

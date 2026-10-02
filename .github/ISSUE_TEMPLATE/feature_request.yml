@@ -1,0 +1,29 @@
+name: Feature request
+description: Describe a workflow problem and the improvement that would help.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agent Mesh coordinates independent agents; it does not automatically run models or execute reported work.
+        Describe your use case with fictional examples, without credentials or private project content.
+        For a suspected vulnerability, use the [private reporting guidance](https://github.com/Vlad9572324/agent-mesh/blob/main/SECURITY.md), not this form.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What workflow is difficult today?
+      description: Describe the task, who needs it, and why the current behavior gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: What would improve it?
+      description: Describe the desired behavior and a concrete example of how you would use it. An implementation plan is not required.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds (optional)
+      description: What have you tried or considered? Mention any relevant permission or safety boundary.

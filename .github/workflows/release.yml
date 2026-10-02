@@ -1,0 +1,215 @@
+name: Release
+run-name: Release · ${{ github.event_name }} · ${{ github.ref_name }} · ${{ github.sha }}
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to validate only; no tag, release, or image will be published
+        required: true
+        type: string
+      expected_sha:
+        description: Full reviewed 40-character main source commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GOTOOLCHAIN: local
+  GOFLAGS: -mod=readonly
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.source.outputs.version }}
+      source_commit: ${{ steps.source.outputs.source_commit }}
+      checksums_sha256: ${{ steps.build.outputs.checksums_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify reviewed source, strict version, main ancestry, and live tag
+        id: source
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          live=()
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            version="${GITHUB_REF#refs/tags/}"
+            expected="$GITHUB_SHA"
+            mode=tag
+            live=(--live)
+          else
+            version="$INPUT_VERSION"
+            expected="$EXPECTED_SHA"
+            mode=dry-run
+          fi
+          python3 -B scripts/release-guard.py --version "$version" \
+            --expected-commit "$expected" --mode "$mode" \
+            --github-repository "$GITHUB_REPOSITORY" "${live[@]}" \
+            | tee "$RUNNER_TEMP/release-source.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          value = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'release-source.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('version=' + value['version'] + '\n')
+              output.write('source_commit=' + value['source_commit'] + '\n')
+          PY
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.23.6'
+          cache: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Download verified public modules, then perform portable checks offline
+        run: |
+          GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+          GOPROXY=off GOSUMDB=off go vet ./...
+          GOPROXY=off GOSUMDB=off go test ./...
+          python3 -B -m unittest discover -s adapters -p 'test_*.py'
+          python3 -B -m unittest discover -s scripts -p 'test_*.py'
+          python3 -B -m unittest discover -s deploy/compose -p 'test_*.py'
+          python3 -B -m unittest discover -s tests -p 'test_operator_targets.py'
+          node --check web/app.js
+          node tests/i18n_runtime.mjs
+          node tests/branding.mjs
+          node scripts/check-docs.mjs
+          node tests/operator_config.mjs
+          node --test tests/live_operator_config.mjs
+          node --test tests/local_process_owner.mjs
+          node tests/privacy_gate.mjs
+          node scripts/check-privacy.mjs
+      - name: Build the four canonical release assets offline
+        id: build
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          python3 -B scripts/build-release.py --version "$VERSION" \
+            --output "$RUNNER_TEMP/agent-mesh-release"
+          echo "checksums_sha256=$(sha256sum "$RUNNER_TEMP/agent-mesh-release/SHA256SUMS" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Real Compose smoke of the same-version image and both archives
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          python3 -B scripts/container-smoke.py --version "$VERSION" \
+            --release-dir "$RUNNER_TEMP/agent-mesh-release" \
+            --expected-commit "$GITHUB_SHA" --source "$GITHUB_REPOSITORY" \
+            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/agent-mesh-server:$VERSION" \
+            | tee "$RUNNER_TEMP/release-smoke.json"
+          {
+            echo '### Release validation (manual dispatch never publishes)'
+            echo '```json'
+            cat "$RUNNER_TEMP/release-source.json" "$RUNNER_TEMP/release-smoke.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve canonical assets and non-sensitive validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-validation-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/agent-mesh-release/
+            ${{ runner.temp }}/release-source.json
+            ${{ runner.temp }}/release-smoke.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.23.6'
+          cache: false
+      - name: Recheck exact live tag and main ancestry
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.source_commit }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -B scripts/release-guard.py --version "$VERSION" \
+            --expected-commit "$EXPECTED_SHA" --mode tag \
+            --github-repository "$GITHUB_REPOSITORY" --live
+      - name: Rebuild and match the validated canonical checksums
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          EXPECTED_SUMS: ${{ needs.validate.outputs.checksums_sha256 }}
+        run: |
+          GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+          python3 -B scripts/build-release.py --version "$VERSION" \
+            --output "$RUNNER_TEMP/agent-mesh-release"
+          [[ "$EXPECTED_SUMS" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$(sha256sum "$RUNNER_TEMP/agent-mesh-release/SHA256SUMS" | cut -d' ' -f1)" == "$EXPECTED_SUMS" ]]
+      - name: Recheck the exact local image that will be published
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          python3 -B scripts/container-smoke.py --version "$VERSION" \
+            --release-dir "$RUNNER_TEMP/agent-mesh-release" \
+            --expected-commit "$GITHUB_SHA" --source "$GITHUB_REPOSITORY" \
+            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/agent-mesh-server:$VERSION" --keep-image \
+            | tee "$RUNNER_TEMP/release-smoke.json"
+      - name: Draft, upload and verify assets, publish and verify image, then publish release
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -B scripts/release-publish.py \
+            --release-dir "$RUNNER_TEMP/agent-mesh-release" \
+            --repository "$GITHUB_REPOSITORY" --version "$VERSION" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-commit "$GITHUB_SHA" \
+            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/agent-mesh-server:$VERSION" \
+            --evidence-out "$RUNNER_TEMP/release-publication.json"
+          {
+            echo '### Verified release publication'
+            echo '```json'
+            cat "$RUNNER_TEMP/release-publication.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve non-sensitive publication evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-publication-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/release-publication.json
+            ${{ runner.temp }}/release-smoke.json
+          if-no-files-found: ignore
+          retention-days: 7

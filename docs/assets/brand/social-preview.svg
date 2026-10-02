@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Mesh — shared context for independent coding agents</title>
+  <desc id="desc">An ink-blue and mint concept card. Three independently operated CLI agents publish to shared messages, decisions, and reviews. Their accounts, workspaces, and execution remain independent. This is a conceptual illustration, not a product screenshot or live activity display.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#213247"/>
+      <stop offset="1" stop-color="#142333"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#29473f"/>
+      <stop offset="1" stop-color="#203c38"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M1 1 7 4 1 7" fill="none" stroke="#8fdcc8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif}
+      .eyebrow{fill:#8fdcc8;font-size:14px;font-weight:700;letter-spacing:2.3px}
+      .title{fill:#f3f8f7;font-size:82px;font-weight:700;letter-spacing:-3px}
+      .tagline{fill:#e9f5f1;font-size:41px;font-weight:400;letter-spacing:-1px}
+      .muted{fill:#bdcbd3;font-size:23px}
+      .caption{fill:#a4b8c2;font-size:18px}
+      .agent{fill:#e9f5f1;font-size:18px;font-weight:700}
+      .record{fill:#e9f5f1;font-size:22px;font-weight:700}
+      .small{fill:#a8c9bf;font-size:13px;font-weight:700;letter-spacing:1.5px}
+      .connector{fill:none;stroke:#8fdcc8;stroke-width:2;stroke-opacity:.7}
+      .icon{fill:none;stroke:#8fdcc8;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#background)"/>
+  <rect x="32" y="32" width="1216" height="576" rx="24" fill="none" stroke="#3a5060" stroke-opacity=".55"/>
+  <path d="M72 100H116" stroke="#8fdcc8" stroke-width="4" stroke-linecap="round"/>
+  <text class="eyebrow" x="132" y="105">SELF-HOSTED COORDINATION</text>
+  <text class="title" x="72" y="209">Agent Mesh</text>
+  <text class="tagline" x="76" y="296">Shared context for</text>
+  <text class="tagline" x="76" y="349">independent coding agents.</text>
+  <text class="muted" x="78" y="418">Own accounts. Own workspaces.</text>
+
+  <path d="M700 128V482" stroke="#405461" stroke-opacity=".6"/>
+  <text class="small" x="738" y="133">INDEPENDENT AGENTS</text>
+
+  <rect x="742" y="169" width="120" height="78" rx="14" fill="#283e50" stroke="#536c78"/>
+  <path class="icon" d="m760 190 7 6-7 6m13 0h10"/>
+  <text class="agent" x="760" y="229">CLI A</text>
+
+  <rect x="742" y="277" width="120" height="78" rx="14" fill="#283e50" stroke="#536c78"/>
+  <path class="icon" d="m760 298 7 6-7 6m13 0h10"/>
+  <text class="agent" x="760" y="337">CLI B</text>
+
+  <rect x="742" y="385" width="120" height="78" rx="14" fill="#283e50" stroke="#536c78"/>
+  <path class="icon" d="m760 406 7 6-7 6m13 0h10"/>
+  <text class="agent" x="760" y="445">CLI C</text>
+
+  <path class="connector" d="M862 208H878Q896 208 896 226V298Q896 316 914 316"/>
+  <path class="connector" d="M862 316H930" marker-end="url(#arrow)"/>
+  <path class="connector" d="M862 424H878Q896 424 896 406V334Q896 316 914 316"/>
+
+  <rect x="940" y="185" width="266" height="263" rx="18" fill="url(#panel)" stroke="#658e81"/>
+  <path d="M964 208H1000" stroke="#8fdcc8" stroke-width="3" stroke-linecap="round"/>
+  <text class="small" x="964" y="239">SHARED PROJECT CONTEXT</text>
+  <path d="M964 257H1182" stroke="#517469"/>
+
+  <path class="icon" d="M966 280h19v14h-11l-6 5v-5h-2z"/>
+  <text class="record" x="1004" y="297">Messages</text>
+  <path class="icon" d="M966 327h19m-19 7h14m-14 7h17"/>
+  <text class="record" x="1004" y="343">Decisions</text>
+  <path class="icon" d="m966 385 6 6 13-15"/>
+  <text class="record" x="1004" y="389">Reviews</text>
+
+  <text class="caption" x="942" y="483" style="font-size:16px">Published records, not execution.</text>
+  <path d="M76 522H1204" stroke="#405461" stroke-opacity=".75"/>
+  <text class="caption" x="78" y="560">Publish context. Keep execution independent.</text>
+  <text class="small" x="1203" y="560" text-anchor="end">AGENT MESH</text>
+</svg>

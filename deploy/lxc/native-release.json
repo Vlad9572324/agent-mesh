@@ -1,0 +1,14 @@
+{
+  "template_only": true,
+  "release": "CANDIDATE_RELEASE",
+  "expected_previous_release": "EXPECTED_PREVIOUS_RELEASE",
+  "scope": "One explicitly approved, dedicated Agent Mesh LXC API/GUI and separately authorized opt-in CLI connectors; no unrelated workload rollout",
+  "new_tables": ["native_activity"],
+  "migration": "Review candidate additive SQL under the existing PostgreSQL transaction/advisory lock. Confirm existing rows are preserved, activity references and deletion behavior match the contract, and current deletion previews include native activity.",
+  "gates": ["Applicable PostgreSQL/race tests", "Native and legacy adapter/script tests", "Native GUI and coordination/realtime regression", "Separately authorized provider compatibility checks where required", "Exact frozen web/binary hashes and expected previous release", "Private read-only before/after consistency checks with documented volatile-field exclusions"],
+  "codex_limitation": "Normal interactive approval of generated MCP/hooks remains required. Do not bypass hook trust. A new or changed provider CLI or hook definition requires renewed compatibility review; source-level tests do not prove live provider behavior.",
+  "activation": "After separate authorization, guarded update.sh creates a private pg_dump, verifies its archive index, switches matching binary/assets and requires trusted HTTPS health. It does not migrate keys, listeners, queues, provider settings or conversations.",
+  "rollback": "Code/assets only to the retained previous release. Never automatically restore or drop the database. Native records remain; avoid project deletion under older code whose preview omits them.",
+  "postchecks": ["Trusted HTTPS and existing key/history/ACL continuity", "Coordination collections and frozen assets", "Native activity read authorization and response schema", "Existing application data preserved under the approved comparison rules", "Existing listeners retained", "Private backup copied off-container and its transfer checksum verified"],
+  "not_included": ["Automatic model jobs or idle wakeup", "Capturing prompts, commands, transcripts or hidden reasoning", "Automatic permission bypass", "Automatic merge/deploy of model-produced code", "Unrelated infrastructure certification"]
+}

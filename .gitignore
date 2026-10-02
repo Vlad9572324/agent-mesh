@@ -1,0 +1,28 @@
+bin/
+runtime/
+evidence/
+coverage/
+*.log
+*.sqlite*
+*.db
+*.dump
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.key
+*.pem
+*.p12
+*.pfx
+*.pat
+*.token
+*.private.*
+credentials*.json
+# Local operator configuration stays outside the repository. These patterns are
+# an additional guard, not a substitute for reviewing tracked files/history.
+operator.env
+operator*.private.json
+database-url
+owner.json
+*-password
