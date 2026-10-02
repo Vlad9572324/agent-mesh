@@ -74,6 +74,8 @@ BUILD_FILES = (
     "internal/link/memory_schema.sql",
     "internal/link/native_events.go",
     "internal/link/native_events_schema.sql",
+    "internal/link/navigation.go",
+    "internal/link/navigation_schema.sql",
     "internal/link/onboarding.go",
     "internal/link/onboarding_schema.sql",
     "internal/link/project_map.go",

@@ -7,6 +7,7 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    "GUI read positions": "Отметки прочтения в интерфейсе",
     "{0} unread": "{0} непрочитанных",
     "All caught up": "Всё прочитано",
     "Checking messages…": "Проверяем сообщения…",
@@ -2915,7 +2916,7 @@
       if (!validTarget()) return;
       const fields = [["channels", tr("Channels")], ["messages", tr("Messages")], ["notes", tr("Notes")],
         ["receipts", tr("Receipts")], ["events", tr("Events")], ["project_members", tr("Project access grants")], ["channel_members", tr("Channel access grants")]];
-      for (const [key, label] of [["onboarding_invitations", tr("Onboarding invitations")], ["tasks", tr("Tasks")], ["task_runs", tr("Task run records")], ["task_events", tr("Task events")], ["memory", tr("Memory entries")], ["memory_versions", tr("Memory versions")], ["artifacts", tr("Artifacts")], ["artifact_bytes", tr("Artifact bytes")], ["sessions", tr("Sessions")], ["native_activity", tr("CLI activity reports")]]) {
+      for (const [key, label] of [["navigation_reads", tr("GUI read positions")], ["onboarding_invitations", tr("Onboarding invitations")], ["tasks", tr("Tasks")], ["task_runs", tr("Task run records")], ["task_events", tr("Task events")], ["memory", tr("Memory entries")], ["memory_versions", tr("Memory versions")], ["artifacts", tr("Artifacts")], ["artifact_bytes", tr("Artifact bytes")], ["sessions", tr("Sessions")], ["native_activity", tr("CLI activity reports")]]) {
         if (Object.hasOwn(preview.counts || {}, key)) fields.push([key, label]);
       }
       if (preview.project?.id !== project.id || !Number.isSafeInteger(preview.project.lifecycle_version) || preview.project.lifecycle_version < 0 ||
