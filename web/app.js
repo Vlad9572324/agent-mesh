@@ -745,7 +745,7 @@
     pollTimer: null, streamWatchdog: null, retry: 0, refreshing: false,
     lastRefresh: 0, refreshAgain: false, streamConnected: false,
     workspaceRevision: "", lastSync: 0, syncError: false, channelSeen: new Map(), channelUpdates: new Set(),
-    navigation: null, navigationRead: null, navigationReadTimer: null,
+    navigation: null, navigationSeq: 0, navigationRead: null, navigationReadTimer: null,
     pendingMessage: null, pendingNote: null, sending: false, publishing: false,
     loginBusy: false, loading: false, dataReady: false, projectReady: false,
     admin: null, adminLoading: false, adminBusy: false, adminKey: "", adminKeyVersion: 0,
@@ -932,6 +932,7 @@
       state.lastSync = 0; state.syncError = false;
       state.channelSeen.clear(); state.channelUpdates.clear();
       state.navigation = null; state.navigationRead = null;
+      state.navigationSeq += 1;
       clearTimeout(state.navigationReadTimer); state.navigationReadTimer = null;
       state.accessRecheckUntil = 0;
     }
@@ -1093,6 +1094,7 @@
     document.body.classList.toggle("nav-open", open);
     $("sidebar-toggle").setAttribute("aria-expanded", String(open));
     setOwnedAttribute($("sidebar-toggle"), "aria-label", () => (open ? tr("Close navigation") : tr("Open navigation")));
+    if (!open) scheduleChannelRead();
   }
   function setAdminSection(section) {
     if (!["onboarding", "accounts", "projects", "access", "diagnostics"].includes(section)) return;
@@ -1197,13 +1199,14 @@
   }
 
   async function loadNavigation(context) {
+    const requestSeq = ++state.navigationSeq;
     try {
       const data = await api("/v1/navigation");
-      if (!current(context)) return;
+      if (!current(context) || requestSeq !== state.navigationSeq) return;
       if (!Array.isArray(data.projects) || !Array.isArray(data.channels)) throw new Error("Invalid navigation snapshot");
       state.navigation = data;
     } catch (error) {
-      if (!current(context)) return;
+      if (!current(context) || requestSeq !== state.navigationSeq) return;
       state.navigation = null;
       if (error.status !== 404) throw error;
     }
@@ -1218,10 +1221,12 @@
     const scroller = $("message-list"), channelId = state.channel?.id, context = state.context;
     const activity = list(state.navigation?.channels).find(channel => channel.id === channelId);
     if (!activity || !state.dataReady || state.loading || state.view !== "chat" || document.hidden ||
+        document.querySelector("dialog[open]") || document.body.classList.contains("nav-open") ||
         $("search-input").value.trim() || !scroller.clientHeight || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 45 || state.navigationRead) return;
     const through = Math.max(0, ...[...scroller.querySelectorAll("[data-message-seq]")].map(element => number(element.dataset.messageSeq)));
     if (!through || through <= number(activity.last_read_seq)) return;
     const request = {channelId, context}; state.navigationRead = request;
+    state.navigationSeq += 1; // A pre-write GET must not restore an older cursor/count.
     try {
       await api(`/v1/channels/${pathId(channelId)}/read`, {method: "PUT", body: {through_seq: through}});
       if (!current(context)) return;
@@ -3275,6 +3280,7 @@
   $("nav-connect-agent").addEventListener("click", () => { setAdminSection("onboarding"); if (state.view !== "admin") void selectAdmin(); });
   $("nav-unread").addEventListener("click", () => { setNavigationOpen(false); void openNextUnread(); });
   $("message-list").addEventListener("scroll", scheduleChannelRead, {passive: true});
+  for (const dialog of document.querySelectorAll("dialog")) dialog.addEventListener("close", scheduleChannelRead);
   $("admin-onboarding-project").addEventListener("change", () => { renderOnboardingChannels(true); updateAdminControls(); });
   $("admin-onboarding-form").addEventListener("submit", event => {
     event.preventDefault();
