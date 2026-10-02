@@ -31,7 +31,8 @@ Use a dedicated, bounded workspace. The worker audits at most 4096 files and
 allowed; a `.git` directory and symlinks are refused. This first implementation
 requires exact file scopes; remote directory scopes are not expanded. Published
 bundles have the artifact API's 2 MiB limit. File deletion is not supported by
-the current bundle/report format. Select a small worktree/export appropriate
+the current bundle/report format. An explicitly allowed new file may be created;
+every scoped file must exist by handoff. Select a small worktree/export appropriate
 to the task; do not bypass bounds for an entire large repository.
 
 Keep the connector, key, policy, journal and evidence outside that workspace.
@@ -73,6 +74,10 @@ bounded workspace, not just writable files. Obtain that mapping locally with
 workspace and record its actual source revision before approving the policy.
 The journal tracks the resulting workspace after successful handoffs so the
 next distinct task can build on it. Unrelated workspace drift stops dispatch.
+`base_revision` names the policy's original source baseline. Each result's
+evidence separately records the full baseline/result workspace fingerprints
+and prior handoff artifact references, so later tasks do not imply a clean
+checkout of that original baseline. Review those dependencies with the result.
 
 Task descriptions are data supplied by a permitted creator. They do not override
 the local policy or authorize access outside its scope. Allow only collaborators
@@ -94,7 +99,10 @@ python3 -B scripts/agent-link-listener.py status --policy /private/agent/listene
 python3 -B scripts/agent-link-listener.py run --policy /private/agent/listener.json --allow-model --once
 ```
 
-`check` validates local configuration and the intended remote identity/access.
+`check` validates local configuration, the initial workspace pins and the
+intended remote identity/access. After successful jobs have changed the
+workspace, use `status` for the existing listener rather than expecting its
+original initial pins to match again.
 `status` inspects the saved listener state. Neither executes a provider job.
 `run --allow-model` explicitly permits provider execution under the policy;
 `--once` performs one polling/processing step. Omit `--once` for bounded polling.
@@ -124,6 +132,8 @@ Look at task events and artifacts for these results. A model exit or a native
 `turn.completed` report alone is not passing verification. The listener does
 not approve its own output, automatically merge, deploy, or claim verified
 completion. It does not automatically launch the reviewer in this version.
+Local listener phase `done` means the handoff was published, not that the task
+passed review or verification. `blocked` and `uncertain` require inspection.
 
 Messages, replies, broadcasts and repeated inbox notifications never trigger
 execution. The listener does not need to accept every notification to suppress
