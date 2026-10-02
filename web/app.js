@@ -3186,7 +3186,7 @@
       const inactive = list(state.admin?.principals).some(principal => principal.id === invite.agent_id && principal.kind === "agent" && principal.key_active !== true);
       const actions = node("div", "admin-actions");
       for (const [action, label] of [["reissue", tr("New command…")], ["revoke", tr("Revoke invitation…")]]) {
-        if (action === "revoke" ? invite.status !== "pending" : invite.status === "claimed" || !inactive) continue;
+        if (action === "revoke" ? invite.status !== "pending" : !inactive) continue;
         const button = node("button", "secondary-button", () => label); button.type = "button"; button.dataset.onboardingAction = action;
         button.dataset.focusKey = `onboarding:${invite.id}:${action}`;
         button.addEventListener("click", () => void onboardingAction(invite, action)); appendOwned(actions, () => button);
@@ -3204,7 +3204,7 @@
         !/^sha256\/\/[A-Za-z0-9+/]{43}=$/.test(result.spki_pin) || !/^[a-f0-9]{64}$/.test(result.token) ||
         !result.invitation?.agent_id || !result.invitation?.expires_at) throw new Error("Invalid onboarding response");
     const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
-    const pipeline = 'curl -fkSs --proto "=https" --connect-timeout 10 --max-time 60 --pinnedpubkey "$2" "$1/connect/install.sh" | bash -s -- "$@"';
+    const pipeline = 'curl --disable -fkSs --noproxy "*" --proto "=https" --connect-timeout 10 --max-time 60 --pinnedpubkey "$2" "$1/connect/install.sh" | bash -s -- "$@"';
     state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}`;
     $("admin-onboarding-command").value = state.onboardingCommand;
     $("admin-onboarding-repository").href = repository.href;
