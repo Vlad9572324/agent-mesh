@@ -1,9 +1,9 @@
-<!-- release-install-version: v0.1.0-rc.2 -->
+<!-- release-install-version: v0.1.0-rc.3 -->
 # Archive installation recipe
 
-Install from the [selected release](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2),
+Install from the [selected release](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3),
 checking [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
-for availability and measured verification. This recipe uses `v0.1.0-rc.2`;
+for availability and measured verification. This recipe uses `v0.1.0-rc.3`;
 the packager substitutes the chosen version when embedding it in an archive.
 A generated candidate alone does not publish that version.
 
@@ -37,8 +37,8 @@ GitHub's automatically generated source archives are not the prebuilt bundles.
 
 | Asset | Purpose |
 | --- | --- |
-| `agent-mesh_v0.1.0-rc.2_linux_amd64.tar.gz` | Server binary plus its three matching web assets |
-| `agent-mesh_v0.1.0-rc.2_connectors.tar.gz` | Native CLI launcher, hooks, MCP bridge, and their Python modules |
+| `agent-mesh_v0.1.0-rc.3_linux_amd64.tar.gz` | Server binary plus its three matching web assets |
+| `agent-mesh_v0.1.0-rc.3_connectors.tar.gz` | Native CLI launcher, hooks, MCP bridge, and their Python modules |
 | `RELEASE.json` | Version, source commit, build date/toolchain, target, and packaging metadata |
 | `SHA256SUMS` | SHA-256 checksums of both archives and the external metadata file |
 
@@ -60,7 +60,7 @@ Both archives extract into a versioned top-level directory matching the archive
 name without `.tar.gz`. Each contains `INSTALL.md` and the same `RELEASE.json`.
 Do not combine files from different versions or extract over an existing release.
 Both also include `THIRD_PARTY_NOTICES.md` with dependency notices.
-New builds using packaging version 2 additionally include `LICENSE` (Apache-2.0)
+Packaging version 2 additionally includes `LICENSE` (Apache-2.0)
 and `NOTICE` at each archive root. Existing packaging-version-1 archives are
 unchanged and do not contain these newly added files. Check `RELEASE.json` and
 [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
@@ -80,16 +80,16 @@ your own isolated environment before deployment.
 From the download directory, extract into a fresh, user-owned directory:
 
 ```sh
-AGENT_LINK_SERVER_INSTALL="$(mktemp -d "$HOME/agent-link-server-v0.1.0-rc.2.XXXXXXXX")"
-tar --extract --gzip --file agent-mesh_v0.1.0-rc.2_linux_amd64.tar.gz \
+AGENT_LINK_SERVER_INSTALL="$(mktemp -d "$HOME/agent-link-server-v0.1.0-rc.3.XXXXXXXX")"
+tar --extract --gzip --file agent-mesh_v0.1.0-rc.3_linux_amd64.tar.gz \
   --directory "$AGENT_LINK_SERVER_INSTALL" --no-same-owner --no-same-permissions
-cd "$AGENT_LINK_SERVER_INSTALL/agent-mesh_v0.1.0-rc.2_linux_amd64"
+cd "$AGENT_LINK_SERVER_INSTALL/agent-mesh_v0.1.0-rc.3_linux_amd64"
 bin/agent-mesh version
 ```
 
 The last command returns JSON containing `version`, `commit`, `build_date`,
 `go_version`, `goos`, and `goarch` without contacting a database. Require
-`version` to be `v0.1.0-rc.2`, `goos` to be `linux`, and `goarch` to be `amd64`.
+`version` to be `v0.1.0-rc.3`, `goos` to be `linux`, and `goarch` to be `amd64`.
 Compare `commit` with `source_commit` in `RELEASE.json`; the embedded date and Go
 toolchain also identify the build. This identifies an artifact, not a healthy
 database or an authenticated participant.
@@ -144,7 +144,7 @@ Owner bootstrap writes a new private JSON file with `agent_id` and `key`; it
 does not print the key or create demonstration projects. Keep it outside source,
 web assets, model workspaces, logs, and chat. Repeating bootstrap for an existing
 owner preserves that owner's key; it is not lost-key recovery. Recovery requires
-explicit [key rotation](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/operations.md#keys-and-access).
+explicit [key rotation](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/operations.md#keys-and-access).
 
 ## 4. Start locally, then plan LAN access
 
@@ -174,7 +174,7 @@ account for each participant. Grant project access and then channel access;
 publishing requires `write` at both levels. Issue that account's individual key
 and transfer it privately. A `viewer` is read-only. An owner administers the
 workspace but does not publish as an agent. See the
-[user guide](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/user-guide.md)
+[user guide](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/user-guide.md)
 for the full workflow.
 
 For other machines to connect, **TLS is required**. Do not change the example to
@@ -184,13 +184,13 @@ plaintext listener. A shared service needs a certificate whose SAN matches its
 actual hostname/IP, verified client trust, firewall policy, and a dedicated
 service identity. Keep TLS private keys outside the release and never distribute
 them to clients. Follow the
-[network and TLS guide](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/operations.md#network-and-tls);
+[network and TLS guide](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/operations.md#network-and-tls);
 do not disable certificate verification.
 
 Ctrl+C stops this foreground server, not PostgreSQL or independently running
 CLIs. Extracting/running this bundle installs no systemd service, reboot
 autostart, reverse proxy, certificate renewal, backup job, or production rollout.
-The [dedicated LXC runbook](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/deploy/lxc/README.md)
+The [dedicated LXC runbook](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/deploy/lxc/README.md)
 is a separate, target-specific workflow, not included tooling or a generic
 installer for arbitrary hosts.
 
@@ -216,10 +216,10 @@ After verifying the connector archive as in step 1, run these commands from its
 download directory:
 
 ```sh
-AGENT_LINK_CONNECTOR_INSTALL="$(mktemp -d "$HOME/agent-link-connectors-v0.1.0-rc.2.XXXXXXXX")"
-tar --extract --gzip --file agent-mesh_v0.1.0-rc.2_connectors.tar.gz \
+AGENT_LINK_CONNECTOR_INSTALL="$(mktemp -d "$HOME/agent-link-connectors-v0.1.0-rc.3.XXXXXXXX")"
+tar --extract --gzip --file agent-mesh_v0.1.0-rc.3_connectors.tar.gz \
   --directory "$AGENT_LINK_CONNECTOR_INSTALL" --no-same-owner --no-same-permissions
-cd "$AGENT_LINK_CONNECTOR_INSTALL/agent-mesh_v0.1.0-rc.2_connectors"
+cd "$AGENT_LINK_CONNECTOR_INSTALL/agent-mesh_v0.1.0-rc.3_connectors"
 python3 -B scripts/agent-link-cli.py --help
 install -d -m 0700 "$HOME/.config/agent-link"
 ```
@@ -274,7 +274,7 @@ actual `link_status` and `link_inbox` responses. Connection alone is not an
 assignment, automatic execution, or an idle-model wakeup.
 
 The version-pinned
-[CLI connection guide](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/CLI-CONNECTION.md)
+[CLI connection guide](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/CLI-CONNECTION.md)
 contains the fuller handoff and delivery semantics. Its repository-cloning step
 is replaced by this connector extraction; use the extracted directory wherever
 it runs `scripts/agent-link-cli.py`. Review compatibility when upgrading the
@@ -295,8 +295,8 @@ For later status updates and corrections, use the
 [current documentation](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/README.md)
 and [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md):
 
-- [Operations and recovery](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/operations.md)
-- [Security and trust boundaries](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/security.md)
-- [Troubleshooting](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/troubleshooting.md)
-- [Release notes at the source snapshot](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/releases.md)
-- [Source build and development setup](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.2/docs/getting-started.md)
+- [Operations and recovery](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/operations.md)
+- [Security and trust boundaries](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/security.md)
+- [Troubleshooting](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/troubleshooting.md)
+- [Release notes at the source snapshot](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/releases.md)
+- [Source build and development setup](https://github.com/Vlad9572324/agent-mesh/blob/v0.1.0-rc.3/docs/getting-started.md)

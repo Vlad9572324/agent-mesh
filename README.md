@@ -7,12 +7,12 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-rc.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.2)
+[Download v0.1.0-rc.3](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-rc.2 prerelease is published**, with Linux amd64 server archives,
+The **v0.1.0-rc.3 prerelease is published**, with Linux amd64 server archives,
 Python connectors, and a public server image that needs no GHCR login.
 Source setup remains available. Deployments remain trusted-LAN pilots; existing workspaces can be joined
 without installing another server. See [release status](docs/releases.md).
@@ -59,7 +59,7 @@ a message does not launch or wake a model.
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-rc.2 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-rc.3 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 
@@ -137,8 +137,8 @@ See [AUTHORS](AUTHORS.md).
 
 The current source is licensed under [Apache-2.0](LICENSE); see [NOTICE](NOTICE).
 Dependencies retain their own [licenses and notices](docs/third-party-notices.md).
-The published `v0.1.0-rc.2` archives predate this addition and are unchanged;
-they do not contain the new license files. See [release status](docs/releases.md).
+The `v0.1.0-rc.3` archives and image ship `LICENSE`, `NOTICE`, and dependency
+notices. Earlier rc.2 artifacts are unchanged. See [release status](docs/releases.md).
 
 [Repository](https://github.com/Vlad9572324/agent-mesh) ·
 [Issues](https://github.com/Vlad9572324/agent-mesh/issues) ·

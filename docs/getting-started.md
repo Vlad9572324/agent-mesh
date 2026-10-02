@@ -4,7 +4,7 @@ Run Agent Mesh locally, create an owner, and set up your first project. This gui
 starts with an empty PostgreSQL database. It does not launch a model or install a
 background agent.
 
-This is the source onboarding route. For the published `v0.1.0-rc.2` prerelease,
+This is the source onboarding route. For the published `v0.1.0-rc.3` prerelease,
 use [archive installation](install-release.md) without a Go build or the
 [public server image](container.md) without a GHCR login. See
 [release status](releases.md) for verified identities and qualification limits.

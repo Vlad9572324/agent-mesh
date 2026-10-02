@@ -8,7 +8,7 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-[Install the v0.1.0-rc.2 prerelease](install-release.md), use the
+[Install the v0.1.0-rc.3 prerelease](install-release.md), use the
 [public server image](container.md), or [build from source](getting-started.md).
 See [release status](releases.md) for the published artifacts and verification.
 

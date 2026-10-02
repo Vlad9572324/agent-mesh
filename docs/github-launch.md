@@ -48,13 +48,13 @@ setup visible; do not advertise an instant installer or unattended agents.
 - **Implemented verification:** source checks, archive/container smoke tests,
   and release automation. Cite only actual runs against this fresh repository.
   A dry run does not prove publication, and a recipe does not prove an image exists.
-- **Published:** the `v0.1.0-rc.2` GitHub prerelease and public
-  `agent-mesh-server` image. [Release status](releases.md) records the verified
-  artifacts, original failed publication run and explicit finalization recovery.
+- **Published:** the `v0.1.0-rc.3` GitHub prerelease and public
+  `agent-mesh-server` image. [Release status](releases.md) records its successful
+  tag publication and preserves the earlier rc.2 failure/recovery history.
 - **Licensed current source:** [Apache-2.0](../LICENSE), with [NOTICE](../NOTICE)
   and separately preserved [dependency licenses](third-party-notices.md).
-  The published `v0.1.0-rc.2` archives predate this addition and have not been
-  regenerated with license files; do not claim a newly published licensed build.
+  The rc.3 archives and image include these license files. Earlier rc.2 artifacts
+  predate the addition and remain unchanged.
 - **Not established here:** adoption, testimonials, comparative benchmarks,
   productivity gains, broad platform support or Internet-scale readiness.
 

@@ -2,9 +2,9 @@
 
 [Documentation](README.md) · [Install a release](install-release.md) · [Release notes](releases.md)
 
-The `v0.1.0-rc.2` GitHub prerelease and public server image are published.
-See [release status](releases.md) for artifact verification, the original failed
-tag run and explicit finalization recovery. Packaging targets Linux amd64 only; workflow definitions
+The `v0.1.0-rc.3` GitHub prerelease and public server image are published through
+a successful version-tag run. See [release status](releases.md) for verification
+and the earlier rc.2 failed-run/recovery history. Packaging targets Linux amd64 only; workflow definitions
 alone do not establish successful publication.
 New version tags use the hosted
 [automatic release workflow](#automatic-version-tag-releases). Its manual
@@ -29,17 +29,17 @@ reviewed commit from this repository's fresh history.
 
 ## Artifact contract
 
-The table records the published `v0.1.0-rc.2` packaging-version-1 contents.
-The current builder uses packaging version 2 and adds root `LICENSE` (Apache-2.0)
+The table describes the published `v0.1.0-rc.3` prerelease.
+The builder uses packaging version 2 and adds root `LICENSE` (Apache-2.0)
 and `NOTICE` files to both archives, retaining `THIRD_PARTY_NOTICES.md` and its
 separate dependency licenses. For a new release, substitute a new validated
-version, keeping the same four asset types. No new build has been published by
-this license change; never overwrite an already published version.
+version, keeping the same four asset types. Existing rc.2 packaging-version-1
+archives are unchanged; never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
-| `agent-mesh_v0.1.0-rc.2_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `THIRD_PARTY_NOTICES.md` |
-| `agent-mesh_v0.1.0-rc.2_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-rc.3_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-rc.3_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
 | `RELEASE.json` | The same release/build metadata included in each archive |
 | `SHA256SUMS` | SHA-256 checksums for both archives and external `RELEASE.json` |
 
@@ -184,7 +184,7 @@ when needed and report skips explicitly.
 ## Local build and verification reference
 
 The commands below describe reproducible local packaging and verification.
-`v0.1.0-rc.2` is the prepared candidate, not an availability claim. Local builds
+Examples use `v0.1.0-rc.3`; select a new version before a new publication. Local builds
 do not create tags or publish assets. For publication, use the guarded tag/dry-run
 workflow above and its exact reviewed version.
 
@@ -220,7 +220,7 @@ From the clean source checkout:
 
 ```sh
 python3 -B scripts/build-release.py \
-  --version v0.1.0-rc.2 \
+  --version v0.1.0-rc.3 \
   --output /absolute/path/to/new-release-output
 ```
 
@@ -255,8 +255,8 @@ The smoke tool must never receive a production/shared workspace DSN.
 
 ```sh
 python3 -B scripts/smoke-release.py \
-  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.2_linux_amd64.tar.gz \
-  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.2_connectors.tar.gz \
+  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.3_linux_amd64.tar.gz \
+  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-rc.3_connectors.tar.gz \
   --checksums /absolute/path/to/new-release-output/SHA256SUMS \
   --database-url-file /private/path/to/test-database-url
 ```

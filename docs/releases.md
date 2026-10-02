@@ -2,7 +2,30 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-rc.2 prerelease published
+## Current status: v0.1.0-rc.3 prerelease published
+
+The [v0.1.0-rc.3 prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3)
+is published from source `cc683249e7b904cefc0fa71d7da444dc8f8099dd`.
+The [version-tag release run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37026132189)
+completed successfully through validation and publication, without the manual
+recovery required by rc.2. Public release metadata was verified, and all four
+release assets were downloaded without authentication and matched the approved
+dry-run build's hashes.
+
+The public image is `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.3`, with digest
+`sha256:dbf1eefe1032ff84684968b0e673d3e30db40685f87953e3ccbbea6d46e757ed`.
+Its configuration and all four layers were downloaded anonymously; descriptor
+sizes/hashes, tag-to-digest identity, source commit, Apache-2.0 label, Linux amd64
+target and nonroot configuration were verified. This was byte-level download
+verification, not a separate Docker execution; the successful hosted run provided
+the container execution and Compose smoke evidence.
+Packaging version 2 includes `LICENSE` (Apache-2.0), `NOTICE` and
+`THIRD_PARTY_NOTICES.md` in both archives and the server image. Dependencies
+retain their own licenses. Use [archive installation](install-release.md) or
+the [public container guide](container.md); runtime qualification remains Linux
+amd64 and the trusted-LAN pilot scope.
+
+## Earlier release: v0.1.0-rc.2 and its recovery
 
 This repository starts with a sanitized source snapshot and a fresh, independent
 Git history. Earlier repository commits, tags, release records and container
@@ -63,9 +86,9 @@ with [NOTICE](../NOTICE) and separate [dependency notices](third-party-notices.m
 
 Apache-2.0 was added to the current source after `v0.1.0-rc.2` was published.
 That release's tag, archives and image are unchanged: the archives do not include
-the new `LICENSE` and `NOTICE` files. The next build from the updated source will
-include them alongside `THIRD_PARTY_NOTICES.md`; no new licensed build has been
-published by this source-only change. Dependencies retain their own licenses.
+the new `LICENSE` and `NOTICE` files. The rc.3 release now includes them alongside
+`THIRD_PARTY_NOTICES.md`, without replacing rc.2 artifacts. Dependencies retain
+their own licenses.
 
 ## Release automation included in source
 
@@ -94,7 +117,8 @@ versions are not overwritten. See the [publication gates](release-process.md).
 
 The builder produces a Linux amd64 server archive, a separate Python connector
 archive, `RELEASE.json`, and `SHA256SUMS`. Both archives contain a version-rendered
-`INSTALL.md`, release metadata and dependency notices. The server bundle includes
+`INSTALL.md`, release metadata and dependency notices. Packaging version 2, used
+by rc.3, also contains `LICENSE` and `NOTICE`. The server bundle includes
 `bin/agent-mesh` and the three matching browser assets; the connector bundle
 contains the launcher, hooks, MCP bridge and runtime modules.
 
