@@ -1,11 +1,13 @@
 package link
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/url"
@@ -40,7 +42,7 @@ func (c *OnboardingConfig) Validate() error {
 		return errors.New("onboarding assets are not configured")
 	}
 	origin, err := url.Parse(c.Origin)
-	if err != nil || origin.Scheme != "https" || origin.Hostname() == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || origin.Path != "" || origin.Opaque != "" || origin.String() != c.Origin {
+	if err != nil || len(c.Origin) > 2048 || origin.Scheme != "https" || origin.Hostname() == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || origin.Path != "" || origin.Opaque != "" || origin.String() != c.Origin {
 		return errors.New("onboarding requires an explicit HTTPS origin without path")
 	}
 	if port := origin.Port(); port != "" {
@@ -57,8 +59,22 @@ func (c *OnboardingConfig) Validate() error {
 	if !strings.HasPrefix(c.SPKIPin, "sha256//") || err != nil || len(pin) != 32 {
 		return errors.New("invalid onboarding SPKI pin")
 	}
-	if !x509.NewCertPool().AppendCertsFromPEM(c.CertificateCA) {
+	certificates := bytes.TrimSpace(c.CertificateCA)
+	if len(certificates) == 0 {
 		return errors.New("invalid onboarding CA certificate")
+	}
+	for len(certificates) > 0 {
+		if !bytes.HasPrefix(certificates, []byte("-----BEGIN CERTIFICATE-----")) {
+			return errors.New("onboarding CA file must contain certificates only")
+		}
+		block, remaining := pem.Decode(certificates)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return errors.New("invalid onboarding CA certificate")
+		}
+		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+			return errors.New("invalid onboarding CA certificate")
+		}
+		certificates = bytes.TrimSpace(remaining)
 	}
 	return nil
 }

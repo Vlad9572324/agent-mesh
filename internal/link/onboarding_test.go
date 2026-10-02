@@ -420,7 +420,11 @@ func TestOnboardingConfigurationValidation(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	for n, change := range []func(*OnboardingConfig){func(c *OnboardingConfig) { c.Origin = "http://mesh.test" }, func(c *OnboardingConfig) { c.Origin = "https://mesh.test/" }, func(c *OnboardingConfig) { c.Origin = "https://user@mesh.test" }, func(c *OnboardingConfig) { c.Origin = "https://mesh.test?redirect=evil" }, func(c *OnboardingConfig) { c.Origin = "https://mesh.test:65536" }, func(c *OnboardingConfig) { c.SPKIPin = "sha256//bad" }, func(c *OnboardingConfig) { c.CertificateCA = []byte("invalid") }, func(c *OnboardingConfig) { c.Repository = "http://repo.test" }, func(c *OnboardingConfig) { c.Package = nil }, func(c *OnboardingConfig) { c.Installer = nil }} {
+	for n, change := range []func(*OnboardingConfig){func(c *OnboardingConfig) { c.Origin = "http://mesh.test" }, func(c *OnboardingConfig) { c.Origin = "https://mesh.test/" }, func(c *OnboardingConfig) { c.Origin = "https://user@mesh.test" }, func(c *OnboardingConfig) { c.Origin = "https://mesh.test?redirect=evil" }, func(c *OnboardingConfig) { c.Origin = "https://mesh.test:65536" }, func(c *OnboardingConfig) { c.SPKIPin = "sha256//bad" }, func(c *OnboardingConfig) { c.CertificateCA = []byte("invalid") }, func(c *OnboardingConfig) { c.Repository = "http://repo.test" }, func(c *OnboardingConfig) {
+		c.CertificateCA = append(append([]byte{}, c.CertificateCA...), []byte("-----BEGIN PRIVATE KEY-----\nprivate\n-----END PRIVATE KEY-----\n")...)
+	}, func(c *OnboardingConfig) { c.CertificateCA = append([]byte("unexpected text\n"), c.CertificateCA...) }, func(c *OnboardingConfig) {
+		c.CertificateCA = append(append([]byte{}, c.CertificateCA...), []byte("trailing text")...)
+	}, func(c *OnboardingConfig) { c.Origin = "https://" + strings.Repeat("a", 2048) }, func(c *OnboardingConfig) { c.Package = nil }, func(c *OnboardingConfig) { c.Installer = nil }} {
 		t.Run(fmt.Sprint(n), func(t *testing.T) {
 			copy := *cfg
 			change(&copy)
