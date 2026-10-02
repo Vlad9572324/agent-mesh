@@ -224,7 +224,7 @@ async function admin(tab) {
   await tab.wait(`!document.getElementById('admin-onboarding-panel').hidden`, 'onboarding wizard');
 }
 async function screenshot(tab, label, width) {
-  await tab.call('Page.bringToFront'); await tab.eval(`window.scrollTo(0,0)`);
+  await tab.call('Page.bringToFront'); await tab.eval(`window.scrollTo(0,0);document.getElementById('workspace-navigation').scrollTop=0`);
   assert(await tab.eval(`(()=>{const keys=${js([...secrets])};return !keys.some(key=>document.body.innerText.includes(key)||Array.from(document.querySelectorAll('input,textarea')).some(e=>e.value.includes(key)));})()`), 'Screenshot could contain secret');
   const file = `${directory}/${label}.png`; const shot = await tab.call('Page.captureScreenshot', {format: 'png', captureBeyondViewport: false});
   await writeFile(file, Buffer.from(shot.data, 'base64'), {mode: 0o600, flag: 'wx'}); report.screenshots.push({label, width, file});
@@ -340,6 +340,7 @@ async function sidebarCases() {
     await unread(viewer, projectButton('project'), 4, true); await unread(viewer, projectButton('other'), 1, true); await unread(viewer, '#nav-unread', 5);
     await unread(writer, channelButton('alpha'), 2, true); await unread(writer, '#nav-unread', 4);
     assert(!(await navigation()).channels.some(item => item.id === ids.private), 'Hidden channel present in navigation endpoint');
+    await screenshot(viewer, 'sidebar-unread-desktop', 1440);
     await viewer.click('#nav-project-native'); await refreshTab(viewer);
     assert((await navigationChannel('alpha')).last_read_seq === 0, 'Opening CLI feed marked discussion as read');
     receiptsBefore = await deliverySnapshot();
