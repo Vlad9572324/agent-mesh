@@ -301,7 +301,7 @@ class _Events:
                     self.final_text = str(event.get("result", ""))
 
 
-def run_job(runtime, cwd, prompt, evidence_dir, event_callback, timeout=600, *, read_only=False, model=None, json_schema=None):
+def run_job(runtime, cwd, prompt, evidence_dir, event_callback, timeout=600, *, read_only=False, model=None, json_schema=None, inherited_lock_fd=None):
     """Run ONCE; callers must independently review the patch and run tests.
 
     Callback must return promptly (set deadlines on any publication it performs).
@@ -311,6 +311,8 @@ def run_job(runtime, cwd, prompt, evidence_dir, event_callback, timeout=600, *, 
     Tool events incompatible with the selected profile fail the job closed.
     Claude accepts only sonnet/opus aliases; Codex retains its default model.
     observed_models contains only runtime metadata; an empty list means unknown.
+    An optional caller-owned workspace directory lock is inherited by the child,
+    keeping cooperative exclusion alive if the caller is abruptly terminated.
     With a Claude JSON schema, only native structured_output is returned as JSON;
     the caller must still validate its application schema. No prose fallback.
     """
@@ -321,6 +323,13 @@ def run_job(runtime, cwd, prompt, evidence_dir, event_callback, timeout=600, *, 
     cwd = Path(cwd).resolve(strict=True)
     if not cwd.is_dir() or cwd == Path(cwd.anchor):
         raise ValueError("cwd must be a specific existing work directory")
+    if inherited_lock_fd is not None:
+        if type(inherited_lock_fd) is not int:
+            raise ValueError("workspace lock descriptor must be an integer")
+        info = os.fstat(inherited_lock_fd)
+        expected = cwd.stat()
+        if not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != (expected.st_dev, expected.st_ino):
+            raise ValueError("workspace lock descriptor must identify the job directory")
     command = _command(runtime, cwd, read_only=read_only, model=model, json_schema=json_schema)
     base = Path(evidence_dir).absolute()
     base.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -348,7 +357,7 @@ def run_job(runtime, cwd, prompt, evidence_dir, event_callback, timeout=600, *, 
             environment.pop("CLAUDECODE", None)
             child = subprocess.Popen(command, cwd=cwd, env=environment, stdin=input_file,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-                                     close_fds=True)
+                                     close_fds=True, pass_fds=() if inherited_lock_fd is None else (inherited_lock_fd,))
             report["pid"] = child.pid
             ownership = _OwnedGroup(child)
             events.emit("runtime_started")

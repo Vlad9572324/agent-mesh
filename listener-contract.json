@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "purpose": "Explicitly enabled local task listener for bounded writer jobs. The Mesh server remains a coordination journal; no central scheduler or existing conversation wakeup is added.",
+  "entrypoint": "scripts/agent-link-listener.py check|status|run --policy /private/policy.json [--allow-model] [--once]",
+  "policy": {
+    "version": "integer 1",
+    "connector_config": "absolute private native connector config path; binds origin, agent, project, runtime, workspace and key/CA",
+    "channel_id": "one explicitly configured writable connector channel",
+    "state_dir": "absolute private owned directory outside the workspace; separate from native connector state",
+    "allowed_creators": "1..32 distinct task creator account IDs preauthorized by the local operator",
+    "allowed_files": "1..32 exact relative file paths, excluding .git and traversal; new files are permitted, deletion is not",
+    "workspace_pins": "complete initial bounded workspace map of relative file paths to lowercase SHA256; .git worktree pointer may be pinned but never edited; empty workspace map is permitted",
+    "base_revision": "operator-pinned source baseline identifier; evolving context recorded separately in evidence",
+    "prompt": "1..16000 UTF-8 bytes of local execution instructions; remote task fields cannot override local policy",
+    "max_jobs": "integer 1..100, durable lifetime cap for this immutable policy/journal",
+    "poll_seconds": "integer 1..300",
+    "max_run_seconds": "integer 30..3600 per listener invocation and per coordination job; provider timeout clamped to remaining invocation budget",
+    "timeout_seconds": "integer 1..600, no greater than max_run_seconds",
+    "publish_artifacts": "must be true; explicitly authorizes publishing exact scoped files and sanitized result evidence to project readers",
+    "request_review": "boolean; true publishes review_requested with the exact complete artifact set"
+  },
+  "selection": "Only ready Tasks assigned to this authenticated agent, created by a locally allowed creator, with exact scope contained in allowed_files. Messages, replies, broadcasts and remote runtime commands are never execution triggers. Generated plans are validated before run_started; oversized task context is reported as rejected and left ready.",
+  "dispatch": "Verify current identity, writable project/task and configured channel access. Take a cooperative exclusive flock on the canonical workspace directory inode. Persist a stable run ID and CAS run_started payload before POST. After an exact receipt, the existing CoordinationWorker revalidates current run, role, task state and scope before one bounded fresh CLI invocation.",
+  "durability": {
+    "state": "Private SQLite WAL journals with FULL synchronous commits; policy and API identity bound independently of rotatable credentials",
+    "workspace": "Linux user.agent_mesh_listener xattr binds workspace to the immutable policy/journal and retains active-run taint. Alternative journals/policies or an unresolved marker without matching durable job are refused. Child inherits the locked directory FD to preserve cooperative exclusion after abrupt parent exit.",
+    "replay": "Lost acknowledgements replay identical event/artifact publication IDs and bytes. Never automatically repeat an uncertain model dispatch. Uncertain/blocked jobs block the whole listener queue pending explicit operator inspection.",
+    "success": "Freeze exact file bundle and sanitized evidence bytes before upload; reuse existing artifact validation and CoordinationWorker durable artifacts_ready outbox. Optional review_requested hands the full set to the assigned independent reviewer. Listener phase done means handoff published, not task completion.",
+    "evidence": "Client-reported result, immutable policy source baseline, canonical full baseline/result workspace SHA256 fingerprints, prior handoff task/run/artifact dependencies, and independent_verification=not_performed. Raw prompts, logs and provider output remain private.",
+    "next_task": "Advance the durable full workspace pins only after successful handoff; reject unexplained external changes before later writers.",
+    "conflicts": "Do not refresh a frozen publication's expected_version after CAS conflict. Cancellation/revocation prevents subsequent authorized publication; an already running external process is not server-fenced. Partial local work remains for inspection without automatic rollback."
+  },
+  "commands": {
+    "check": "Read-only local policy and API identity/channel/task-ACL preflight; initial workspace mismatch is failure; no model or journal writes",
+    "status": "Read existing private local journal without locking the active workspace; missing journal yields initialized:false and jobs:[]",
+    "run": "Requires --allow-model; bounded polling and execution. --once performs one polling/dispatch or durable retry pass. No reboot autostart is installed."
+  },
+  "limits": [
+    "Linux filesystem with flock and user xattr support; cooperation does not sandbox arbitrary external writers.",
+    "Existing bounded worker workspace limits apply: 4096 files, 128 MiB total, no symlinks or .git directory; exported directory or worktree pointer only.",
+    "Generated worker plan maximum prompt is 32000 UTF-8 bytes. Unsupported oversized task context is not silently truncated.",
+    "Portable handoff requires every scoped file to exist after execution, at most 32 files and 2 MiB encoded bundle. No automatic apply/merge/deploy, test verification, independent reviewer execution, completion claim or uncertain recovery.",
+    "A truncated task listing is a visible error; this listener is not an unbounded fleet queue.",
+    "Network retries are bounded by the invocation; pending durable publications remain available to a later explicit invocation."
+  ]
+}
