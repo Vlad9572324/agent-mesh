@@ -303,8 +303,8 @@ async function refreshTab(tab) {
 async function unread(tab, selector, count, active) {
   await tab.wait(`(()=>{const e=document.querySelector(${js(selector)});return e&&e.dataset.unread===${js(String(count))}${active === undefined ? '' : `&&e.dataset.active===${js(String(active))}`};})()`, `navigation count ${count}`);
 }
-async function readMarker(name, seq) {
-  await viewer.wait(async () => (await navigationChannel(name)).last_read_seq === seq, 'persisted visible read position');
+async function readMarker(name, seq, actor = 'viewer') {
+  await viewer.wait(async () => (await navigationChannel(name, actor)).last_read_seq === seq, 'persisted visible read position');
 }
 async function deliverySnapshot() {
   return (await sql(`SET search_path TO "${schema}"; SELECT json_build_object('native',(SELECT json_agg(n ORDER BY id) FROM native_activity n),'receipts',(SELECT json_agg(r ORDER BY message_id,agent_id) FROM receipts r))::text;`, 'delivery-state')).toString().trim();
@@ -352,7 +352,7 @@ async function sidebarCases() {
     assert((await navigationChannel('beta')).last_read_seq === 0 && (await navigationChannel('other-channel')).last_read_seq === 0, 'Reading one channel cleared another');
     assert(await deliverySnapshot() === receiptsBefore, 'GUI read changed CLI activity or agent delivery receipts');
   });
-  await check('search and scrolled-away chat retain unread messages until the unfiltered bottom is visible', async () => {
+  await check('search scroll overlays and older snapshots preserve accurate unread messages', async () => {
     await viewer.fill('search-input', 'missing-search-result');
     const filtered = await discussion('alpha', 'Message hidden by search');
     await refreshTab(viewer); await pause(250);
@@ -370,6 +370,47 @@ async function sidebarCases() {
     await unread(viewer, channelButton('alpha'), 1, true);
     await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=e.scrollHeight;e.dispatchEvent(new Event('scroll'));})()`);
     await readMarker('alpha', below.seq); lastAlpha = below;
+    // Exercise the existing modal overlay over a loaded chat without publishing
+    // a note. Its normal notes-view entry point already hides the discussion.
+    await writer.click(channelButton('alpha')); await readMarker('alpha', lastAlpha.seq, 'writer');
+    await writer.eval(`document.getElementById('new-note-button').click()`);
+    const covered = await discussion('alpha', 'New message behind an open modal');
+    await writer.wait(`document.getElementById('note-dialog').open && !!document.querySelector('#message-list [data-message-id="${covered.id}"]')`, 'message loaded behind modal', 12000);
+    await pause(250);
+    assert((await navigationChannel('alpha', 'writer')).last_read_seq === lastAlpha.seq, 'Modal-covered chat was marked read');
+    await writer.click('#note-cancel'); await readMarker('alpha', covered.seq, 'writer');
+    assert((await navigationChannel('alpha')).last_read_seq === lastAlpha.seq, 'Another account or background tab cleared viewer unread state');
+    await viewer.call('Page.bringToFront'); await readMarker('alpha', covered.seq); lastAlpha = covered;
+    await viewer.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
+    await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=e.scrollHeight;e.dispatchEvent(new Event('scroll'));})()`);
+    await viewer.click('#sidebar-toggle');
+    const menuCovered = await discussion('alpha', 'New message behind mobile navigation');
+    await viewer.wait(`document.body.classList.contains('nav-open') && !!document.querySelector('#message-list [data-message-id="${menuCovered.id}"]')`, 'message loaded behind navigation', 12000);
+    await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=e.scrollHeight;e.dispatchEvent(new Event('scroll'));})()`);
+    await pause(250);
+    assert((await navigationChannel('alpha')).last_read_seq === lastAlpha.seq, 'Mobile-menu-covered chat was marked read');
+    for (const type of ['keyDown', 'keyUp']) await viewer.call('Input.dispatchKeyEvent', {type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27});
+    await readMarker('alpha', menuCovered.seq); lastAlpha = menuCovered;
+    await viewer.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
+    await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=0;e.dispatchEvent(new Event('scroll'));})()`);
+    const raced = await discussion('alpha', 'Unread snapshot intentionally held behind a newer acknowledgement');
+    await refreshTab(viewer); await unread(viewer, channelButton('alpha'), 1, true);
+    // Delay bytes from a real earlier GET after the server has answered. The
+    // newer read response must remain authoritative even if cancellation loses.
+    await viewer.eval(`(()=>{const original=window.fetch.bind(window);let hold=true;window.__heldNavigationReady=false;
+      window.fetch=async(input,init)=>{const url=new URL(typeof input==='string'?input:input.url,location.href);
+        const selected=hold&&url.pathname==='/v1/navigation';if(selected)hold=false;
+        const response=await original(input,init);if(!selected)return response;
+        const bytes=await response.arrayBuffer(),status=response.status,headers=[...response.headers];
+        window.__heldNavigationReady=true;return new Promise(resolve=>{window.__releaseNavigation=()=>{window.__releaseNavigation=null;resolve(new Response(bytes,{status,headers}));};});};})()`);
+    await viewer.click('#refresh-button'); await viewer.wait('window.__heldNavigationReady===true', 'real old navigation response held');
+    await viewer.eval(`(()=>{const e=document.getElementById('message-list');e.scrollTop=e.scrollHeight;e.dispatchEvent(new Event('scroll'));})()`);
+    await readMarker('alpha', raced.seq); await unread(viewer, channelButton('alpha'), 0, true);
+    await viewer.eval(`(()=>{window.__staleUnreadRestored=false;window.__navigationObserver=new MutationObserver(()=>{if(Number(document.querySelector(${js(channelButton('alpha'))})?.dataset.unread)>0)window.__staleUnreadRestored=true;});
+      window.__navigationObserver.observe(document.getElementById('channel-list'),{childList:true,subtree:true,attributes:true,attributeFilter:['data-unread']});window.__releaseNavigation();})()`);
+    await pause(350);
+    assert(await viewer.eval(`!window.__staleUnreadRestored && document.querySelector(${js(channelButton('alpha'))}).dataset.unread==='0'`), 'Older navigation snapshot restored a cleared unread badge');
+    await viewer.eval('window.__navigationObserver.disconnect()'); lastAlpha = raced;
     assert(await deliverySnapshot() === receiptsBefore, 'GUI read synthesized agent acceptance');
   });
   await check('read state survives login and historical activity is distinct from unread messages', async () => {
@@ -523,7 +564,7 @@ try {
 } catch (error) {
   if (!report.cases.some(item => !item.passed)) report.cases.push({name: 'infrastructure', passed: false, error: safeError(error)});
 } finally {
-  for (const tab of tabs) { try { await tab.eval(`document.getElementById('logout-button')?.click()`); } catch {} tab.close(); }
+  for (const tab of tabs) { try { await tab.eval(`window.__releaseNavigation?.();document.getElementById('logout-button')?.click()`); } catch {} tab.close(); }
   if (browserCDP) { try { await browserCDP.call('Browser.close'); } catch {} browserCDP.close(); }
   report.owned_browser_stopped = await stopChild(browser);
   report.owned_server_stopped = await stopChild(server);
