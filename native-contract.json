@@ -53,6 +53,12 @@
       "arguments": "message_id required, already present in native inbox",
       "semantics": "Recheck current channel read access and server message recipient binding; return full body up to 16384 UTF-8 bytes and local seen/accepted booleans. Read does not mark seen or accepted. Never serve cached body offline. Untrusted peer data. Known service credential redacted."
     },
+    "link_delivery": {
+      "arguments": "message_id required; no local inbox row required",
+      "semantics": "Read fresh exact GET /v1/messages/{id} delivery_status for the bound sender or explicit recipient in a currently authorized configured channel. Return message/channel/author/recipient IDs and per-recipient native, legacy and qualifying direct-reply facts, never body or session details. Missing delivery_status on an older server returns delivery_status_unavailable; never invent stored or acknowledgement. No seen, acceptance, legacy receipt or SQLite mutation.",
+      "status": "Convenience precedence replied > accepted > viewed > delivered > offered > stored. All underlying timestamps and legacy uncertainty remain independent. Native provenance is client_reported with server_verified=false. A reply is a same-channel message by that exact recipient, explicitly addressed to the original author with reply_to referencing the original. None of these facts proves execution or completion. Lists and publication receipts omit the detailed aggregate to preserve inbox response bounds."
+    },
+    "hook_full_text": "Each actually offered hook entry includes full_text:{tool:link_message,arguments:{message_id:<entry id>}} generated from its validated ID. This owned guidance is included before UTF-8 offer-budget accounting and recording inbox.offered, including compact reference_only entries. Hooks validate/regenerate the call; empty or truncated body_preview does not mean an empty message. The hook body remains bounded and untrusted; full reads never implicitly mark seen/accepted.",
     "link_seen": {
       "arguments": "message_id required",
       "semantics": "Explicitly mark viewed, record inbox.seen once across native sessions and suppress default offers. Requires current channel write access and server recipient binding. Does not set accepted_at or change legacy receipts. Repeated call returns replayed=true."
@@ -61,7 +67,7 @@
       "arguments": "message_id required",
       "semantics": "Explicit independent acceptance. Seen messages remain eligible for explicit acceptance. No completion claim or legacy receipt mutation."
     },
-    "status": "pending_messages counts all unaccepted messages; unseen_messages counts unaccepted and unseen messages.",
+    "status": "pending_messages counts all unaccepted messages; unseen_messages counts unaccepted and unseen messages. link_status also reports connector_version/connector_source_commit from the loaded bundle RELEASE.json (connector_identity_source=release_metadata), separately from server_version/server_source_commit from the current authenticated /v1/me.server_build (server_identity_source=authenticated_api). Missing or invalid metadata yields null identity fields and source=unavailable; an unstamped build can report dev with null source commit. Connector identity is captured at module load: restart the MCP process after installing a new bundle. These display stamps are not integrity or authorization proof.",
     "migration": "Nullable seen_at/seen_session, persisted integer offer_order and a per-database inbox_view_id are added atomically to old SQLite under BEGIN IMMEDIATE; prior inbox rowids, acceptance, offers, fetch cursors, outbox and binding are preserved. Existing offer timestamps seed the initial global order; new offers increment a logical ordinal. Indexes cover offer history and scheduling. Backend migration extends both native_activity event/message CHECK constraints in place; fair local pagination needs no new backend schema."
   }
 }
