@@ -56,7 +56,7 @@ func deliveryTestReport(f *fixture, message, actor, client, event string) map[st
 }
 func deliveryTestReply(f *fixture, client, actor, channel, original string, recipients []string) string {
 	f.t.Helper()
-	return f.expect("POST", "/v1/channels/"+channel+"/messages", actor, map[string]any{"client_id": client, "body": "private fixture reply", "recipient_ids": recipients, "reply_to": original}, 201)["message"].(map[string]any)["id"].(string)
+	return f.expect("POST", "/v1/channels/"+channel+"/messages", actor, map[string]any{"client_id": client, "body": "private fixture reply", "recipient_ids": recipients, "channel_only": len(recipients) == 0, "reply_to": original}, 201)["message"].(map[string]any)["id"].(string)
 }
 
 func TestDeliveryPolicyPersistenceCutoffCASAndValidation(t *testing.T) {

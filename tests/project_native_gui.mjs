@@ -6,6 +6,7 @@
 // Owner deadline regression: node tests/project_native_gui.mjs --delivery-alerts-only
 // Titled document upload regression: node tests/project_native_gui.mjs --documents-only
 // Focused sender receipt regression: node tests/project_native_gui.mjs --receipts-only
+// Explicit message addressing: node tests/project_native_gui.mjs --addressing-only
 import {readFile, writeFile, mkdtemp, mkdir, copyFile, rm, open, lstat} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
@@ -22,20 +23,21 @@ const quietOnly = process.argv.includes('--quiet-only');
 const receiptsOnly = process.argv.includes('--receipts-only');
 const deliveryOnly = process.argv.includes('--delivery-alerts-only');
 const documentsOnly = process.argv.includes('--documents-only');
-if ([quietOnly, receiptsOnly, deliveryOnly, documentsOnly].filter(Boolean).length > 1) throw new Error('Choose one focused browser suite');
+const addressingOnly = process.argv.includes('--addressing-only');
+if ([quietOnly, receiptsOnly, deliveryOnly, documentsOnly, addressingOnly].filter(Boolean).length > 1) throw new Error('Choose one focused browser suite');
 const technicalTypes = new Set(['session.started', 'session.ended', 'turn.started', 'turn.completed',
   'tool.started', 'tool.completed', 'agent.waiting', 'inbox.offered']);
 const quietTechnical = [], quietImportant = [];
 const runtime = runtimeDir(), chrome = browserExecutable(), caPath = certificateFile();
 const run = `project-native-${randomUUID().slice(0, 8)}`;
 const schema = `project_native_gui_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
-const ids = Object.fromEntries(['owner', 'writer', 'peer', 'viewer', 'project', 'other', 'alpha', 'beta', 'quiet', 'private', 'other-channel'].map(name => [name, `${run}-${name}`]));
+const ids = Object.fromEntries(['owner', 'writer', 'peer', 'second', 'viewer', 'project', 'other', 'alpha', 'beta', 'quiet', 'private', 'other-channel'].map(name => [name, `${run}-${name}`]));
 const readPaths = new Set(['alpha', 'beta', 'quiet', 'other-channel'].map(name => `/v1/channels/${ids[name]}/read`));
-const allowedBrowserRequest = item => item.method === 'GET' || documentsOnly && item.tab === 'writer' && item.method === 'POST' && item.path === `/v1/projects/${ids.project}/artifacts` || deliveryOnly && item.tab === 'owner' && item.method === 'PUT' && item.path === '/v1/admin/delivery-policy' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
+const allowedBrowserRequest = item => item.method === 'GET' || addressingOnly && item.tab === 'writer' && item.method === 'POST' && item.path === `/v1/channels/${ids.alpha}/messages` || documentsOnly && item.tab === 'writer' && item.method === 'POST' && item.path === `/v1/projects/${ids.project}/artifacts` || deliveryOnly && item.tab === 'owner' && item.method === 'PUT' && item.path === '/v1/admin/delivery-policy' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
 const report = {run, schema, database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
   browser_errors: [], requests: [], layouts: [], screenshots: [], models_started: 0,
   scope: 'Owned isolated schema, loopback TLS API and Chromium; no shared fixture keys or production requests'};
-report.mode = documentsOnly ? 'documents' : deliveryOnly ? 'delivery-alerts' : receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
+report.mode = addressingOnly ? 'addressing' : documentsOnly ? 'documents' : deliveryOnly ? 'delivery-alerts' : receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
 const tabs = [], keys = {}, secrets = new Set(), publicEvents = [], privateEvents = [];
 const js = JSON.stringify, pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -147,19 +149,19 @@ async function message(channel = 'alpha', body = 'Isolated meaningful message', 
   }, actor, 201)).message;
 }
 async function fixtures() {
-  for (const actor of ['writer', 'peer', 'viewer']) {
+  for (const actor of ['writer', 'peer', 'viewer', ...(addressingOnly ? ['second'] : [])]) {
     await api('/v1/admin/principals', 'POST', {id: ids[actor], name: actor === 'writer' ? actorName : ids[actor], kind: actor === 'viewer' ? 'viewer' : 'agent', runtime: 'browser-fixture-no-model'}, 'owner', 201);
     keys[actor] = (await api(`/v1/admin/principals/${ids[actor]}/rotate-key`, 'POST', {})).key; secrets.add(keys[actor]);
   }
   for (const name of ['project', 'other']) await api('/v1/admin/projects', 'POST', {id: ids[name], name: ids[name]}, 'owner', 201);
   for (const name of ['alpha', 'beta', 'quiet', 'private', 'other-channel']) await api('/v1/admin/channels', 'POST', {id: ids[name], name: ids[name], project_id: ids[name === 'other-channel' ? 'other' : 'project']}, 'owner', 201);
-  for (const actor of ['writer', 'peer', 'viewer']) {
+  for (const actor of ['writer', 'peer', 'viewer', ...(addressingOnly ? ['second'] : [])]) {
     const access = actor === 'viewer' ? 'read' : 'write';
     for (const name of ['project', 'other']) await grant(actor, 'project', name, access);
     for (const name of ['alpha', 'beta', 'quiet', 'other-channel']) await grant(actor, 'channel', name, access);
   }
   await grant('writer', 'channel', 'private', 'write');
-  if (receiptsOnly || deliveryOnly || documentsOnly) return;
+  if (receiptsOnly || deliveryOnly || documentsOnly || addressingOnly) return;
   oldQuiet = await activity('session.ended', 'quiet', 'peer');
   // Backdate only this owned schema's fixture to check stale-event truthfulness
   // without waiting five minutes or altering production/browser wall clocks.
@@ -276,7 +278,7 @@ async function login(tab, actor) {
   await project(tab);
   // The historical regression deliberately inspects every archived event.
   // The quiet regression keeps the product's default until testing the toggle.
-  if (!quietOnly && !receiptsOnly && !deliveryOnly && !documentsOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
+  if (!quietOnly && !receiptsOnly && !deliveryOnly && !documentsOnly && !addressingOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
 }
 async function project(tab, name = 'project') {
   await tab.click(`#project-switcher [data-focus-key="project:${ids[name]}"]`);
@@ -301,6 +303,88 @@ async function screenshot(tab, label, width) {
 async function stopChild(child) {
   for (const signal of ['SIGTERM', 'SIGKILL']) if (child?.pid && child.exitCode === null && child.signalCode === null) { child.kill(signal); await Promise.race([new Promise(resolveExit => child.once('exit', resolveExit)), pause(2500)]); }
   return !child || !child.pid || child.exitCode !== null || child.signalCode !== null;
+}
+
+async function addressingCases() {
+  const path = `/v1/channels/${ids.alpha}/messages`;
+  const selected = `Array.from(document.querySelectorAll('#recipient-list input:checked')).map(e=>e.value)`;
+  const input = actor => `#recipient-list input[value="${ids[actor]}"]`;
+  const postCount = () => writer.requests.filter(item => item.method === 'POST').length;
+  const chat = async (tab, name = 'alpha') => {
+    await tab.click(`#channel-list [data-focus-key="channel:${ids[name]}"]`);
+    await tab.wait(`!document.getElementById('chat-panel').hidden && !document.getElementById('refresh-button').disabled`, 'chat ready');
+  };
+  let parent, ownMessage;
+  await check('default composer refuses empty recipients without a POST; reader roles cannot compose', async () => {
+    await isolatedServer(); await fixtures();
+    parent = await message('alpha', 'Original peer message'); ownMessage = await message('alpha', 'Original own message', 'writer');
+    await browsers();
+    for (const tab of tabs) await chat(tab);
+    assert(await viewer.eval(`document.getElementById('composer-form').hidden`) && await owner.eval(`document.getElementById('composer-form').hidden`), 'Reader can compose');
+    await writer.filter('language-select', 'en'); await writer.fill('message-input', 'Unaddressed draft'); await writer.click('#send-button');
+    await writer.wait(`document.getElementById('send-status').textContent.includes('Choose a recipient')`, 'empty recipient validation');
+    assert(postCount() === 0 && await writer.eval(`!document.getElementById('channel-only').checked && ${selected}.length===0`), 'Empty draft published or mode implicit');
+  });
+  await check('explicit channel-only publication is bilingual and stores exactly zero recipients', async () => {
+    await writer.click('#channel-only');
+    for (const language of ['ru', 'en']) {
+      await writer.filter('language-select', language);
+      const state = await writer.eval(`({label:document.querySelector('label[for="channel-only"]').textContent,warning:document.getElementById('channel-only-warning').textContent,visible:!document.getElementById('channel-only-warning').hidden,disabled:document.getElementById('recipient-fieldset').disabled,body:document.getElementById('message-input').value})`);
+      assert(state.visible && state.disabled && state.body === 'Unaddressed draft', 'Mode warning or draft lost');
+      assert(language === 'ru' ? /только в канал/.test(state.label) && /не попадёт во входящие/.test(state.warning) : /channel only/.test(state.label) && /will not enter/.test(state.warning), 'Mode is not localized');
+    }
+    await writer.click('#send-button');
+    await writer.wait(`document.getElementById('send-status').textContent.includes('Published to the channel only') && !document.getElementById('send-button').disabled`, 'channel publication confirmed');
+    const saved = (await api(`${path}?after_seq=0&limit=100`)).messages.filter(item => item.body === 'Unaddressed draft');
+    assert(saved.length === 1 && saved[0].recipient_ids.length === 0 && !saved[0].reply_to, 'Channel publication was addressed or duplicated');
+    assert(await writer.eval(`!document.getElementById('channel-only').checked && document.getElementById('message-input').value==='' && ${selected}.length===0`), 'Successful publication did not reset mode');
+  });
+  await check('actual Reply button selects the visible peer and stores a directed reply', async () => {
+    await writer.click(`[data-focus-key="reply:${parent.id}"]`);
+    assert(await writer.eval(`document.getElementById('reply-to').value===${js(parent.id)} && JSON.stringify(${selected})===${js(JSON.stringify([ids.peer]))}`), 'Reply did not prefill exact peer');
+    await writer.fill('message-input', 'Directed reply from browser'); await writer.click('#send-button');
+    await writer.wait(`document.getElementById('send-status').textContent.includes('does not confirm viewing or acceptance') && !document.getElementById('send-button').disabled`, 'addressed storage status');
+    const saved = (await api(`${path}?after_seq=0&limit=100`)).messages.filter(item => item.body === 'Directed reply from browser');
+    assert(saved.length === 1 && saved[0].reply_to === parent.id && JSON.stringify(saved[0].recipient_ids) === JSON.stringify([ids.peer]), 'Reply targets or parent changed');
+    assert(postCount() === 2, 'Unexpected extra message write');
+  });
+  await check('manual recipients survive reply selection; channel changes clear intent and suggestions', async () => {
+    await writer.click(input('second')); await writer.click(`[data-focus-key="reply:${parent.id}"]`);
+    assert(await writer.eval(`JSON.stringify(${selected})===${js(JSON.stringify([ids.second]))}`), 'Reply overwrote manual recipient');
+    await writer.filter('reply-to', ownMessage.id);
+    assert(await writer.eval(`JSON.stringify(${selected})===${js(JSON.stringify([ids.second]))}`), 'Own reply silently targets self or replaces manual recipient');
+    await writer.click(input('second')); await writer.filter('reply-to', parent.id);
+    assert(await writer.eval(`JSON.stringify(${selected})===${js(JSON.stringify([ids.peer]))}`), 'Reply dropdown did not suggest peer');
+    await writer.click('#channel-only'); await writer.fill('message-input', 'Unsent channel mode draft'); await chat(writer, 'beta');
+    assert(await writer.eval(`!document.getElementById('channel-only').checked && ${selected}.length===0 && document.getElementById('reply-to').value==='' && document.getElementById('message-input').value===''`), 'Cross-channel draft or mode survived');
+    await chat(writer); assert(postCount() === 2, 'Switching context published a message');
+  });
+  await check('recipient ACL revocation removes selection and cannot degrade a reply into channel publication', async () => {
+    await writer.click(input('peer')); await writer.fill('message-input', 'ACL-sensitive unsent draft');
+    await grant('peer', 'channel', 'alpha', 'none'); await writer.click('#refresh-button');
+    await writer.wait(`!document.querySelector(${js(input('peer'))}) && !document.getElementById('refresh-button').disabled`, 'revoked recipient removed', 12000);
+    assert(await writer.eval(`${selected}.length===0 && document.getElementById('message-input').value==='ACL-sensitive unsent draft'`), 'Revoked recipient kept or body discarded');
+    await writer.click(`[data-focus-key="reply:${parent.id}"]`); await writer.click('#send-button');
+    await writer.wait(`document.getElementById('send-status').textContent.includes('Choose a recipient')`, 'unavailable reply author blocked');
+    assert(postCount() === 2, 'Stale ACL or missing reply author published');
+    await grant('peer', 'channel', 'alpha', 'write');
+  });
+  await check('bilingual mobile addressing controls fit and logout clears all unpublished intent', async () => {
+    await writer.click('#channel-only');
+    await writer.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 1000, deviceScaleFactor: 1, mobile: true});
+    for (const language of ['ru', 'en']) {
+      await writer.filter('language-select', language);
+      assert(await writer.eval(`document.documentElement.scrollWidth<=innerWidth+1 && document.getElementById('channel-only').checked`), 'Addressing mobile overflow or language change cleared intent');
+    }
+    await screenshot(writer, 'addressing-mobile-390', 390);
+    await writer.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
+    for (const tab of tabs) {
+      await tab.click('#logout-button');
+      await tab.wait(`!document.getElementById('login-panel').hidden && !document.getElementById('channel-only').checked && document.getElementById('recipient-list').textContent==='' && document.getElementById('message-input').value==='' && localStorage.length===0 && sessionStorage.length===0`, 'logout clears addressing');
+    }
+    assert(postCount() === 2 && !report.browser_guard_failed && report.browser_errors.length === 0, 'Browser safety or runtime failure');
+    assert(report.requests.every(allowedBrowserRequest), 'Unexpected browser mutation');
+  });
 }
 
 async function documentCases() {
@@ -699,7 +783,9 @@ async function quietCases() {
 }
 
 try {
-  if (documentsOnly) {
+  if (addressingOnly) {
+    await addressingCases();
+  } else if (documentsOnly) {
     await documentCases();
   } else if (deliveryOnly) {
     await deliveryCases();
@@ -837,7 +923,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === (documentsOnly ? 6 : deliveryOnly ? 7 : receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === (addressingOnly ? 6 : documentsOnly ? 6 : deliveryOnly ? 7 : receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/project-native-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});

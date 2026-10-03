@@ -78,7 +78,7 @@ const projectPath = suffix => `/v1/projects/${ids.project}/${suffix}`;
 const grant = (actor, scope, resource, access) => api('/v1/admin/access', 'PUT', {agent_id: ids[actor], scope, resource_id: ids[resource], access});
 async function postMessage(label, body = `Visible fixture message ${label}`, channel = 'channel') {
   return (await api(`/v1/channels/${ids[channel]}/messages`, 'POST', {client_id: `${run}-${label}`, body,
-    recipient_ids: channel === 'channel' ? [ids.writer] : []}, 'peer', 201)).message;
+    recipient_ids: channel === 'channel' ? [ids.writer] : [], channel_only: channel !== 'channel'}, 'peer', 201)).message;
 }
 async function taskEvent(type, target = task, extra = {}, actor = 'writer') {
   const current = (await api(projectPath(`tasks/${target.id}`), 'GET', undefined, 'writer')).task;

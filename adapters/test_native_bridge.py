@@ -7,6 +7,7 @@ import json
 import queue
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 import native_bridge as native
@@ -59,6 +60,7 @@ class FakeAPI(hook_tests.FakeNativeAPI):
                 record = {"id": "sent-" + path.split("/")[3] + "-" + body["client_id"], "channel_id": path.split("/")[3],
                           "author_id": "a", "seq": len(self.published) + 1, **copy.deepcopy(body)}
                 record.pop("client_id")
+                record.pop("channel_only", None)
                 response = {"message": record, "replayed": False}
             elif path.endswith("/artifacts"):
                 record = {"id": "artifact-" + body["client_id"], "project_id": "p", "author_id": "a",
@@ -138,6 +140,107 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(result["publication_state"], "sent")
         with self.assertRaisesRegex(native.NativeError, "conflict"):
             resumed.send("c", ["b"], "different", client_id="send-1")
+        self.assertEqual(len(self.api.published), 1)
+
+    def test_new_send_requires_addressees_before_network_or_outbox(self):
+        bridge = self.bridge()
+        for recipients in (None, []):
+            with self.subTest(recipients=recipients):
+                with self.assertRaisesRegex(native.NativeError, "recipient_ids_required_use_link_broadcast"):
+                    bridge.send("c", recipients, "hello")
+        self.assertEqual(self.api.calls, [])
+        self.assertEqual(bridge.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
+
+    def test_reply_infers_only_author_without_local_offer_or_acknowledgement(self):
+        self.api.messages = [self.message(recipient_ids=["a", "other-peer"])]
+        bridge = self.bridge()
+        for identity, recipients in (("omitted", None), ("empty", [])):
+            result = bridge.send("c", recipients, "reply", reply_to="m1", client_id=identity)
+            self.assertEqual(result["publication_state"], "sent")
+            self.assertEqual(result["result"]["message"]["recipient_ids"], ["b"])
+        self.assertEqual(len([call for call in self.api.calls if call[:2] == ("GET", "/v1/messages/m1")]), 2)
+        self.assertEqual(bridge.db.execute("SELECT count(*) FROM inbox").fetchone()[0], 0)
+        self.assertEqual(self.api.activity, {})
+
+    def test_reply_inference_validates_identity_channel_author_and_current_access(self):
+        bridge = self.bridge()
+        for changes in ({"id": "other"}, {"channel_id": "d"}, {"author_id": None}, {"author_id": "a"}):
+            with self.subTest(changes=changes):
+                original = self.api.request
+                def request(method, path, body=None, **kwargs):
+                    if (method, path) == ("GET", "/v1/messages/m1"):
+                        return {"message": self.message(**changes)}
+                    return original(method, path, body, **kwargs)
+                with patch.object(self.api, "request", side_effect=request), self.assertRaises(native.NativeError):
+                    bridge.send("c", body="reply", reply_to="m1")
+        self.api.channels["c"] = False
+        self.api.calls.clear()
+        with self.assertRaisesRegex(native.NativeError, "not_authorized"):
+            bridge.send("c", body="reply", reply_to="m1")
+        self.assertFalse(any(path == "/v1/messages/m1" for _, path, _ in self.api.calls))
+        self.assertEqual(bridge.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
+        self.assertEqual(self.api.published, {})
+
+    def test_explicit_reply_preserves_addressees_and_broadcast_never_infers(self):
+        bridge = self.bridge()
+        result = bridge.send("c", ["chosen"], "reply", reply_to="m1", client_id="explicit")
+        self.assertEqual(result["result"]["message"]["recipient_ids"], ["chosen"])
+        result = bridge.broadcast("c", "channel note", reply_to="m1", client_id="channel-only")
+        self.assertEqual(result["result"]["message"]["recipient_ids"], [])
+        self.assertNotIn("channel_only", result["result"]["message"])
+        self.assertFalse(any(path == "/v1/messages/m1" for _, path, _ in self.api.calls))
+        posted = self.api.published[("/v1/channels/c/messages", "channel-only")][0]
+        self.assertTrue(posted["channel_only"])
+        self.assertEqual(posted["reply_to"], "m1")
+
+    def test_inferred_reply_lost_ack_keeps_original_author_across_restart(self):
+        self.api.messages = [self.message()]
+        bridge = self.bridge()
+        self.api.lose_next_ack = True
+        with self.assertRaises(native.NativeError):
+            bridge.send("c", body="reply", reply_to="m1", client_id="reply-1")
+        bridge.close()
+        resumed = self.bridge()
+        # Even a contradictory remote response cannot retarget an already queued reply.
+        self.api.messages[0]["author_id"] = "different"
+        with self.assertRaisesRegex(native.NativeError, "conflict"):
+            resumed.send("c", body="reply", reply_to="m1", client_id="reply-1")
+        self.assertEqual(resumed.flush()["sent"], 1)
+        posted = [body for method, path, body in self.api.calls if method == "POST" and path.endswith("/messages")]
+        self.assertEqual(len(posted), 2)
+        self.assertEqual(posted[0], posted[1])
+        self.assertEqual(posted[0]["recipient_ids"], ["b"])
+        self.assertEqual(len(self.api.published), 1)
+
+    def test_broadcast_lost_ack_exact_retry_and_receipt_binding(self):
+        bridge = self.bridge()
+        self.api.lose_next_ack = True
+        with self.assertRaises(native.NativeError):
+            bridge.broadcast("c", "channel note", client_id="broadcast-1")
+        bridge.close()
+        resumed = self.bridge()
+        result = resumed.broadcast("c", "channel note", client_id="broadcast-1")
+        self.assertEqual(result["publication_state"], "sent")
+        with self.assertRaisesRegex(native.NativeError, "conflict"):
+            resumed.send("c", ["b"], "channel note", client_id="broadcast-1")
+        self.assertEqual(len(self.api.published), 1)
+        self.api.corrupt_receipt = lambda value: value["message"].update(recipient_ids=["b"])
+        with self.assertRaisesRegex(native.NativeError, "receipt"):
+            resumed.broadcast("c", "bad receipt", client_id="broadcast-2")
+        self.assertEqual(resumed.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0], 1)
+
+    def test_legacy_pending_channel_only_payload_replays_without_rewriting_intent(self):
+        bridge = self.bridge()
+        # Seed the unchanged payload that an earlier connector committed before losing its ACK.
+        old = {"body": "historical note", "recipient_ids": [], "reply_to": None, "client_id": "old-send"}
+        self.api.lose_next_ack = True
+        with self.assertRaises(native.NativeError):
+            bridge._publish("message", "/v1/channels/c/messages", old, channel="c")
+        bridge.close()
+        resumed = self.bridge()
+        self.assertEqual(resumed.flush()["sent"], 1)
+        posted = [body for method, path, body in self.api.calls if method == "POST" and path.endswith("/messages")]
+        self.assertEqual(posted, [old, old])
         self.assertEqual(len(self.api.published), 1)
 
     def test_same_client_id_in_two_paths_preserves_distinct_outbox_records(self):

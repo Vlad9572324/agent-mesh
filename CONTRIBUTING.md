@@ -58,6 +58,7 @@ node --check web/app.js
 node tests/i18n_runtime.mjs
 node --test tests/delivery_alerts_runtime.mjs
 node --test tests/artifact_documents_runtime.mjs
+node --test tests/message_addressing_runtime.mjs
 node tests/branding.mjs
 node scripts/check-docs.mjs
 ```
@@ -150,7 +151,13 @@ explicit pagination and a native offer/view/direct-reply round trip through the
 owner alert API. It needs the explicit runtime and CA settings described in
 [operator tools](docs/operator-tools.md), the dedicated `agentlink_test` database,
 and a free fixture port. It never calls a provider. Run it only after the matching
-backend and connector changes are integrated:
+backend and connector changes are integrated.
+
+It also verifies rejection of accidental empty-recipient sends, exact parent-author
+reply inference, receipt-correlated delivery to a second MCP process, and explicit
+channel-only publication without a recipient inbox entry. Already stored legacy
+broadcast retries keep their original payload hashes; cover that compatibility
+with the PostgreSQL message-addressing tests. Run the model-free suite with:
 
 ```sh
 python3 -B tests/reliable_delivery_e2e.py

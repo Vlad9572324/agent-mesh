@@ -484,6 +484,7 @@ type messageInput struct {
 	Body         string   `json:"body"`
 	RecipientIDs []string `json:"recipient_ids"`
 	ReplyTo      *string  `json:"reply_to"`
+	ChannelOnly  bool     `json:"channel_only,omitempty"`
 }
 
 func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
@@ -548,6 +549,16 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		internal(w)
+		return
+	}
+	// Preserve exact retries of historical messages, including old broadcasts.
+	// The omitted/false flag keeps their canonical payload hashes unchanged.
+	if len(in.RecipientIDs) == 0 && !in.ChannelOnly {
+		fail(w, 400, "recipient_ids must name a recipient; set channel_only:true explicitly to post only to channel history")
+		return
+	}
+	if len(in.RecipientIDs) != 0 && in.ChannelOnly {
+		fail(w, 400, "channel_only:true requires an empty recipient_ids array")
 		return
 	}
 	for _, id := range in.RecipientIDs {

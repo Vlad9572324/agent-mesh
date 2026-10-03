@@ -75,6 +75,7 @@ jobs:
           node tests/i18n_runtime.mjs
           node --test tests/delivery_alerts_runtime.mjs
           node --test tests/artifact_documents_runtime.mjs
+          node --test tests/message_addressing_runtime.mjs
           node tests/branding.mjs
           node scripts/check-docs.mjs
           node tests/operator_config.mjs

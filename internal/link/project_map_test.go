@@ -97,7 +97,7 @@ func TestProjectMapScopeReferencesAndMetadataOnly(t *testing.T) {
 	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "map-private-agent", "name": "Hidden account", "kind": "agent", "runtime": "fixture"}, 201)
 	f.access("map-private-agent", "project", "pilot", "read", 200)
 	f.access("map-private-agent", "channel", "map-private", "read", 200)
-	hiddenMessage := f.expect("POST", "/v1/channels/map-private/messages", "claude-pilot", map[string]any{"client_id": "map-hidden-message", "body": privateBody, "recipient_ids": []string{}}, 201)["message"].(map[string]any)
+	hiddenMessage := f.expect("POST", "/v1/channels/map-private/messages", "claude-pilot", map[string]any{"client_id": "map-hidden-message", "body": privateBody, "recipient_ids": []string{}, "channel_only": true}, 201)["message"].(map[string]any)
 	hiddenNative := f.expect("POST", "/v1/channels/map-private/activity", "claude-pilot", nativeInput("map-private-event", "turn.started"), 201)["activity"].(map[string]any)
 	f.expect("POST", "/v1/projects/pilot/sessions", "claude-pilot", coordinationSessionInput("map-private-session", "map-private"), 201)
 	// Simulate a historical note reference whose source channel is now hidden.
@@ -207,7 +207,7 @@ func TestProjectMapSuppressesMalformedReferences(t *testing.T) {
 	f.expect("POST", "/v1/admin/channels", "owner", map[string]any{"id": "map-other-visible", "name": "Other visible channel", "project_id": "pilot"}, 201)
 	f.access("codex-pilot", "channel", "map-other-visible", "write", 200)
 	f.access("viewer-pilot", "channel", "map-other-visible", "read", 200)
-	otherMessage := f.expect("POST", "/v1/channels/map-other-visible/messages", "codex-pilot", map[string]any{"client_id": "map-other-visible-message", "body": "fixture", "recipient_ids": []string{}}, 201)["message"].(map[string]any)["id"]
+	otherMessage := f.expect("POST", "/v1/channels/map-other-visible/messages", "codex-pilot", map[string]any{"client_id": "map-other-visible-message", "body": "fixture", "recipient_ids": []string{}, "channel_only": true}, 201)["message"].(map[string]any)["id"]
 	// These malformed references are injected only into this test's owned schema.
 	// Both endpoints remain visible, so sampling/ACL filtering cannot mask a false relation.
 	if _, err := f.s.Pool.Exec(ctx, `UPDATE native_activity SET message_id=$2 WHERE id=$1`, native, otherMessage); err != nil {

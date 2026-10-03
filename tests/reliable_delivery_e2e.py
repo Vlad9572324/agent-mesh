@@ -29,7 +29,7 @@ class ReliableDeliverySmoke(NativeSmoke):
     def runner(self, *args, **kwargs):
         raise AssertionError('This suite cannot dispatch a model job')
 
-    def mcp(self, name, arguments, runtime='codex'):
+    def mcp(self, name, arguments, runtime='codex', *, expected_error=None):
         # Each call is a real fresh stdio process/session. Inbox state remains
         # shared, proving that fair selection survives process boundaries.
         config, _ = self.configs[runtime]
@@ -49,6 +49,10 @@ class ReliableDeliverySmoke(NativeSmoke):
         rows = {p['id']: p for p in map(json.loads, result.stdout.splitlines()) if 'id' in p}
         require(set(rows) == {1, 2} and 'error' not in rows[2], 'correlated MCP response')
         answer = rows[2]['result']
+        if expected_error is not None:
+            require(answer.get('isError') is True, 'MCP must reject accidental publication')
+            require(expected_error in json.dumps(answer), 'MCP returned the expected addressing error')
+            return answer
         require(not answer.get('isError'), 'MCP tool failed: ' + name)
         return answer['structuredContent']
 
@@ -57,14 +61,14 @@ class ReliableDeliverySmoke(NativeSmoke):
             'client_id': self.run_id + '-' + label, 'body': body,
             'recipient_ids': ['codex-pilot']})['message']
 
-    def finish_publication(self, page):
+    def finish_publication(self, page, runtime='codex'):
         publication = page['publication']
         require(not publication.get('error') and publication['blocked'] == 0,
                 'MCP reports publication result without hidden failure')
         # link_inbox deliberately caps its automatic flush. Honour the returned
         # backlog instead of assuming every offered report has already arrived.
         if publication['pending']:
-            publication = self.mcp('link_flush', {'limit': 100})
+            publication = self.mcp('link_flush', {'limit': 100}, runtime=runtime)
         require(publication['pending'] == 0 and publication['blocked'] == 0,
                 'explicit pending report flush completed')
 
@@ -176,7 +180,7 @@ class ReliableDeliverySmoke(NativeSmoke):
                    and 'body' not in delivery)
         self.clients['codex-pilot'].request('POST', '/v1/channels/general/messages', {
             'client_id': self.run_id + '-broadcast-reply', 'body': 'Synthetic reply without addressee',
-            'recipient_ids': [], 'reply_to': mid})
+            'recipient_ids': [], 'channel_only': True, 'reply_to': mid})
         self.check('broadcast_reply_does_not_clear_direct_reply_deadline', len(target_alerts()) == 1)
         sent = self.mcp('link_send', {'channel_id': 'general', 'recipient_ids': ['claude-pilot'],
                                     'reply_to': mid, 'body': 'Synthetic direct answer',
@@ -224,6 +228,51 @@ class ReliableDeliverySmoke(NativeSmoke):
                    content['text'] == text and content['artifact']['title'] == title
                    and content['artifact']['role'] == 'document' and not content['truncated'])
 
+    def addressed_message_roundtrip(self):
+        client = self.clients['codex-pilot']
+        path = '/v1/channels/general/messages'
+        before = client.request('GET', path + '?limit=100')['messages']
+        # The exact previous incident: publication with no recipients must fail
+        # before creating a message, rather than report a silently undelivered send.
+        self.mcp('link_send', {'channel_id': 'general', 'recipient_ids': [],
+                              'body': 'Accidental broadcast',
+                              'client_id': self.run_id + '-missing-recipient'},
+                 expected_error='recipient')
+        after = client.request('GET', path + '?limit=100')['messages']
+        self.check('empty_native_send_creates_no_server_message',
+                   [m['id'] for m in before] == [m['id'] for m in after])
+        question = self.publish('addressed-question', 'Synthetic question for one peer')
+        args = {'channel_id': 'general', 'reply_to': question['id'],
+                'body': 'Synthetic automatic-author reply',
+                'client_id': self.run_id + '-automatic-author-reply'}
+        sent = self.mcp('link_send', args)
+        reply = sent['result']['message']
+        self.check('reply_resolves_exact_author_without_explicit_recipients',
+                   sent['publication_state'] == 'sent'
+                   and reply['recipient_ids'] == ['claude-pilot']
+                   and reply['reply_to'] == question['id'])
+        repeated = self.mcp('link_send', args)
+        self.check('inferred_reply_replay_keeps_same_identity',
+                   repeated['result']['message']['id'] == reply['id'])
+        page = self.mcp('link_inbox', {'limit': 100, 'context_budget': 16000}, runtime='claude')
+        self.finish_publication(page, runtime='claude')
+        self.check('other_native_process_receives_inferred_reply',
+                   reply['id'] in {m['id'] for m in page['messages']})
+        status = self.mcp('link_delivery', {'message_id': question['id']}, runtime='claude')
+        self.check('reply_is_correlated_by_server_delivery_status',
+                   status['delivery_status'][0]['reply']['message_id'] == reply['id'])
+        broadcast_args = {'channel_id': 'general', 'body': 'Explicit channel note',
+                          'client_id': self.run_id + '-intentional-channel-only'}
+        broadcast = self.mcp('link_broadcast', broadcast_args)['result']['message']
+        again = self.mcp('link_broadcast', broadcast_args)['result']['message']
+        self.check('explicit_channel_only_publication_is_replayable',
+                   broadcast['recipient_ids'] == [] and broadcast['id'] == again['id'])
+        page = self.mcp('link_inbox', {'limit': 100, 'context_budget': 16000}, runtime='claude')
+        self.finish_publication(page, runtime='claude')
+        self.check('intentional_channel_note_stays_out_of_native_inbox',
+                   broadcast['id'] not in {m['id'] for m in page['messages']})
+        self.check('addressing_regression_started_no_models', self.model_calls == 0)
+
 
 def main():
     argparse.ArgumentParser(description=__doc__).parse_args()
@@ -236,6 +285,7 @@ def main():
         smoke.inbox_progress()
         smoke.deadline_roundtrip()
         smoke.build_and_document_roundtrip()
+        smoke.addressed_message_roundtrip()
         smoke.report['success'] = True
     except BaseException as error:
         smoke.report['success'] = False

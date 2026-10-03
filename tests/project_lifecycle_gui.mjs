@@ -107,9 +107,9 @@ try {
   }
   agentKey = (await success(`/v1/admin/principals/${ids.agent}/rotate-key`, 'POST', {})).key;
   const first = (await success(`/v1/channels/${ids.channel}/messages`, 'POST', { client_id: `${run}-first`, body: 'Fixture retained in archive; not model work', recipient_ids: [ids.agent] }, agentKey)).message;
-  await success(`/v1/channels/${ids.channel}/messages`, 'POST', { client_id: `${run}-reply`, body: 'Fixture reply', recipient_ids: [], reply_to: first.id }, agentKey);
+  await success(`/v1/channels/${ids.channel}/messages`, 'POST', { client_id: `${run}-reply`, body: 'Fixture reply', recipient_ids: [], channel_only: true, reply_to: first.id }, agentKey);
   await success(`/v1/projects/${ids.project}/notes`, 'POST', { client_id: `${run}-note`, title: 'Fixture note', body: 'Retained while archived', source_message_id: first.id }, agentKey);
-  await success(`/v1/channels/${ids.controlChannel}/messages`, 'POST', { client_id: `${run}-control-message`, body: 'Unrelated control must remain', recipient_ids: [] }, agentKey);
+  await success(`/v1/channels/${ids.controlChannel}/messages`, 'POST', { client_id: `${run}-control-message`, body: 'Unrelated control must remain', recipient_ids: [], channel_only: true }, agentKey);
   const beforeMessages = JSON.stringify(await success(`/v1/channels/${ids.channel}/messages`, 'GET', undefined, agentKey));
   const beforeControl = JSON.stringify(await success(`/v1/channels/${ids.controlChannel}/messages`, 'GET', undefined, agentKey));
   await call('Page.enable'); await call('Runtime.enable'); await call('Network.enable');

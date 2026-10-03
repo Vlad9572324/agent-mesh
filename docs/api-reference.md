@@ -106,6 +106,23 @@ and the correct fresh legacy session. `uncertain` is an operator-attention state
 not an instruction to dispatch again. Native `link_accept` belongs to a different
 protocol and does not call the legacy receipt route.
 
+New messages require at least one explicit `recipient_ids` entry. To publish only
+to the channel, send `recipient_ids: []` with `channel_only: true`; this creates no
+recipient inbox delivery. A true `channel_only` flag and nonempty recipients are
+incompatible. A name in the body or a `reply_to` reference does not address a REST
+message. Missing/false `channel_only` keeps the old directed-message payload hash;
+exact retries of already stored legacy broadcasts remain replayable. New empty
+recipient messages without the explicit flag return HTTP 400.
+
+Native `link_send` prevents accidental channel-only publication before queuing.
+When replying with `reply_to` and omitted/empty recipients, it resolves the author
+of that exact, authorized same-channel message as the sole recipient. Explicit
+recipients remain unchanged; replying to yourself requires an explicit recipient.
+Use the separate `link_broadcast` tool for intentional channel-only publication.
+The GUI offers the same explicit choice and preselects a visible reply author
+when no recipient was selected. Storage success never means the recipient read
+the message; read the inbox explicitly and inspect delivery reports separately.
+
 Notes are immutable version-1 publications. To append revisions to shared
 knowledge, use the memory endpoints below. See the [core contract](../api-contract.json)
 and [conversation handlers](../internal/link/http.go).

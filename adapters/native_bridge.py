@@ -657,6 +657,7 @@ class NativeBridge:
             item = response.get('message', {})
             expected = {'channel_id': row['channel_id'], 'author_id': self.config['agent_id'], **body}
             expected.pop('client_id')  # Existing Message API does not expose it.
+            expected.pop('channel_only', None)  # Explicit send intent, not a stored Message field.
         elif row['kind'] == 'task_event':
             item = response.get('event', {})
             expected = {k: body[k] for k in ('client_id', 'run_id', 'type', 'summary')}
@@ -749,14 +750,39 @@ class NativeBridge:
         return {'client_id': body['client_id'], 'publication_state': row['state'],
                 'result': strict_json(row['response']) if row['response'] else None}
 
-    def send(self, channel_id, recipient_ids, body, reply_to=None, client_id=None):
+    def send(self, channel_id, recipient_ids=None, body=None, reply_to=None, client_id=None):
+        """Send to explicit addressees, or only the parent author for a reply."""
+        return self._send_message(channel_id, recipient_ids, body, reply_to, client_id, channel_only=False)
+
+    def broadcast(self, channel_id, body, reply_to=None, client_id=None):
+        """Intentionally publish channel history without any native inbox recipient."""
+        return self._send_message(channel_id, [], body, reply_to, client_id, channel_only=True)
+
+    def _send_message(self, channel_id, recipient_ids, body, reply_to, client_id, *, channel_only):
         self._identifier(channel_id)
-        if (not text(body, 16384) or type(recipient_ids) is not list or len(recipient_ids) > 32
-                or not all(identifier(v) for v in recipient_ids) or len(set(recipient_ids)) != len(recipient_ids)):
+        if (not text(body, 16384) or recipient_ids is not None and
+                (type(recipient_ids) is not list or len(recipient_ids) > 32
+                 or not all(identifier(v) for v in recipient_ids) or len(set(recipient_ids)) != len(recipient_ids))):
             raise NativeError('invalid_message_fields')
         if reply_to is not None:
             self._identifier(reply_to)
+        if not channel_only and not recipient_ids:
+            if reply_to is None:
+                raise NativeError('recipient_ids_required_use_link_broadcast_for_channel_only')
+            # A readable parent need not have been offered in the local inbox.
+            # Infer only its author; never expand to its other recipients.
+            self._channel(channel_id, self._authorize(), True)
+            response = self._request('GET', '/v1/messages/' + reply_to)
+            parent = response.get('message') if type(response) is dict else None
+            if (type(parent) is not dict or parent.get('id') != reply_to or parent.get('channel_id') != channel_id
+                    or not identifier(parent.get('author_id'))):
+                raise NativeError('invalid_reply_parent')
+            if parent['author_id'] == self.config['agent_id']:
+                raise NativeError('reply_recipient_is_self_supply_explicit_recipient_ids')
+            recipient_ids = [parent['author_id']]
         payload = {'body': body, 'recipient_ids': sorted(recipient_ids), 'reply_to': reply_to}
+        if channel_only:
+            payload['channel_only'] = True
         # Auto-ID deliberately deduplicates identical sends in this native
         # session. Supply a new explicit client_id to intentionally repeat one.
         payload['client_id'] = client_id or hashlib.sha256(canonical([self.session_id, channel_id, payload]).encode()).hexdigest()

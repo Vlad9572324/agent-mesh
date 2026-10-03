@@ -69,5 +69,11 @@
     },
     "status": "pending_messages counts all unaccepted messages; unseen_messages counts unaccepted and unseen messages. link_status also reports connector_version/connector_source_commit from the loaded bundle RELEASE.json (connector_identity_source=release_metadata), separately from server_version/server_source_commit from the current authenticated /v1/me.server_build (server_identity_source=authenticated_api). Missing or invalid metadata yields null identity fields and source=unavailable; an unstamped build can report dev with null source commit. Connector identity is captured at module load: restart the MCP process after installing a new bundle. These display stamps are not integrity or authorization proof.",
     "migration": "Nullable seen_at/seen_session, persisted integer offer_order and a per-database inbox_view_id are added atomically to old SQLite under BEGIN IMMEDIATE; prior inbox rowids, acceptance, offers, fetch cursors, outbox and binding are preserved. Existing offer timestamps seed the initial global order; new offers increment a logical ordinal. Indexes cover offer history and scheduling. Backend migration extends both native_activity event/message CHECK constraints in place; fair local pagination needs no new backend schema."
+  },
+  "native_message_publication": {
+    "link_send": "New messages require nonempty recipient_ids. With reply_to and missing/empty recipients, freshly authorize the configured writable channel, load the exact same-channel parent and resolve its non-self author only. Explicit recipient lists remain unchanged. Names/mentions in body never choose addressees.",
+    "link_broadcast": "Explicit channel-only publication: recipient_ids:[] and channel_only:true. No native recipient inbox delivery or model wake. Uses the same durable idempotent outbox and receipt verification.",
+    "compatibility": "Legacy directed request hashes unchanged; old queued payloads are never rewritten. New accidental empty sends fail, while exact replay of existing legacy broadcasts remains available. Restart an updated MCP process to load new tools.",
+    "inbox": "Sending and status calls do not read inbox. Call link_inbox explicitly; publication success is not recipient viewing."
   }
 }

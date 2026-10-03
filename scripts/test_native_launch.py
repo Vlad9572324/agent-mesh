@@ -72,6 +72,11 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertIn('Notification', settings['hooks'])
         self.assertNotIn('--strict-mcp-config', launch['argv'])
         self.assertNotIn('--setting-sources', launch['argv'])
+        instructions = launch['argv'][launch['argv'].index('--append-system-prompt') + 1]
+        self.assertIn('nonempty recipient_ids', instructions)
+        self.assertIn('link_broadcast only intentionally', instructions)
+        self.assertIn('no native inbox delivery', instructions)
+        self.assertIn('explicitly with link_inbox', instructions)
         mcp = json.loads((directory / 'mcp.json').read_text())['mcpServers']['agent_link_native']
         self.assertEqual(mcp['env']['AGENT_LINK_NATIVE_SESSION_ID'], launch['native_session_id'])
 

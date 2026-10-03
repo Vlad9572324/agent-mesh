@@ -177,7 +177,7 @@ func TestMessageDeliveryOnlyOnExactDetail(t *testing.T) {
 	if len(expanded) <= 2*1024*1024 {
 		t.Fatal("fixture no longer exercises detail expansion risk")
 	}
-	created := f.expect("POST", "/v1/channels/general/messages", "claude-pilot", map[string]any{"client_id": "broadcast-detail", "body": "broadcast", "recipient_ids": []string{}}, 201)["message"].(map[string]any)
+	created := f.expect("POST", "/v1/channels/general/messages", "claude-pilot", map[string]any{"client_id": "broadcast-detail", "body": "broadcast", "recipient_ids": []string{}, "channel_only": true}, 201)["message"].(map[string]any)
 	if _, exists := created["delivery_status"]; exists {
 		t.Fatal("send response contains detail-only status")
 	}

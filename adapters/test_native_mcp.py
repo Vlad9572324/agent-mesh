@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from native_bridge import NativeError, canonical
 from native_mcp import MAX_LINE, MCPServer, PROTOCOLS, tools, validate
-from test_native_hooks import FakeNativeAPI
+from test_native_bridge import FakeAPI
 
 
 KEY = 'd' * 64
@@ -84,7 +84,10 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         listing = self.server.handle(rpc(2, 'tools/list'))['result']['tools']
         names = {v['name'] for v in listing}
-        self.assertEqual(len(names), 16)
+        self.assertEqual(len(names), 17)
+        self.assertIn('link_broadcast', names)
+        send = next(v for v in listing if v['name'] == 'link_send')
+        self.assertEqual(set(send['inputSchema']['required']), {'channel_id', 'body'})
         self.assertIn('link_artifact_publish', names)
         self.assertIn('link_accept', names)
         self.assertIn('link_seen', names)
@@ -184,7 +187,7 @@ class PipeTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         (self.root / 'workspace').mkdir(mode=0o700)
-        self.api = FakeNativeAPI()
+        self.api = FakeAPI()
         self.api.messages = [{'id': 'message-1', 'seq': 1, 'channel_id': 'c', 'author_id': 'peer',
                               'recipient_ids': ['a'], 'reply_to': 'earlier', 'body': 'fixture-only message'}]
         self.requests = []
@@ -204,7 +207,13 @@ class PipeTests(unittest.TestCase):
                 if self.command == 'GET' and self.path == '/v1/messages/message-1':
                     result = {'message': fixture.api.messages[0]}
                 else:
-                    result = fixture.api.request(self.command, self.path, body)
+                    try:
+                        result = fixture.api.request(self.command, self.path, body)
+                    except NativeError as error:
+                        if str(error) != 'lost_ack_after_commit':
+                            raise
+                        self.close_connection = True
+                        return
                 raw = canonical(result).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -269,6 +278,59 @@ class PipeTests(unittest.TestCase):
         self.assertEqual(result.stdout, b'')
         self.assertEqual(result.stderr, b'{"error":"native_mcp_stopped"}\n')
         self.assertEqual(self.requests, [])
+
+    def test_stdio_new_send_empty_or_missing_addressees_fails_before_network(self):
+        answers = self.run_pipe([initialize(), READY,
+            rpc(2, 'tools/call', {'name': 'link_send', 'arguments': {'channel_id': 'c', 'body': 'No implicit broadcast'}}),
+            rpc(3, 'tools/call', {'name': 'link_send', 'arguments': {'channel_id': 'c', 'body': 'No implicit broadcast', 'recipient_ids': []}})])
+        for answer in answers[1:]:
+            self.assertTrue(answer['result']['isError'])
+            self.assertIn('recipient_ids_required_use_link_broadcast', canonical(answer))
+        self.assertEqual(self.requests, [])
+
+    def test_stdio_reply_infers_only_parent_author_and_explicit_recipients_win(self):
+        self.api.messages[0]['recipient_ids'] = ['a', 'third-party']
+        answers = self.run_pipe([initialize(), READY,
+            rpc(2, 'tools/call', {'name': 'link_send', 'arguments': {'channel_id': 'c', 'body': 'Inferred reply', 'reply_to': 'message-1', 'client_id': 'inferred'}}),
+            rpc(3, 'tools/call', {'name': 'link_send', 'arguments': {'channel_id': 'c', 'body': 'Empty reply', 'recipient_ids': [], 'reply_to': 'message-1', 'client_id': 'empty'}}),
+            rpc(4, 'tools/call', {'name': 'link_send', 'arguments': {'channel_id': 'c', 'body': 'Explicit reply', 'recipient_ids': ['chosen'], 'reply_to': 'message-1', 'client_id': 'explicit'}})])
+        for answer in answers[1:]:
+            self.assertFalse(answer['result']['isError'], answer)
+        recipients = [value[0]['recipient_ids'] for value in self.api.published.values()]
+        self.assertEqual(recipients, [['peer'], ['peer'], ['chosen']])
+        self.assertEqual(self.requests.count(('GET', '/v1/messages/message-1')), 2)
+        self.assertEqual(self.api.activity, {})
+
+    def test_stdio_reply_parent_self_or_different_channel_is_rejected(self):
+        for changes in ({'author_id': 'a'}, {'channel_id': 'other'}, {'id': 'mismatched'}):
+            with self.subTest(changes=changes):
+                self.api.messages[0].update(id='message-1', author_id='peer', channel_id='c')
+                self.api.messages[0].update(changes)
+                answers = self.run_pipe([initialize(), READY, rpc(2, 'tools/call', {'name': 'link_send',
+                    'arguments': {'channel_id': 'c', 'body': 'Reply', 'reply_to': 'message-1'}})])
+                self.assertTrue(answers[1]['result']['isError'])
+        self.assertEqual(self.api.published, {})
+        self.assertFalse(any(method == 'POST' for method, _ in self.requests))
+
+    def test_stdio_directed_and_explicit_broadcast_lost_ack_restart_exact_replay(self):
+        for tool, changes in (('link_send', {'recipient_ids': ['peer']}), ('link_broadcast', {})):
+            with self.subTest(tool=tool):
+                args = {'channel_id': 'c', 'body': 'Durable intent', 'reply_to': 'message-1', 'client_id': tool, **changes}
+                self.api.lose_next_ack = True
+                failed = self.run_pipe([initialize(), READY, rpc(2, 'tools/call', {'name': tool, 'arguments': args})])
+                self.assertTrue(failed[1]['result']['isError'])
+                retried = self.run_pipe([initialize(), READY, rpc(2, 'tools/call', {'name': tool, 'arguments': args})])
+                self.assertFalse(retried[1]['result']['isError'], retried)
+                result = retried[1]['result']['structuredContent']
+                self.assertEqual(result['publication_state'], 'sent')
+                self.assertTrue(result['result']['replayed'])
+                payload = self.api.published[('/v1/channels/c/messages', tool)][0]
+                self.assertEqual(payload['recipient_ids'], changes.get('recipient_ids', []))
+                self.assertEqual(payload.get('channel_only'), True if tool == 'link_broadcast' else None)
+                self.assertNotIn('channel_only', result['result']['message'])
+        self.assertEqual(len(self.api.published), 2)
+        self.assertNotIn(('GET', '/v1/messages/message-1'), self.requests)
+        self.assertEqual(self.api.activity, {})
 
     def test_full_message_seen_and_review_across_stdio_restarts(self):
         self.api.messages[0]['body'] = '\x01' * 16384  # Worst-case JSON expansion remains bounded.

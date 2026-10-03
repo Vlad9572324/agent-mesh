@@ -116,7 +116,7 @@ func TestWorkspaceChannelMessageSequenceIgnoresTelemetryAndReceipts(t *testing.T
 		eventSeq++
 		check(eventSeq, 2)
 	}
-	input := map[string]any{"client_id": "message-position-second", "body": "Actual new discussion", "recipient_ids": []string{}}
+	input := map[string]any{"client_id": "message-position-second", "body": "Actual new discussion", "recipient_ids": []string{}, "channel_only": true}
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", input, 201)
 	eventSeq++
 	check(eventSeq, eventSeq)
@@ -136,8 +136,8 @@ func TestWorkspaceHiddenStateAndFreshACL(t *testing.T) {
 	f.expect("POST", "/v1/admin/projects", "owner", map[string]any{"id": "hidden-project", "name": "Hidden project"}, 201)
 	f.expect("POST", "/v1/admin/channels", "owner", map[string]any{"id": "hidden-channel", "project_id": "pilot", "name": "Hidden channel"}, 201)
 	f.access("claude-pilot", "channel", "hidden-channel", "write", 200)
-	f.expect("POST", "/v1/channels/hidden-channel/messages", "claude-pilot", map[string]any{"client_id": "hidden-channel-message", "body": "Hidden", "recipient_ids": []string{}}, 201)
-	f.expect("POST", "/v1/channels/isolated/messages", "deny-pilot", map[string]any{"client_id": "hidden-project-message", "body": "Hidden", "recipient_ids": []string{}}, 201)
+	f.expect("POST", "/v1/channels/hidden-channel/messages", "claude-pilot", map[string]any{"client_id": "hidden-channel-message", "body": "Hidden", "recipient_ids": []string{}, "channel_only": true}, 201)
+	f.expect("POST", "/v1/channels/isolated/messages", "deny-pilot", map[string]any{"client_id": "hidden-project-message", "body": "Hidden", "recipient_ids": []string{}, "channel_only": true}, 201)
 	f.expect("POST", "/v1/projects/isolated/notes", "deny-pilot", map[string]any{"client_id": "hidden-note", "title": "Hidden", "body": "Hidden"}, 201)
 	f.heartbeat("deny-pilot", "hidden-session")
 	workspaceExpectSame(t, viewer, workspaceTestRevision(t, f, "viewer-pilot"), "hidden project/channel/note/heartbeat/audit")

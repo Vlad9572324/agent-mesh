@@ -31,7 +31,7 @@ func navigationRead(f *fixture, actor, channel string, seq float64, status int) 
 	return f.expect("PUT", "/v1/channels/"+channel+"/read", actor, map[string]any{"through_seq": seq}, status)
 }
 func navigationMessage(f *fixture, actor, channel, id string) map[string]any {
-	return f.expect("POST", "/v1/channels/"+channel+"/messages", actor, map[string]any{"client_id": id, "body": "Discussion", "recipient_ids": []string{}}, 201)["message"].(map[string]any)
+	return f.expect("POST", "/v1/channels/"+channel+"/messages", actor, map[string]any{"client_id": id, "body": "Discussion", "recipient_ids": []string{}, "channel_only": true}, 201)["message"].(map[string]any)
 }
 
 func TestNavigationCountsMessagesNotJournalPositions(t *testing.T) {

@@ -176,7 +176,7 @@ func TestAdminInventoryAccessAndSecretHygiene(t *testing.T) {
 	f.expect("POST", "/v1/channels/new-channel/messages", "new-agent", map[string]any{}, 404)
 	f.access("new-agent", "project", "new-project", "write", 200)
 	f.access("new-agent", "channel", "new-channel", "write", 200)
-	f.expect("POST", "/v1/channels/new-channel/messages", "new-agent", map[string]any{"client_id": "allowed", "body": "test", "recipient_ids": []string{}}, 201)
+	f.expect("POST", "/v1/channels/new-channel/messages", "new-agent", map[string]any{"client_id": "allowed", "body": "test", "recipient_ids": []string{}, "channel_only": true}, 201)
 	f.access("new-agent", "project", "new-project", "read", 200)
 	var channelWrite bool
 	if err := f.s.Pool.QueryRow(context.Background(), "SELECT can_write FROM channel_members WHERE channel_id='new-channel' AND agent_id='new-agent'").Scan(&channelWrite); err != nil || channelWrite {

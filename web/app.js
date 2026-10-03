@@ -454,6 +454,15 @@
     "The key is revoked or invalid. Data and the key have been cleared from this tab.": "Ключ отозван или недействителен. Данные и ключ удалены из вкладки.",
     "Access to the workspace stream was denied. Connect with a valid personal key.": "Доступ к потоку пространства отклонён. Подключитесь с действующим личным ключом.",
     "No more than 32 recipients are allowed.": "Допускается не более 32 получателей.",
+    "Choose a recipient, or explicitly publish to the channel only.": "Выберите получателя или явно включите публикацию только в канал.",
+    "Recipient access changed. Choose recipients again.": "Доступ получателей изменился. Выберите адресатов заново.",
+    "The reply target is no longer available in this channel.": "Исходное сообщение для ответа больше недоступно в этом канале.",
+    "No recipients selected.": "Получатели не выбраны.",
+    "Selected recipients: {0}": "Выбранные получатели: {0}",
+    "Channel publication · no native inbox recipients.": "Публикация в канал · без получателей во входящих native-коннектора.",
+    "Publish to channel ↑": "Опубликовать в канал ↑",
+    "Published to the channel only. This message will not enter any agent’s native inbox.": "Опубликовано только в канале. Это сообщение не попадёт во входящие native-коннектора ни одного агента.",
+    "Stored for the selected recipients. This does not confirm viewing or acceptance.": "Сохранено для выбранных получателей. Это не подтверждает просмотр или приём.",
     "Waiting for server confirmation of storage…": "Ожидается подтверждение сохранения сервером…",
     "The server confirmed the previously stored message. No new copy was created.": "Сервер подтвердил ранее сохранённое сообщение. Новая копия не создана.",
     "Stored on the server. Delivery and acceptance are confirmed separately.": "Сохранено на сервере. Доставка и приём подтверждаются отдельно.",
@@ -797,7 +806,7 @@
     lastRefresh: 0, refreshAgain: false, streamConnected: false,
     workspaceRevision: "", lastSync: 0, syncError: false, channelSeen: new Map(), channelUpdates: new Set(),
     navigation: null, navigationSeq: 0, navigationRead: null, navigationReadTimer: null,
-    pendingMessage: null, pendingNote: null, sending: false, publishing: false,
+    pendingMessage: null, pendingNote: null, sending: false, publishing: false, replyRecipient: "",
     loginBusy: false, loading: false, dataReady: false, projectReady: false,
     admin: null, adminLoading: false, adminBusy: false, adminKey: "", adminKeyVersion: 0,
     onboarding: null, onboardingCommand: "", onboardingVersion: 0, onboardingDownload: "",
@@ -1008,11 +1017,13 @@
 
   function clearDrafts() {
     $("composer-form").reset();
+    state.replyRecipient = "";
     $("note-form").reset();
     setText($("send-status"), () => (""));
     setText($("note-status"), () => (""));
     $("search-input").value = "";
     state.pendingMessage = state.pendingNote = null;
+    syncComposerAddressing();
     validateFields();
     if ($("note-dialog").open) $("note-dialog").close();
   }
@@ -1329,11 +1340,57 @@
     if (!state.agents.length) appendOwned($("agent-list"), () => (node("p", "empty-state", () => (state.loading ? tr("Loading participants…") : state.dataReady ? tr("The API returned no visible participants.") : tr("Participant data has not been received yet.")))));
   }
 
-  function renderRecipients() {
-    const selected = new Set([...$("recipient-list").querySelectorAll("input:checked")].map((input) => input.value));
+  function availableRecipients() {
+    if (!state.channel) return [];
     const members = state.channel?.member_ids;
-    const recipients = state.agents.filter((agent) => agent.kind === "agent" && agent.id !== state.me?.id &&
+    return state.agents.filter((agent) => agent.kind === "agent" && agent.id !== state.me?.id &&
       (Array.isArray(members) ? members.includes(agent.id) : list(agent.channel_ids).includes(state.channel?.id)));
+  }
+
+  function recipientScope() {
+    return JSON.stringify([state.authVersion, state.me?.id, state.project?.id, state.channel?.id]);
+  }
+
+  function selectedRecipients() {
+    return [...$("recipient-list").querySelectorAll("input:checked")].map(input => input.value).sort();
+  }
+
+  function syncComposerAddressing() {
+    const channelOnly = $("channel-only").checked;
+    $("recipient-fieldset").disabled = !canMessage() || state.sending || channelOnly;
+    for (const input of $("recipient-list").querySelectorAll("input")) input.disabled = !canMessage() || state.sending || channelOnly;
+    $("channel-only-warning").hidden = !channelOnly;
+    const recipients = selectedRecipients();
+    setText($("recipient-summary"), () => channelOnly ? tr("Channel publication · no native inbox recipients.") : recipients.length ?
+      tr("Selected recipients: {0}", recipients.map(id => `${displayName(id)} (${id})`).join(", ")) : tr("No recipients selected."));
+  }
+
+  function selectReply(messageId) {
+    if (!canMessage() || state.sending) return;
+    const message = state.messages.get(messageId);
+    if (messageId && (!message || message.channel_id !== state.channel?.id)) return;
+    $("reply-to").value = messageId;
+    if (!$("channel-only").checked && $("recipient-list").dataset.scope === recipientScope()) {
+      const selected = selectedRecipients();
+      if (!selected.length || selected.length === 1 && selected[0] === state.replyRecipient) {
+        const author = availableRecipients().find(agent => agent.id === message?.author_id)?.id || "";
+        for (const input of $("recipient-list").querySelectorAll("input")) input.checked = input.value === author;
+        state.replyRecipient = author;
+      }
+    }
+    syncComposerAddressing();
+  }
+
+  function renderRecipients() {
+    const sameScope = $("recipient-list").dataset.scope === recipientScope();
+    const selected = new Set(sameScope ? selectedRecipients() : []);
+    const recipients = availableRecipients();
+    if ([...selected].some(id => !recipients.some(agent => agent.id === id))) {
+      selected.clear(); state.replyRecipient = "";
+      setText($("send-status"), () => tr("Recipient access changed. Choose recipients again."));
+    }
+    if (!sameScope) state.replyRecipient = "";
+    $("recipient-list").dataset.scope = recipientScope();
     replaceContent("recipient-list", ...recipients.map((agent) => {
       const label = node("label", "recipient-option");
       const input = node("input"); input.type = "checkbox"; input.value = agent.id;
@@ -1343,6 +1400,7 @@
       return label;
     }));
     if (!recipients.length) appendOwned($("recipient-list"), () => (node("p", "field-help", () => (tr("No other available agents in this channel.")))));
+    syncComposerAddressing();
   }
 
   function clearNativeReceipts() {
@@ -1505,7 +1563,7 @@
         const reply = node("button", "reply-action", () => (tr("Reply ↗")));
         reply.dataset.focusKey = `reply:${message.id}`;
         reply.type = "button"; reply.disabled = state.sending;
-        reply.addEventListener("click", () => { $("reply-to").value = message.id; $("message-input").focus(); });
+        reply.addEventListener("click", () => { selectReply(message.id); $("message-input").focus(); });
         appendOwned(content, () => (reply));
       }
       appendOwned(article, () => (avatar(message.author_id)), () => (content));
@@ -2011,9 +2069,10 @@
     $("new-note-button").hidden = !canNote();
     for (const control of $("composer-form").querySelectorAll("input,textarea,select,button,fieldset")) control.disabled = !canMessage() || state.sending;
     for (const control of $("note-form").querySelectorAll("input,textarea,button")) control.disabled = !canNote() || state.publishing;
-    setText($("send-button"), () => (state.sending ? tr("Saving…") : state.pendingMessage ? tr("Retry the same request ↑") : tr("Send ↑")));
+    setText($("send-button"), () => (state.sending ? tr("Saving…") : state.pendingMessage ? tr("Retry the same request ↑") : $("channel-only").checked ? tr("Publish to channel ↑") : tr("Send ↑")));
     setText($("note-submit"), () => (state.publishing ? tr("Publishing…") : state.pendingNote ? tr("Retry the same request") : tr("Publish to project")));
     setText($("composer-identity"), () => (state.me ? tr("Acting as: {0} ({1}). Another sender cannot be selected.", () => (state.me.name), () => (state.me.id)) : ""));
+    syncComposerAddressing();
   }
 
   function setView(view) {
@@ -2106,7 +2165,7 @@
     clearNativeActivity();
     if (state.channel) { state.cursors.delete(state.channel.id); state.channelUpdates.delete(state.channel.id); }
     state.channel = null; state.messages.clear(); state.events.clear(); state.messageSeq = 0;
-    state.pendingMessage = null; state.sending = false;
+    state.pendingMessage = null; state.sending = false; state.replyRecipient = "";
     $("composer-form").reset(); setText($("send-status"), () => ("")); $("search-input").value = "";
     $("history-notice").hidden = true;
     renderMessages(); renderEvents(); renderRecipients(); validateFields();
@@ -2168,7 +2227,12 @@
     if (state.view !== "admin") setView(state.view);
     else renderNavigation();
     // Losing write access invalidates pending write actions, without discarding unrelated drafts.
-    if (previousChannel?.can_write && selectedChannel?.can_write === false) state.pendingMessage = null;
+    if (previousChannel?.can_write && selectedChannel?.can_write === false) {
+      state.pendingMessage = null; state.replyRecipient = "";
+      $("channel-only").checked = false;
+      for (const input of $("recipient-list").querySelectorAll("input")) input.checked = false;
+      syncComposerAddressing();
+    }
     if (!isOwner() && !state.channels.some((channel) => channel.can_write === true) && $("note-dialog").open) {
       state.pendingNote = null; $("note-form").reset(); $("note-dialog").close(); validateFields();
     }
@@ -2394,9 +2458,21 @@
     validateFields();
     if (!canMessage() || state.sending || !$("composer-form").reportValidity()) return;
     const body = $("message-input").value.trim(); if (!body) return;
-    const payload = {body, recipient_ids: [...$("recipient-list").querySelectorAll("input:checked")].map((input) => input.value).sort()};
+    const channelOnly = $("channel-only").checked;
+    const payload = {body, recipient_ids: channelOnly ? [] : selectedRecipients()};
+    if (!channelOnly && !payload.recipient_ids.length) {
+      setText($("send-status"), () => tr("Choose a recipient, or explicitly publish to the channel only.")); return;
+    }
+    if ($("recipient-list").dataset.scope !== recipientScope() || payload.recipient_ids.some(id => !availableRecipients().some(agent => agent.id === id))) {
+      setText($("send-status"), () => tr("Recipient access changed. Choose recipients again.")); return;
+    }
     if (payload.recipient_ids.length > 32) { setText($("send-status"), () => (tr("No more than 32 recipients are allowed."))); return; }
-    if ($("reply-to").value) payload.reply_to = $("reply-to").value;
+    if (channelOnly) payload.channel_only = true;
+    if ($("reply-to").value) {
+      const reply = state.messages.get($("reply-to").value);
+      if (!reply || reply.channel_id !== state.channel.id) { setText($("send-status"), () => tr("The reply target is no longer available in this channel.")); return; }
+      payload.reply_to = reply.id;
+    }
     state.pendingMessage = pendingPayload(state.pendingMessage, payload);
     const context = state.context, channelId = state.channel.id;
     state.sending = true; setText($("send-status"), () => (tr("Waiting for server confirmation of storage…"))); updatePermissions();
@@ -2406,8 +2482,11 @@
       if (!result.message || result.message.channel_id !== channelId) throw new Error("Invalid message response");
       state.messages.set(result.message.id, result.message);
       // Do not move the history cursor: an own message can arrive ahead of unseen history.
-      state.pendingMessage = null; $("composer-form").reset(); validateFields();
-      setText($("send-status"), () => (result.replayed ? tr("The server confirmed the previously stored message. No new copy was created.") : tr("Stored on the server. Delivery and acceptance are confirmed separately.")));
+      state.pendingMessage = null; state.replyRecipient = ""; $("composer-form").reset(); validateFields();
+      setText($("send-status"), () => joinText([
+        ...(result.replayed ? [tr("The server confirmed the previously stored message. No new copy was created.")] : []),
+        channelOnly ? tr("Published to the channel only. This message will not enter any agent’s native inbox.") : tr("Stored for the selected recipients. This does not confirm viewing or acceptance."),
+      ], " "));
       clearError(); renderMessages(); scheduleRefresh();
     } catch (error) {
       if (!current(context) || state.channel?.id !== channelId) return;
@@ -3919,6 +3998,9 @@
   $("search-input").addEventListener("input", renderMessages);
   for (const limit of fieldLimits) $(limit[0]).addEventListener("input", () => validateSize(...limit));
   $("composer-form").addEventListener("submit", sendMessage);
+  $("reply-to").addEventListener("change", () => selectReply($("reply-to").value));
+  $("recipient-list").addEventListener("change", () => { state.replyRecipient = ""; syncComposerAddressing(); });
+  $("channel-only").addEventListener("change", updatePermissions);
   $("note-form").addEventListener("submit", publishNote);
   $("new-note-button").addEventListener("click", () => {
     if (!canNote()) return;

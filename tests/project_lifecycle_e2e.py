@@ -56,6 +56,8 @@ def lifecycle_audit(project=None):
 def post(actor, channel, label, recipients=None, reply=None):
     body = {'client_id': RUN + '-' + label, 'body': 'Lifecycle fixture ' + label,
             'recipient_ids': recipients or []}
+    if not recipients:
+        body['channel_only'] = True
     if reply is not None:
         body['reply_to'] = reply
     return success(f'/v1/channels/{channel}/messages', body, actor=actor, expected=201)['message']
@@ -372,7 +374,7 @@ def concurrency_archive_writes_and_delete():
         start.wait(timeout=10)
         return request(f'/v1/channels/{channel}/messages', STATE['writer'],
                        {'client_id': RUN + '-racing-' + str(number), 'body': 'Concurrent lifecycle fixture',
-                        'recipient_ids': []})[0]
+                        'recipient_ids': [], 'channel_only': True})[0]
     def archive_project():
         start.wait(timeout=10)
         return request(f'/v1/admin/projects/{project}/archive', OWNER, {})

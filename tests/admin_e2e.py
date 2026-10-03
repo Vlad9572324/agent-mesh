@@ -329,7 +329,8 @@ def grant_access_and_isolation():
 def post_message(actor, channel, label, recipients=None):
     return success(f'/v1/channels/{channel}/messages', {'client_id': RUN + '-' + label,
                    'body': 'Private acceptance payload ' + label,
-                   'recipient_ids': recipients or []}, actor=actor, expected=201)['message']
+                   'recipient_ids': recipients or [], 'channel_only': not bool(recipients)},
+                   actor=actor, expected=201)['message']
 
 
 def owner_reads_all_without_impersonation():

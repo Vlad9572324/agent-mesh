@@ -233,6 +233,7 @@ func TestMessageIdempotencyAndBoundaries(t *testing.T) {
 	in["recipient_ids"] = []string{"viewer-pilot"}
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", in, 400)
 	in["recipient_ids"] = []string{}
+	in["channel_only"] = true
 	in["reply_to"] = "nonexistent"
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", in, 404)
 	f.expect("GET", "/v1/messages/"+id, "deny-pilot", nil, 404)
@@ -309,7 +310,7 @@ func TestNotesAndRestrictedSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	private := f.expect("POST", "/v1/channels/restricted/messages", "claude-pilot", map[string]any{"client_id": "restricted-source", "body": "private", "recipient_ids": []string{}}, 201)["message"].(map[string]any)
+	private := f.expect("POST", "/v1/channels/restricted/messages", "claude-pilot", map[string]any{"client_id": "restricted-source", "body": "private", "recipient_ids": []string{}, "channel_only": true}, 201)["message"].(map[string]any)
 	in["client_id"] = "note-restricted"
 	in["source_message_id"] = private["id"]
 	f.expect("POST", "/v1/projects/pilot/notes", "claude-pilot", in, 400)

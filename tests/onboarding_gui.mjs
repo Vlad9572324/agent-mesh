@@ -287,7 +287,7 @@ const projectButton = name => `#project-switcher [data-focus-key="project:${ids[
 const navigation = (actor = 'viewer') => api('/v1/navigation', 'GET', undefined, actor);
 const navigationChannel = async (name, actor = 'viewer') => (await navigation(actor)).channels.find(item => item.id === ids[name]);
 async function discussion(name, body = 'An actual isolated discussion message', actor = 'peer') {
-  return (await api(`/v1/channels/${ids[name]}/messages`, 'POST', {client_id: `${run}-${randomUUID()}`, body, recipient_ids: []}, actor, 201)).message;
+  return (await api(`/v1/channels/${ids[name]}/messages`, 'POST', {client_id: `${run}-${randomUUID()}`, body, recipient_ids: [], channel_only: true}, actor, 201)).message;
 }
 async function technical(name, type = 'tool.completed') {
   return (await api(`/v1/channels/${ids[name]}/activity`, 'POST', {client_id: `${run}-${randomUUID()}`,

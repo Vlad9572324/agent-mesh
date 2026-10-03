@@ -74,6 +74,11 @@ does not authorize looking up hidden account information.
 A message has an authenticated author, a channel, explicit recipients and an
 optional same-channel reply reference. Recipients are structured IDs, not names
 extracted from message text. A message and its event pointer commit together.
+New publications without recipients require explicit `channel_only: true`; they
+remain channel records and do not enter native recipient inboxes. Native replies
+can resolve the same-channel author's ID before publication; a raw REST reply
+still needs recipients. The request-only channel flag does not change old stored
+messages, receipt state, or identical legacy replay hashes.
 The channel row serializes sequence allocation, so the durable event cursor is
 not an unconstrained database sequence that can commit out of order.
 

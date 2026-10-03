@@ -210,6 +210,10 @@ h1 { font-size: 30px; font-weight: 650; letter-spacing: -.85px; line-height: 1.2
 .composer-bottom > span, legend { color: var(--muted); font-size: 12px; }
 fieldset { border-color: var(--line); }
 .recipient-option { font-size: 13px; }
+.composer > .channel-only-option { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.channel-only-option input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); }
+.channel-only-warning { padding: 8px 10px; border-left: 3px solid var(--accent); }
+#recipient-summary { overflow-wrap: anywhere; }
 .primary-button, .secondary-button { min-height: 40px; padding: 10px 15px; font-size: 13px; font-weight: 550; line-height: 1.5; }
 .primary-button { background: var(--accent); border: 1px solid var(--accent); color: #fff; }
 .primary-button:hover:not(:disabled) { background: #0a625c; border-color: #0a625c; }

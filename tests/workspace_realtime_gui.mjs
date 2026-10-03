@@ -96,6 +96,7 @@ async function createChannel(key, project) {
 async function post(label, channel = 'channel', recipients = ['writer']) {
   return (await success(`/v1/channels/${ids[channel]}/messages`, 'POST', {
     client_id: `${run}-${label}`, body: `Live message ${run}/${label}`, recipient_ids: recipients.map(key => ids[key]),
+    channel_only: recipients.length === 0,
   }, 'peer', 201)).message;
 }
 async function note(label, project = 'project') {

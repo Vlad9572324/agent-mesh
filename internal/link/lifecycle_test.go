@@ -181,7 +181,7 @@ func TestArchiveRestoreVisibilityAndIdempotency(t *testing.T) {
 		t.Fatal("restore did not preserve content and exact ACL")
 	}
 	f.expect("GET", "/v1/channels/"+lifecycleChannel+"/messages", "viewer-pilot", nil, 200)
-	f.expect("POST", "/v1/channels/"+lifecycleChannel+"/messages", "claude-pilot", map[string]any{"client_id": "after-restore", "body": "Restored write", "recipient_ids": []string{}}, 201)
+	f.expect("POST", "/v1/channels/"+lifecycleChannel+"/messages", "claude-pilot", map[string]any{"client_id": "after-restore", "body": "Restored write", "recipient_ids": []string{}, "channel_only": true}, 201)
 	f.expect("POST", "/v1/channels/"+lifecycleChannel+"/messages", "viewer-pilot", map[string]any{}, 404)
 	var count int
 	if err := f.s.Pool.QueryRow(context.Background(), "SELECT count(*) FROM admin_audit WHERE target_id=$1 AND action IN ('project.archive','project.restore')", lifecycleID).Scan(&count); err != nil || count != 2 {
@@ -418,7 +418,7 @@ func TestConcurrentArchiveAgainstAgentWritesAndACL(t *testing.T) {
 			defer wg.Done()
 			<-start
 			method, path, identity := "POST", "/v1/channels/"+lifecycleChannel+"/messages", "claude-pilot"
-			body := map[string]any{"client_id": fmt.Sprintf("concurrent-lifecycle-%d", i), "body": "concurrent", "recipient_ids": []string{}}
+			body := map[string]any{"client_id": fmt.Sprintf("concurrent-lifecycle-%d", i), "body": "concurrent", "recipient_ids": []string{}, "channel_only": true}
 			if i%3 == 1 {
 				path = "/v1/projects/" + lifecycleID + "/notes"
 				body = map[string]any{"client_id": fmt.Sprintf("concurrent-note-%d", i), "title": "Concurrent", "body": "concurrent"}
