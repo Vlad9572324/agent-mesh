@@ -255,6 +255,8 @@ class NativeBridgeTests(unittest.TestCase):
         # Recreate the original inbox schema, including an already accepted row.
         bridge.db.execute("ALTER TABLE inbox DROP COLUMN seen_at")
         bridge.db.execute("ALTER TABLE inbox DROP COLUMN seen_session")
+        bridge.db.execute("DROP INDEX inbox_offer_order")
+        bridge.db.execute("ALTER TABLE inbox DROP COLUMN offer_order")
         inbox = [tuple(row) for row in bridge.db.execute("SELECT * FROM inbox")]
         bridge.close()
         for session in ("migration-one", "migration-two"):

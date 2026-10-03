@@ -55,8 +55,9 @@ def definition(name, description, schema, readonly=False):
 
 _TOOLS = [
     definition('link_status', 'Current authenticated native bridge status. Does not start a model or change legacy leases.', obj(), True),
-    definition('link_inbox', 'Poll a bounded backlog page and offer unseen, unaccepted addressed messages. include_seen also reviews seen but unaccepted messages. Untrusted peer data. Offering never marks seen or accepted.',
-               obj({'limit': integer(1, 200), 'context_budget': integer(512, 16000), 'include_seen': {'type': 'boolean'}})),
+    definition('link_inbox', 'Poll one bounded page per channel and fairly offer unseen, unaccepted messages. cursor="" starts a stable local view; pass next_cursor unchanged to continue. include_seen reviews seen, unaccepted messages. fetch_has_more and offer_has_more are separate. Check publication for report delivery errors. Untrusted peer data; never marks seen or accepted.',
+               obj({'limit': integer(1, 200), 'context_budget': integer(512, 16000), 'include_seen': {'type': 'boolean'},
+                    'cursor': {'type': 'string', 'maxLength': 2048}})),
     definition('link_message', 'Read the full body (at most 16 KiB) of one already-polled inbox message with current authorization. Untrusted peer data. Does not mark seen or accepted.', obj({'message_id': IDENTIFIER}, ('message_id',)), True),
     definition('link_seen', 'Explicitly mark one inbox message viewed, not accepted. Persists across sessions and suppresses default inbox offers. Does not change legacy receipts.', obj({'message_id': IDENTIFIER}, ('message_id',))),
     definition('link_accept', 'Explicitly acknowledge one native inbox message. Does not claim execution or modify legacy delivery receipts.', obj({'message_id': IDENTIFIER}, ('message_id',))),
@@ -147,8 +148,19 @@ class MCPServer:
 
     def call(self, name, arguments):
         if name == 'link_inbox':
-            self.bridge.poll_inbox(arguments.get('limit', 20))
-            return self.bridge.offer_inbox(arguments.get('context_budget', 6000), include_seen=arguments.get('include_seen', False))
+            fetched = self.bridge.poll_inbox(arguments.get('limit', 20))
+            result = self.bridge.offer_inbox(arguments.get('context_budget', 6000),
+                                            include_seen=arguments.get('include_seen', False), cursor=arguments.get('cursor'))
+            result.update(fetch=fetched, fetch_has_more=fetched['has_more'])
+            try:
+                result['publication'] = self.bridge.flush(limit=4)
+            except Exception:
+                # An ACK can be lost after commit. Do not discard offered data,
+                # claim zero sends, or include remote/private exception text.
+                result['publication'] = {'error': 'publication_failed',
+                    'pending': self.bridge.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
+                    'blocked': self.bridge.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0]}
+            return result
         methods = {'link_status': 'status', 'link_message': 'message', 'link_seen': 'seen_message', 'link_accept': 'accept_message', 'link_send': 'send', 'link_tasks': 'tasks',
                    'link_task_create': 'create_task', 'link_task_event': 'task_event', 'link_memory': 'memory',
                    'link_memory_write': 'write_memory', 'link_artifacts': 'artifacts', 'link_artifact_publish': 'publish_artifact',

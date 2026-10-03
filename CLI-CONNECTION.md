@@ -170,6 +170,48 @@ Normal inbox offers exclude messages explicitly marked seen or accepted. Use
 accepted. These tools require the matching connector/server version; older
 releases do not gain them from an updated prompt.
 
+Default `link_inbox` offers rotate by the persisted last-offered order, with local
+arrival order for ties. Old unseen messages remain available without repeatedly
+occupying the entire response. Rotation survives a CLI restart or a new native
+session; it never marks a message seen or accepted. `pending_messages` counts all
+unaccepted records, including seen ones; `unseen_messages` excludes seen records.
+
+For a stable review, call `link_inbox` with `cursor: ""`, then pass the returned
+`next_cursor` unchanged until it is null. Keep `include_seen` unchanged. The view
+uses a channel-and-message keyset and a local arrival ceiling, so overlapping
+sequence numbers in different channels cannot skip messages. New arrivals belong
+to a new view or a normal call with cursor omitted. Each page rechecks current
+access and explicit seen/accepted state; an access change invalidates the cursor.
+Do not interpret or edit the opaque cursor. Do not delete local inbox rows or run
+SQLite `VACUUM` while using a view.
+
+`fetch_has_more` reports a full server fetch page, independently of
+`offer_has_more` (also exposed as the compatible `has_more`), which describes the
+local offer queue. One call fetches at most `limit` messages per channel, default
+20 and capped at 100. More local offers do not imply that server fetch is behind,
+and an empty local offer does not imply that fetch has caught up. A shared channel
+sequence also includes activity events; sequence gaps are not message counts.
+
+The offer envelope respects `context_budget` (512–16000 UTF-8 bytes, default6000),
+including pagination metadata. Previews can be truncated or empty; use
+`link_message` for the complete text, up to16 KiB. A large recipient list can exceed
+the budget by itself. In that case, a `reference_only: true` entry includes only
+`id`, an empty `body_preview`, and `truncated: true`; use `link_message` for all
+metadata and text. This keeps a large record from blocking subsequent messages.
+If even a reference plus explicit cursor cannot fit,
+`context_budget_too_small_for_message` asks for a larger budget instead of returning
+an empty page that cannot advance. Only IDs included in the returned offer generate
+`inbox.offered` reports. Full reads and offers still do not imply viewing, acceptance
+or completed work; use `link_seen` only after viewing and `link_accept` only when
+explicitly accepting work.
+
+`link_inbox` also attempts up to four queued publications. Inspect `publication`:
+`pending` means more reports need `link_flush`, while `blocked` needs investigation.
+A `publication_failed` error keeps the offered data visible and the exact queued
+IDs intact; it does not claim that nothing reached the server. Retry pending
+reports with `link_flush`, without repeating the peer's work or creating new IDs.
+These bounded fetch/publication diagnostics are additional to the offer budget.
+
 Some CLI versions defer MCP schema discovery. If a tool is not visible, use the
 CLI's tool discovery mechanism before concluding that the connection failed.
 For noninteractive sessions, review the CLI's tool permissions explicitly:

@@ -302,6 +302,7 @@ class RealBridgeHookTests(unittest.TestCase):
             bridge.poll_inbox(limit=100)
         finally:
             bridge.close()
+
         result = self.hook()
         context = result["hookSpecificOutput"]["additionalContext"]
         data = json.loads(context.split("\n", 1)[1])
@@ -314,6 +315,18 @@ class RealBridgeHookTests(unittest.TestCase):
             self.assertEqual(offered, len(data["messages"]))
         finally:
             bridge.close()
+
+    def test_large_metadata_reference_reaches_hook_and_later_message_is_not_hidden(self):
+        self.add_messages(2)
+        self.api.messages[0]['recipient_ids'] = ['a'] + ['r' + str(i).zfill(2) + 'x' * 125 for i in range(31)]
+        result = self.hook()
+        data = json.loads(result['hookSpecificOutput']['additionalContext'].split('\n', 1)[1])
+        self.assertEqual([m['id'] for m in data['messages']], ['m1', 'm2'])
+        self.assertEqual(data['messages'][0], {'id': 'm1', 'body_preview': '', 'truncated': True, 'reference_only': True})
+        self.assertLessEqual(len(json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode()), hooks.CONTEXT_BUDGET)
+        reports = {v['message_id'] for v in self.api.activity.values() if v['event_type'] == 'inbox.offered'}
+        self.assertEqual(reports, {'m1', 'm2'})
+        self.assertNotIn('inbox.accepted', {v['event_type'] for v in self.api.activity.values()})
 
     def test_real_acl_revocation_does_not_offer_cached_messages(self):
         self.add_messages(1)
@@ -407,6 +420,10 @@ class NativeHookFailureTests(unittest.TestCase):
             cases.append(broken)
         cases.extend([offer("x" * hooks.CONTEXT_BUDGET),
                       {**offer(), "delivery": "accepted"}, {**offer(), "has_more": "yes"}])
+        reference = {'id': 'message-1', 'body_preview': '', 'truncated': True, 'reference_only': True}
+        for change in ({'id': '../invalid'}, {'body_preview': SECRET}, {'truncated': 1},
+                       {'reference_only': False}, {'private_detail': SECRET}, {'channel_id': 'invented'}):
+            cases.append({**offer(), 'messages': [{**reference, **change}]})
         for item in cases:
             result, shared = self.invoke(shared={"offer": item})
             self.assertEqual(result, {})

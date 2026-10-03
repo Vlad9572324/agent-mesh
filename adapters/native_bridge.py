@@ -226,7 +226,14 @@ class NativeBridge:
                 for name, kind in (('seen_at', 'REAL'), ('seen_session', 'TEXT')):
                     if name not in columns:
                         self.db.execute(f'ALTER TABLE inbox ADD COLUMN {name} {kind}')
+                self.db.execute('CREATE INDEX IF NOT EXISTS offers_message_time ON offers(message_id,offered_at)')
+                if 'offer_order' not in columns:
+                    self.db.execute('ALTER TABLE inbox ADD COLUMN offer_order INTEGER NOT NULL DEFAULT 0')
+                    self.db.execute('''UPDATE inbox SET offer_order=COALESCE(
+                        (SELECT CAST(MAX(offered_at) AS INTEGER) FROM offers WHERE message_id=inbox.id),0)''')
+                self.db.execute('CREATE INDEX IF NOT EXISTS inbox_offer_order ON inbox(offer_order)')
                 self.db.execute("INSERT OR IGNORE INTO meta VALUES('binding',?)", (encoded,))
+                self.db.execute("INSERT OR IGNORE INTO meta VALUES('inbox_view_id',?)", (uuid.uuid4().hex,))
                 for channel in self.config['channel_ids']:
                     self.db.execute('INSERT OR IGNORE INTO cursors(channel_id) VALUES(?)', (channel,))
         except BaseException:
@@ -374,51 +381,121 @@ class NativeBridge:
                                    (channel, include_seen)).fetchone()[0]
                    for channel in allowed)
 
-    def offer_inbox(self, context_budget=6000, minimum_interval=0, include_seen=False):
+    def _inbox_scope(self, allowed, include_seen):
+        state_id = self.db.execute("SELECT value FROM meta WHERE key='inbox_view_id'").fetchone()[0]
+        material = [state_id, self.config['agent_id'], self.config['project_id'],
+                    sorted(allowed), include_seen]
+        return hashlib.sha256(canonical(material).encode()).hexdigest()
+
+    @staticmethod
+    def _inbox_cursor(scope, ceiling, row):
+        value = [1, scope, ceiling, [row['channel_id'], row['seq'], row['id']]]
+        return base64.urlsafe_b64encode(canonical(value).encode()).decode().rstrip('=')
+
+    def _inbox_position(self, cursor, scope, maximum):
+        # A cursor is only a scoped position, never authority or executable SQL.
+        try:
+            if type(cursor) is not str or not 1 <= len(cursor) <= 2048 or not re.fullmatch(r'[A-Za-z0-9_-]+', cursor):
+                raise ValueError()
+            raw = base64.b64decode(cursor + '=' * (-len(cursor) % 4), altchars=b'-_', validate=True)
+            value = strict_json(raw.decode('utf-8'))
+            if (canonical(value).encode() != raw or base64.urlsafe_b64encode(raw).decode().rstrip('=') != cursor
+                    or type(value) is not list or len(value) != 4 or type(value[0]) is not int or value[0] != 1
+                    or value[1] != scope or type(value[2]) is not int or not 1 <= value[2] <= maximum
+                    or type(value[3]) is not list or len(value[3]) != 3):
+                raise ValueError()
+            channel, seq, identity = value[3]
+            if (not identifier(channel) or not identifier(identity) or type(seq) is not int
+                    or not 1 <= seq <= 9223372036854775807):
+                raise ValueError()
+            if not self.db.execute('SELECT 1 FROM inbox WHERE channel_id=? AND seq=? AND id=? AND rowid<=?',
+                                   (channel, seq, identity, value[2])).fetchone():
+                raise ValueError()
+            return value[2], value[3]
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            raise NativeError('invalid_inbox_cursor') from None
+
+    def offer_inbox(self, context_budget=6000, minimum_interval=0, include_seen=False, cursor=None):
         if type(context_budget) is not int or not 512 <= context_budget <= 16000:
             raise NativeError('invalid_context_budget')
         if type(minimum_interval) is not int or not 0 <= minimum_interval <= 3600:
             raise NativeError('invalid_offer_interval')
         if type(include_seen) is not bool:
             raise NativeError('invalid_include_seen')
+        if cursor is not None and (type(cursor) is not str or len(cursor) > 2048):
+            raise NativeError('invalid_inbox_cursor')
         allowed = self._authorize()
-        result = {'messages': [], 'has_more': False, 'truncated': False, 'delivery': 'offered_not_accepted'}
-        if not allowed:
-            return result
-        now = time.time()
-        # Filter BEFORE the bound: inaccessible old messages cannot starve an
-        # accessible channel. Offers are session-local cooldown, not acceptance.
-        marks = ','.join('?' for _ in allowed)
-        rows = self.db.execute(f'''SELECT i.* FROM inbox i LEFT JOIN offers o
-            ON o.message_id=i.id AND o.session_id=? WHERE i.accepted_at IS NULL
-            AND (? OR i.seen_at IS NULL)
-            AND i.channel_id IN ({marks}) AND (?=0 OR o.offered_at IS NULL OR o.offered_at<=?)
-            ORDER BY i.seq,i.id LIMIT 200''', (self.session_id, include_seen, *allowed, minimum_interval, now-minimum_interval)).fetchall()
-        offered = []
-        for row in rows:
-            if row['channel_id'] not in allowed:
-                continue
-            item = strict_json(row['message'])
-            body = item.pop('body')
-            item['body_preview'] = body.encode()[:2000].decode('utf-8', errors='ignore')
-            item['truncated'] = item['body_preview'] != body
-            candidate = {**result, 'messages': result['messages'] + [item]}
-            while len(canonical(candidate).encode()) > context_budget and item['body_preview']:
-                item['body_preview'] = item['body_preview'][:max(0, len(item['body_preview']) - 256)]
-                item['truncated'] = True
-            if len(canonical(candidate).encode()) > context_budget:
-                result['has_more'] = result['truncated'] = True
-                break
-            result['messages'].append(item)
-            offered.append(item['id'])
-        result['has_more'] = result['has_more'] or self._pending_count(allowed, include_seen) > len(offered)
-        result['truncated'] = result['truncated'] or any(v['truncated'] for v in result['messages'])
-        # Activity only names exactly the records included in the returned JSON.
+        # Serialize selection and scheduling across hook/MCP connections. No
+        # network IO occurs in this transaction. Global order survives sessions;
+        # channel-local sequence numbers are never compared for fair scheduling.
         with self.atomic():
-            for message_id in offered:
+            result = {'messages': [], 'has_more': False, 'offer_has_more': False,
+                      'next_cursor': None, 'truncated': False, 'delivery': 'offered_not_accepted'}
+            explicit = cursor is not None
+            scope = self._inbox_scope(allowed, include_seen)
+            ceiling = self.db.execute('SELECT COALESCE(MAX(rowid),0) FROM inbox').fetchone()[0]
+            position = ['', 0, '']
+            if cursor:
+                ceiling, position = self._inbox_position(cursor, scope, ceiling)
+            if not allowed:
+                return result
+            now = time.time()
+            marks = ','.join('?' for _ in allowed)
+            where = f'i.accepted_at IS NULL AND (? OR i.seen_at IS NULL) AND i.channel_id IN ({marks})'
+            params = [include_seen, *allowed]
+            if explicit:
+                where += ' AND i.rowid<=? AND (i.channel_id,i.seq,i.id)>(?,?,?)'
+                params.extend([ceiling, *position])
+                order = 'i.channel_id,i.seq,i.id'
+            else:
+                where += ''' AND (?=0 OR NOT EXISTS (SELECT 1 FROM offers o
+                    WHERE o.message_id=i.id AND o.session_id=? AND o.offered_at>?))'''
+                params.extend([minimum_interval, self.session_id, now-minimum_interval])
+                order = 'i.offer_order,i.rowid'
+            # One lookahead record distinguishes an exhausted keyset page.
+            rows = self.db.execute(f'SELECT i.* FROM inbox i WHERE {where} ORDER BY {order} LIMIT 201', params).fetchall()
+            pending = self._pending_count(allowed, include_seen)
+            for index, row in enumerate(rows[:200]):
+                item = strict_json(row['message'])
+                body = item.pop('body')
+                item['body_preview'] = body.encode()[:2000].decode('utf-8', errors='ignore')
+                item['truncated'] = item['body_preview'] != body
+                more = index + 1 < len(rows) if explicit else pending > index + 1
+                candidate = {**result, 'messages': result['messages'] + [item],
+                             'has_more': more, 'offer_has_more': more,
+                             'next_cursor': self._inbox_cursor(scope, ceiling, row) if explicit and more else None}
+                while True:
+                    candidate['truncated'] = more or any(v['truncated'] for v in candidate['messages'])
+                    if len(canonical(candidate).encode()) <= context_budget:
+                        break
+                    if not item['body_preview']:
+                        break
+                    item['body_preview'] = item['body_preview'][:max(0, len(item['body_preview']) - 256)]
+                    item['truncated'] = True
+                if len(canonical(candidate).encode()) > context_budget:
+                    # Long recipient lists must not block a hook's whole queue.
+                    # Show an explicit reference, never invented/partial author
+                    # or recipient metadata. The full record remains online via
+                    # link_message. This ID really is included in the offer.
+                    item = {'id': row['id'], 'body_preview': '', 'truncated': True, 'reference_only': True}
+                    candidate['messages'] = result['messages'] + [item]
+                    candidate['truncated'] = True
+                if len(canonical(candidate).encode()) > context_budget:
+                    if not result['messages']:
+                        raise NativeError('context_budget_too_small_for_message')
+                    break
+                result = candidate
+            if not rows and not explicit:
+                result['has_more'] = result['offer_has_more'] = pending > 0
+            ordinal = self.db.execute('SELECT COALESCE(MAX(offer_order),0)+1 FROM inbox').fetchone()[0]
+            # Only the exact returned records count as offered, including an
+            # empty/truncated preview whose full text requires link_message.
+            for item in result['messages']:
+                message_id = item['id']
                 self._observe('inbox.offered', message_id=message_id, event_id=message_id)
                 self.db.execute('INSERT INTO offers VALUES(?,?,?) ON CONFLICT(session_id,message_id) DO UPDATE SET offered_at=excluded.offered_at',
                                 (self.session_id, message_id, now))
+                self.db.execute('UPDATE inbox SET offer_order=? WHERE id=?', (ordinal, message_id))
         return self.sanitize(result)
 
     def _current_inbox_message(self, message_id, *, write=False):

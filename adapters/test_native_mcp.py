@@ -101,7 +101,8 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         self.assertEqual(self.server.handle(rpc(2, 'resources/list'))['error']['code'], -32601)
         self.assertEqual(self.server.handle(rpc(3, 'tools/call', {'name': 'exec'}))['error']['code'], -32602)
-        for identity, args in [(4, {'url': 'https://other'}), (5, {'limit': True}), (6, {'limit': 201}), (7, {'include_seen': 1})]:
+        for identity, args in [(4, {'url': 'https://other'}), (5, {'limit': True}), (6, {'limit': 201}), (7, {'include_seen': 1}),
+                               (8, {'cursor': None}), (9, {'cursor': True}), (10, {'cursor': 'x' * 2049})]:
             response = self.server.handle(rpc(identity, 'tools/call', {'name': 'link_inbox', 'arguments': args}))
             self.assertTrue(response['result']['isError'])
         self.assertEqual(self.bridge.calls, [])
