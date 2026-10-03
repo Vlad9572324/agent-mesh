@@ -57,6 +57,7 @@ python3 -B -m unittest discover -s scripts -p 'test_*.py'
 node --check web/app.js
 node tests/i18n_runtime.mjs
 node --test tests/delivery_alerts_runtime.mjs
+node --test tests/artifact_documents_runtime.mjs
 node tests/branding.mjs
 node scripts/check-docs.mjs
 ```
@@ -154,6 +155,12 @@ backend and connector changes are integrated:
 ```sh
 python3 -B tests/reliable_delivery_e2e.py
 ```
+
+This suite also checks sender-side `link_delivery` without a local recipient
+inbox, separate native and legacy facts, authenticated build reporting, and an
+immutable titled document publication/read round trip over real MCP and HTTPS.
+Document artifacts must keep legacy untitled request hashes replayable across
+migration; named documents never substitute for an `evidence` verification role.
 
 Delivery-policy integration tests use real PostgreSQL with synthetic timestamps
 to cover deadline boundaries, independent receipt stages, exact reply identity,

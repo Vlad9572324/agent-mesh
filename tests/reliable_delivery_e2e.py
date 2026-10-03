@@ -6,6 +6,7 @@ AGENT_LINK_RUNTIME_DIR and its test DSN, plus AGENT_LINK_CA_FILE. No provider CL
 live workspace or model is used. The fixed fixture port must be available.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -28,10 +29,10 @@ class ReliableDeliverySmoke(NativeSmoke):
     def runner(self, *args, **kwargs):
         raise AssertionError('This suite cannot dispatch a model job')
 
-    def mcp(self, name, arguments):
+    def mcp(self, name, arguments, runtime='codex'):
         # Each call is a real fresh stdio process/session. Inbox state remains
         # shared, proving that fair selection survives process boundaries.
-        config, _ = self.configs['codex']
+        config, _ = self.configs[runtime]
         packets = [
             {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
                 'protocolVersion': '2025-11-25', 'capabilities': {},
@@ -165,6 +166,14 @@ class ReliableDeliverySmoke(NativeSmoke):
         self.check('real_seen_clears_ack_only_leaves_reply_deadline', len(alerts) == 1
                    and alerts[0]['reason'] == 'unanswered' and alerts[0]['seen_at']
                    and alerts[0]['accepted_at'] is None and alerts[0]['legacy_accepted_at'] is None)
+        delivery = self.mcp('link_delivery', {'message_id': mid}, runtime='claude')
+        row = delivery['delivery_status'][0]
+        self.check('sender_reads_native_seen_without_local_inbox_or_fabricated_legacy_ack',
+                   delivery['message_id'] == mid and row['agent_id'] == 'codex-pilot'
+                   and row['status'] == 'viewed' and row['native']['seen_at']
+                   and row['native']['accepted_at'] is None and row['reply'] is None
+                   and row['legacy']['delivered_at'] is None and row['legacy']['accepted_at'] is None
+                   and 'body' not in delivery)
         self.clients['codex-pilot'].request('POST', '/v1/channels/general/messages', {
             'client_id': self.run_id + '-broadcast-reply', 'body': 'Synthetic reply without addressee',
             'recipient_ids': [], 'reply_to': mid})
@@ -174,10 +183,46 @@ class ReliableDeliverySmoke(NativeSmoke):
                                     'client_id': self.run_id + '-direct-reply'})
         self.check('real_direct_reply_clears_owner_alert', sent['publication_state'] == 'sent'
                    and not target_alerts())
+        delivery = self.mcp('link_delivery', {'message_id': mid}, runtime='claude')
+        row = delivery['delivery_status'][0]
+        self.check('sender_reads_qualifying_direct_reply_separately_from_acceptance',
+                   row['status'] == 'replied'
+                   and row['reply']['message_id'] == sent['result']['message']['id']
+                   and row['native']['accepted_at'] is None and row['legacy']['accepted_at'] is None)
         original = self.clients['codex-pilot'].request('GET', '/v1/messages/' + mid)['message']
         self.check('native_path_preserves_legacy_receipts', all(not r.get('delivered_at')
                    and not r.get('accepted_at') for r in original.get('receipts', [])))
         self.check('no_model_invocation', self.model_calls == 0 and not self.report['models'])
+
+    def build_and_document_roundtrip(self):
+        status = self.mcp('link_status', {})
+        server = self.clients['codex-pilot'].request('GET', '/v1/me')['server_build']
+        self.check('status_build_identity_matches_actual_authenticated_server',
+                   status['server_version'] == server['version'] == 'dev'
+                   and status['server_source_commit'] is None
+                   and server['source_commit'] == 'unknown'
+                   and status['server_identity_source'] == 'authenticated_api')
+        self.check('unstamped_source_connector_does_not_borrow_server_identity',
+                   status['connector_version'] is None and status['connector_source_commit'] is None
+                   and status['connector_identity_source'] == 'unavailable')
+        text = 'Synthetic document / Документ: sender delivery verification.\n'
+        title = 'Delivery requirements / Требования'
+        args = {'client_id': self.run_id + '-document', 'role': 'document',
+                'title': title, 'base_revision': 'requirements-v1', 'content': text}
+        sent = self.mcp('link_artifact_publish', args)
+        artifact = sent['result']['artifact']
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        self.check('named_document_published_with_explicit_document_revision',
+                   sent['publication_state'] == 'sent' and artifact['title'] == title
+                   and artifact['role'] == 'document' and artifact['base_revision'] == 'requirements-v1'
+                   and artifact['sha256'] == digest and artifact['size_bytes'] == len(text.encode()))
+        replay = self.mcp('link_artifact_publish', args)
+        self.check('document_retry_preserves_identity', replay['result']['artifact']['id'] == artifact['id'])
+        content = self.mcp('link_artifacts', {'action': 'content', 'artifact_id': artifact['id'],
+                           'sha256': digest, 'base_revision': 'requirements-v1'}, runtime='claude')
+        self.check('other_participant_reads_same_named_document_with_pins',
+                   content['text'] == text and content['artifact']['title'] == title
+                   and content['artifact']['role'] == 'document' and not content['truncated'])
 
 
 def main():
@@ -190,6 +235,7 @@ def main():
         smoke.prepare_reliability()
         smoke.inbox_progress()
         smoke.deadline_roundtrip()
+        smoke.build_and_document_roundtrip()
         smoke.report['success'] = True
     except BaseException as error:
         smoke.report['success'] = False
