@@ -2,7 +2,64 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-rc.3 prerelease published
+## Current status: v0.1.0-receipts.1 prerelease published
+
+Source: `6ea712e7c3bcfeafc3a4e20429766833dbf52caa`; packaging version: **3**.
+The version-tag workflow completed validation and publication successfully.
+All four release assets were downloaded anonymously, their SHA-256 hashes matched
+the approved hosted dry-run build, and their bytes matched both the local release
+artifacts used for deployment and the hosted build. Existing releases were not
+replaced.
+
+| Verification | Result |
+| --- | --- |
+| Version-tag release run | [37113695805](https://github.com/Vlad9572324/agent-mesh/actions/runs/37113695805) — validation and publication passed |
+| Published GitHub prerelease | [v0.1.0-receipts.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1), release ID `402439670` |
+| Four release asset downloads and SHA-256 comparison | Passed anonymously; byte-for-byte match to the local and approved hosted builds |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-receipts.1` |
+| Anonymous image descriptor/layer verification | Passed for the configuration and all four layers; every size and SHA-256 matched |
+
+The published image digest is
+`sha256:ebc930e9709f037941c2d33120bb11d814f9fbe2aa6b83940fbd36907169d78b`.
+Anonymous verification confirmed tag-to-digest identity, every descriptor’s size
+and SHA-256, exact version/source, Linux amd64, the Apache-2.0 label and nonroot
+configuration. That was a byte-download check, not a separate Docker execution.
+The successful hosted workflow supplies the container execution, Compose smoke
+and digest-pull identity checks.
+
+The [prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1)
+adds changes since rc.3:
+
+- Chat displays each recipient’s offered, viewed and accepted connector reports
+  separately from adapter confirmations. Times identify the first server record
+  of each report. Acceptance does not establish task completion.
+- Owners can issue scoped, expiring, one-time participant invitations. The
+  generated connection command prepares a private connector and starts a normal
+  local CLI when the recipient explicitly runs it. `--check` starts no model.
+- Sidebar counts persist each account’s unread messages. Quiet activity views
+  hide routine technical reports by default with a reversible reveal control;
+  the history and transport cursors are retained.
+- The connector bundle includes an opt-in local task listener with explicit
+  creator/file policy, bounded execution and durable artifact/review handoff.
+  Ordinary messages do not start models, and this is not a central scheduler.
+
+This release remains a Linux amd64 trusted-LAN pilot. The immutable release
+source is the commit above; later documentation corrections do not change its
+tag, binary, archives or image.
+
+The [publication-free release dry run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37113513604)
+and [Container CI validation](https://github.com/Vlad9572324/agent-mesh/actions/runs/37113498441)
+passed for this source. The hosted default Go run skips database integration
+without a test DSN; hosted Compose smoke covers its separate isolated scenarios.
+Local validation ran the full Go suite with a dedicated database: **115 tests,
+no skips**. Focused native-receipt checks passed **25 JavaScript runtime cases**
+and **6 isolated browser cases**, including real SSE refresh, localization,
+unavailable status, stale-response rejection and cleanup. Local archive checks
+covered five help entrypoints and eight imports; hosted container checks covered
+three help entrypoints and four imports. These are distinct test scopes, and
+none establishes that a provider model executed a task.
+
+## Earlier release: v0.1.0-rc.3
 
 The [v0.1.0-rc.3 prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3)
 is published from source `cc683249e7b904cefc0fa71d7da444dc8f8099dd`.
@@ -117,10 +174,15 @@ versions are not overwritten. See the [publication gates](release-process.md).
 
 The builder produces a Linux amd64 server archive, a separate Python connector
 archive, `RELEASE.json`, and `SHA256SUMS`. Both archives contain a version-rendered
-`INSTALL.md`, release metadata and dependency notices. Packaging version 2, used
-by rc.3, also contains `LICENSE` and `NOTICE`. The server bundle includes
-`bin/agent-mesh` and the three matching browser assets; the connector bundle
-contains the launcher, hooks, MCP bridge and runtime modules.
+`INSTALL.md`, release metadata and dependency notices. Packaging version 3 retains
+the `LICENSE` and `NOTICE` introduced by rc.3 packaging version 2. The server
+bundle includes `bin/agent-mesh` and the three matching browser assets; the
+connector bundle contains the launcher, hooks, MCP bridge, opt-in listener,
+coordination/artifact modules and listener documentation. The
+[release process](release-process.md#artifact-contract) lists its complete runtime
+closure. Owner invitation packages are generated privately from the server’s
+embedded connector sources; no invitation, service key or runtime state is
+included in public release assets.
 
 `agent-mesh version` reports build identity without contacting PostgreSQL.
 The bundle does not install PostgreSQL, issue LAN TLS certificates, create a real
@@ -159,8 +221,9 @@ The hosted checks, explicit recovery and anonymous downloads above establish
 the recorded artifact publication, not live-model or production qualification.
 Operator-specific evidence stays outside the repository.
 
-- No scheduler, automatic idle wakeup, merge/deploy, external process stopping
-  or filesystem fencing.
+- No central scheduler, automatic idle wakeup, merge/deploy or external process
+  stopping. The opt-in listener uses local workspace locking and explicit file
+  scope; the server itself does not hold filesystem locks or sandbox a CLI.
 - Attributed reports are not independent correctness certification; the server
   does not execute reported tests or import private model memory.
 - Owners can read published workspace content; service keys are not end-to-end

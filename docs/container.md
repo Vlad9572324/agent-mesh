@@ -7,25 +7,29 @@ PostgreSQL 14 container managed by Docker Compose. It does not include a model,
 provider CLI, connector daemon, or production deployment. Native CLI participants
 still run on their own machines using the [CLI connection guide](../CLI-CONNECTION.md).
 
-**Public image available:** `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.3`
-can be pulled without logging in to GHCR. Its source/build identity and digest
-were verified. The matching [GitHub prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3)
-is also published with server and connector archives.
-See [release status](releases.md) for the exact evidence. This is the new server
-package, not an inherited image or earlier repository release.
+**Public image available:** `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-receipts.1`.
+The version-tag workflow published it and verified a digest pull and binary
+identity. Its configuration and all four layers were separately downloaded
+without authentication and verified against every descriptor’s size and SHA-256.
+That byte-download check was not another Docker execution; container execution
+was performed by the hosted workflow. The matching
+[GitHub prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1)
+is published with server and connector archives. See
+[release status](releases.md) for current evidence and preserved rc.3/rc.2 results.
 
-Agent Mesh is licensed under [Apache-2.0](../LICENSE). The rc.3 image contains
+Agent Mesh is licensed under [Apache-2.0](../LICENSE). The packaging-version-3 image contains
 `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md` under `/opt/agent-mesh/`, with an
 Apache-2.0 OCI license label. Dependencies retain their own licenses.
-The earlier rc.2 image predates this addition and is unchanged.
+The rc.3 image already includes these files; rc.2 predates this addition. Both
+earlier images remain unchanged.
 
 ## Releases and Packages are different
 
 | Distribution | Identity | What it supplies |
 | --- | --- | --- |
-| GitHub prerelease | [v0.1.0-rc.3](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3) | Linux amd64 server archive, Python connectors, metadata and checksums |
-| Public GHCR image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-rc.3` | Verified Linux amd64 server image; anonymous pull supported |
-| GHCR manual candidate — pending | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
+| GitHub prerelease | [v0.1.0-receipts.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1) | Linux amd64 server archive, Python connectors, metadata and checksums |
+| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-receipts.1` | Linux amd64 server image; hosted execution and separate anonymous download verified |
+| GHCR manual candidate — separate workflow | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
 
 Manual container candidates report a version such as
 `v0.1.0-rc.2-container.<12-character-commit>`. This is a build-identity format,
@@ -114,10 +118,10 @@ environment file, repository, model workspace, or chat.
 
 ## 2. Pull and inspect the selected image
 
-Pull the verified public rc.3 image without a login:
+Pull the exact published receipts.1 image without a login:
 
 ```sh
-AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:dbf1eefe1032ff84684968b0e673d3e30db40685f87953e3ccbbea6d46e757ed'
+AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:ebc930e9709f037941c2d33120bb11d814f9fbe2aa6b83940fbd36907169d78b'
 docker pull "$AGENT_MESH_IMAGE"
 docker run --rm --network none "$AGENT_MESH_IMAGE" version
 ```
@@ -126,8 +130,8 @@ The version command needs no database or service keys. Check its JSON `commit`,
 `version`, `build_date`, `go_version`, `goos`, and `goarch` against the selected
 publication. A version match is artifact identity, not database readiness,
 provider authentication, or a deployment test.
-For this digest, require `version` to be `v0.1.0-rc.3`, `commit` to be
-`cc683249e7b904cefc0fa71d7da444dc8f8099dd`, and target `linux` / `amd64`.
+For this digest, require `version` to be `v0.1.0-receipts.1`, `commit` to be
+`6ea712e7c3bcfeafc3a4e20429766833dbf52caa`, and target `linux` / `amd64`.
 Use that same source revision's Compose files. Tag-pinned guides are historical
 snapshots and may retain prepublication status wording; the
 [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)
@@ -221,6 +225,10 @@ and individually scoped participant accounts through the [user guide](user-guide
 Normal Compose startup does **not** run bootstrap, create an owner, or seed demo
 data. It does not start a provider CLI/model, attach an existing agent session,
 or install a host-level service. A container restart is not a model wakeup.
+The optional owner invitation wizard additionally requires a trusted public HTTPS
+origin and CA configuration described in [agent onboarding](agent-onboarding.md).
+Its connection command runs on the participant’s machine; neither inviting an
+agent nor receiving an ordinary message starts a model in this container.
 Compose does set `restart: unless-stopped` for the app and database, so Docker can
 restart those explicitly started containers under its own lifecycle policy. It
 does not configure whether Docker itself starts on host boot.

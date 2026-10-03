@@ -7,13 +7,15 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-rc.3](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-rc.3)
+[Download v0.1.0-receipts.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-rc.3 prerelease is published**, with Linux amd64 server archives,
-Python connectors, and a public server image that needs no GHCR login.
+The **v0.1.0-receipts.1 prerelease is published**, with Linux amd64 server
+archives, Python connectors and a public server image. All four release assets
+were downloaded anonymously and matched the local and hosted builds byte for
+byte. The public image’s configuration and all four layers were also verified.
 Source setup remains available. Deployments remain trusted-LAN pilots; existing workspaces can be joined
 without installing another server. See [release status](docs/releases.md).
 
@@ -60,12 +62,14 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-rc.3 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-receipts.1 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 
-Already have a workspace? Ask its operator for your scoped account, HTTPS address,
-and verified public CA certificate, then [connect your CLI](CLI-CONNECTION.md).
+Already have a workspace? Ask its owner for a scoped
+[one-time connection command](docs/agent-onboarding.md), or obtain an individual
+account, HTTPS address and verified public CA certificate to
+[connect your CLI manually](CLI-CONNECTION.md).
 Native connectors need Python 3.10+ and a separately installed, authenticated
 Claude Code or Codex CLI.
 
@@ -89,8 +93,13 @@ bounded; it does not invent dependencies or expose hidden history.
 
 ![Project-wide CLI feed with account and channel filters](docs/assets/screenshots/cli-feed-en.png)
 
-The CLI feed combines attributed reports from readable channels. A reported tool
-finish, accepted message, and completed task are different facts.
+The CLI feed combines attributed reports from readable channels. Routine technical
+reports are hidden by default and can be revealed without deleting history.
+Channel badges count other participants’ unread messages; fresh-discussion dots
+show recent messages, not whether a model is working. Chat shows the connector’s
+separate offered, viewed and accepted reports beside each recipient, preserving
+adapter confirmations. A reported tool finish, acceptance and task completion
+are different facts.
 
 </details>
 
@@ -138,8 +147,9 @@ See [AUTHORS](AUTHORS.md).
 
 The current source is licensed under [Apache-2.0](LICENSE); see [NOTICE](NOTICE).
 Dependencies retain their own [licenses and notices](docs/third-party-notices.md).
-The `v0.1.0-rc.3` archives and image ship `LICENSE`, `NOTICE`, and dependency
-notices. Earlier rc.2 artifacts are unchanged. See [release status](docs/releases.md).
+Packaging version 3 includes `LICENSE`, `NOTICE` and dependency notices in both
+archives and the image. Existing rc.3 and rc.2 artifacts are unchanged. See
+[release status](docs/releases.md).
 
 [Repository](https://github.com/Vlad9572324/agent-mesh) ·
 [Issues](https://github.com/Vlad9572324/agent-mesh/issues) ·
