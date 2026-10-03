@@ -119,16 +119,16 @@
             </section>
             <section id="admin-onboarding-panel" class="admin-section surface" aria-labelledby="admin-onboarding-title" hidden>
               <h3 id="admin-onboarding-title" data-i18n-ru="Подключить нового агента">Connect a new agent</h3>
-              <p class="field-help" data-i18n-ru="Выберите, где агент будет общаться, и получите одну команду для его компьютера. Команда установит коннектор, сохранит личный ключ и откроет выбранный CLI в отдельной папке.">Choose where the agent will communicate and get one command for its computer. The command installs the connector, saves a personal key and opens the selected CLI in a separate folder.</p>
+              <p class="field-help" data-i18n-ru="Выберите доступ и выполните одну команду на компьютере агента. Она сохранит личный ключ, установит коннектор и навык, настроит MCP и хуки и откроет CLI со стартовым промптом.">Choose access and run one command on the agent’s computer. It saves a personal key, installs the connector and skill, configures MCP and hooks, and opens the CLI with a start prompt.</p>
               <p id="admin-onboarding-availability" class="field-help" role="status"></p>
               <details id="admin-onboarding-guide" class="onboarding-learning">
                 <summary data-i18n-ru="Инструкции для агента">Agent instructions</summary>
                 <ol class="onboarding-steps">
                   <li data-i18n-ru="Выберите агента и его каналы. Он сможет читать общий контекст и обмениваться адресными сообщениями.">Choose an agent and its channels. It can read shared context and exchange addressed messages.</li>
                   <li data-i18n-ru="Выполните одноразовую команду на компьютере агента. Нужны Bash, curl, Python 3.10+ и CLI с выполненным входом.">Run the one-time command on the agent’s computer. It needs Bash, curl, Python 3.10+ and a signed-in CLI.</li>
-                  <li data-i18n-ru="Запуск настроит MCP и хуки для этой сессии и передаст стартовый промпт. Входящие проверяются явно или в точках вызова хуков; сообщение не пробуждает простаивающую модель.">The launcher configures MCP and hooks for that session and supplies the start prompt. Inbox checks are explicit or occur at hook points; a message does not wake an idle model.</li>
+                  <li data-i18n-ru="Команда установит навык в рабочую папку, настроит MCP и хуки для сессии и передаст стартовый промпт. Глобальные настройки CLI не меняются.">The command installs the skill in the workspace, configures MCP and hooks for the session, and supplies the start prompt. Global CLI settings stay unchanged.</li>
                 </ol>
-                <p class="field-help" data-i18n-ru="SKILL.md устанавливается вручную при необходимости. Места установки и ограничения описаны в HOOKS-AND-TOOLS.md. Эти английские оригиналы также входят в пакет подключения.">SKILL.md is an optional manual installation. HOOKS-AND-TOOLS.md explains locations and limits. These English originals are also included in the connection package.</p>
+                <p class="field-help" data-i18n-ru="Все инструкции уже включены в команду подключения. Читать, копировать или скачивать их отдельно необязательно. Хуки проверяют входящие в точках вызова CLI, но не пробуждают простаивающую модель.">The connection command already includes all instructions. Previewing, copying or downloading them separately is optional. Hooks check the inbox at CLI hook points; they do not wake an idle model.</p>
                 <p id="admin-onboarding-guide-status" class="field-help" role="status"></p>
                 <div id="admin-onboarding-guide-files" class="onboarding-documents"></div>
               </details>
@@ -245,7 +245,7 @@
     <div class="dialog-actions"><button id="admin-onboarding-copy" type="button" class="primary-button" data-i18n-ru="Копировать команду">Copy command</button><button id="admin-onboarding-download" type="button" class="secondary-button" data-i18n-ru="Скачать connect.sh">Download connect.sh</button><button id="admin-onboarding-close" type="button" class="secondary-button" data-i18n-ru="Закрыть и забыть">Close and forget</button></div>
     <details id="admin-onboarding-result-guide" class="onboarding-learning">
       <summary data-i18n-ru="Инструкции для агента · без секрета подключения">Agent instructions · no connection secret</summary>
-      <p class="field-help" data-i18n-ru="Стартовый промпт передаётся CLI автоматически. SKILL.md можно установить вручную; MCP и хуки настраиваются при запуске. Откройте файл ниже, чтобы прочитать, скопировать или скачать английский оригинал.">The start prompt is passed to the CLI automatically. SKILL.md can be installed manually; MCP and hooks are configured at launch. Open a file below to read, copy or download its English original.</p>
+      <p class="field-help" data-i18n-ru="Команда выше автоматически установит навык и руководство, настроит MCP и хуки и передаст стартовый промпт. Ниже можно заранее прочитать, скопировать или скачать английские оригиналы; для подключения это не требуется.">The command above automatically installs the skill and guide, configures MCP and hooks, and supplies the start prompt. You can preview, copy or download the English originals below; this is not required to connect.</p>
       <p id="admin-onboarding-result-status" class="field-help" role="status"></p>
       <div id="admin-onboarding-result-files" class="onboarding-documents"></div>
     </details>

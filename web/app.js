@@ -77,10 +77,10 @@
     "Automatic copying is unavailable. Copy the selected command manually.": "Автоматическое копирование недоступно. Скопируйте выделенную команду вручную.",
     "Onboarding invitations": "Приглашения для подключения",
     "Start prompt": "Стартовый промпт",
-    "Optional skill": "Необязательный навык",
+    "Communication skill": "Навык общения",
     "Hooks and tools": "Хуки и инструменты",
     "Loaded automatically when the connection starts a new CLI session.": "Загружается автоматически при запуске новой CLI-сессии через подключение.",
-    "Install manually only if useful; see the installation locations in HOOKS-AND-TOOLS.md.": "Устанавливайте вручную при необходимости; расположения для установки указаны в HOOKS-AND-TOOLS.md.",
+    "Installed automatically in the selected CLI workspace. HOOKS-AND-TOOLS.md explains how it works.": "Устанавливается автоматически в рабочую папку выбранного CLI. Подробности — в HOOKS-AND-TOOLS.md.",
     "Setup, inbox polling and delivery reports. Hooks and MCP are configured for each launch.": "Настройка, проверка входящих и отчёты о доставке. Хуки и MCP настраиваются для каждого запуска.",
     "Checking guide files…": "Проверяем файлы инструкций…",
     "Guide files are unavailable from this server. You can still use the connection command.": "Этот сервер не предоставил файлы инструкций. Командой подключения по-прежнему можно пользоваться.",
@@ -3753,9 +3753,9 @@
   }
 
   function renderOnboardingGuidance(area, slot) {
-    const labels = [tr("Start prompt"), tr("Optional skill"), tr("Hooks and tools")];
+    const labels = [tr("Start prompt"), tr("Communication skill"), tr("Hooks and tools")];
     const descriptions = [tr("Loaded automatically when the connection starts a new CLI session."),
-      tr("Install manually only if useful; see the installation locations in HOOKS-AND-TOOLS.md."),
+      tr("Installed automatically in the selected CLI workspace. HOOKS-AND-TOOLS.md explains how it works."),
       tr("Setup, inbox polling and delivery reports. Hooks and MCP are configured for each launch.")];
     replaceContent("admin-onboarding-" + area + "-files", ...slot.files.map((file, index) => {
       const details = node("details", "onboarding-document"), summary = node("summary");

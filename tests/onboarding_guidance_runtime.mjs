@@ -93,9 +93,9 @@ test('canonical English files render literally; labels localize without changing
   assert.equal(preview.readOnly, true); assert.equal(preview.lang, 'en');
   f.h.applyLanguage('ru'); assert.match(card.textContent, /Стартовый промпт/); assert.equal(preview.value, docs.files[0].content);
   const skill = f.$('admin-onboarding-guide-files').children[1];
-  assert.match(skill.textContent, /Необязательный навык/); assert.match(skill.textContent, /Устанавливайте вручную/);
+  assert.match(skill.textContent, /Навык общения/); assert.match(skill.textContent, /Устанавливается автоматически/);
   assert.match(skill.textContent, /HOOKS-AND-TOOLS.md/);
-  f.h.applyLanguage('en'); assert.match(skill.textContent, /Optional skill/); assert.match(skill.textContent, /Install manually/);
+  f.h.applyLanguage('en'); assert.match(skill.textContent, /Communication skill/); assert.match(skill.textContent, /Installed automatically/);
   await f.h.loadOnboardingGuidance('guide', JSON.parse(JSON.stringify(docs)));
   assert.equal(f.$('admin-onboarding-guide-files').children[0], card); assert.equal(card.open, true);
 });

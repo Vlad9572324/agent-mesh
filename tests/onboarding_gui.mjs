@@ -507,7 +507,9 @@ try {
     for (const language of ['en', 'ru']) {
       await owner.filter('language-select', language);
       const summary = await owner.eval(`document.querySelector('#admin-onboarding-guide-files [data-guidance-file="SKILL.md"]').textContent`);
-      assert(language === 'ru' ? /Необязательный навык/.test(summary) && /Устанавливайте вручную/.test(summary) : /Optional skill/.test(summary) && /Install manually/.test(summary), 'Document labels or descriptions do not localize');
+      assert(language === 'ru' ? /Навык общения/.test(summary) && /Устанавливается автоматически/.test(summary) : /Communication skill/.test(summary) && /Installed automatically/.test(summary), 'Document labels or descriptions do not localize');
+      const help = await owner.eval(`document.querySelector('#admin-onboarding-panel > .field-help').textContent`);
+      assert(language === 'ru' ? /одну команду/.test(help) && /коннектор и навык/.test(help) && /MCP и хуки/.test(help) : /one command/.test(help) && /connector and skill/.test(help) && /MCP and hooks/.test(help), 'One-command automatic setup explanation is missing or not localized');
       const texts = await owner.eval(`Array.from(document.querySelectorAll('#admin-onboarding-guide-files [data-guidance-file]')).map(e=>({name:e.dataset.guidanceFile,content:e.querySelector('textarea').value}))`);
       assert(texts.length === 3 && texts.every(file => expectedGuidance.files.some(expected => expected.name === file.name && expected.content === file.content && hash(Buffer.from(file.content)) === expected.sha256)), 'API documents changed in GUI');
     }
@@ -558,6 +560,9 @@ try {
     for (const language of ['en', 'ru']) {
       await owner.filter('language-select', language);
       assert(await owner.eval(`document.getElementById('admin-onboarding-command').value===${js(command)}`), 'Language switch changed secret command');
+      const help = await owner.eval(`document.querySelector('#admin-onboarding-result-guide > .field-help').textContent`);
+      assert(language === 'ru' ? /автоматически установит навык/.test(help) && /для подключения это не требуется/.test(help) : /automatically installs the skill/.test(help) && /not required to connect/.test(help), 'Result implies manual skill setup or mandatory document copying');
+
     }
     await closeCommand(token);
     assert(await owner.eval(`document.querySelectorAll('#admin-onboarding-guide-files [data-guidance-file]').length===3`), 'Closing secret command removed reusable guides');

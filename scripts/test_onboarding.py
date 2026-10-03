@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import sys
 import tarfile
 import tempfile
@@ -192,9 +193,9 @@ class ConnectionTests(unittest.TestCase):
         self.bridge = native_bridge
         FakeHTTP.calls = []; FakeHTTP.writable = True; FakeHTTP.identity = "new-agent"
 
-    def invoke(self, args, available=()):
+    def invoke(self, args, available=(), before_exec=None):
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(self.bridge, "NativeHTTP", FakeHTTP), patch.object(connect.shutil, "which", side_effect=lambda name: "/fake/" + name if name in available else None), patch.object(connect.os, "execv") as execute, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with patch.object(self.bridge, "NativeHTTP", FakeHTTP), patch.object(connect.shutil, "which", side_effect=lambda name: "/fake/" + name if name in available else None), patch.object(connect.os, "execv", side_effect=before_exec) as execute, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             result = connect.main(args, bundle=self.bundle)
         self.assertNotIn(KEY, out.getvalue() + err.getvalue())
         return result, out.getvalue(), err.getvalue(), execute
@@ -208,6 +209,133 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.invoke(["--check"])[0], 0)
         self.assertEqual((self.bundle / "config.json").read_bytes(), config)
         self.assertEqual((self.bundle / "config.json").stat().st_mode & 0o777, 0o600)
+        self.assertTrue(json.loads(out)["skill_ready"])
+        self.assertEqual(Path(json.loads(out)["skill_path"]), self.skill_directory() / "SKILL.md")
+
+    def skill_directory(self, workspace=None, runtime="codex"):
+        return (workspace or self.bundle / "workspace") / (".agents" if runtime == "codex" else ".claude") / "skills/agent-mesh-communication"
+
+    def assert_skill_ready(self, workspace=None, runtime="codex"):
+        directory = self.skill_directory(workspace, runtime)
+        for name in ("SKILL.md", "HOOKS-AND-TOOLS.md"):
+            self.assertEqual((directory / name).read_bytes(), (self.bundle / name).read_bytes())
+        self.assertFalse(list(directory.glob(".agent-mesh-*")))
+        return directory
+
+    def test_both_runtimes_install_complete_skill_before_normal_cli_launch(self):
+        for runtime in ("codex", "claude"):
+            with self.subTest(runtime=runtime):
+                self.bundle = Path(self.temp.name) / ("bundle-" + runtime)
+                self.bundle.mkdir(mode=0o700)
+                installer.write_files(self.bundle, package_files())
+                result, out, err, execute = self.invoke(["--runtime", runtime], (runtime,),
+                    before_exec=lambda *_: self.assert_skill_ready(runtime=runtime))
+                execute.assert_called_once()
+                directory = self.assert_skill_ready(runtime=runtime)
+                for target in (directory, *directory.iterdir()):
+                    self.assertEqual(target.stat().st_mode & 0o777, 0o700 if target.is_dir() else 0o600)
+                other = ".claude" if runtime == "codex" else ".agents"
+                self.assertFalse((self.bundle / "workspace" / other).exists())
+
+    def test_check_installs_in_explicit_workspace_and_leaves_home_untouched(self):
+        home = Path(self.temp.name) / "home"; home.mkdir()
+        (home / "existing-settings").write_text("preserve")
+        for runtime in ("codex", "claude"):
+            with self.subTest(runtime=runtime):
+                self.bundle = Path(self.temp.name) / ("explicit-bundle-" + runtime)
+                self.bundle.mkdir(mode=0o700); installer.write_files(self.bundle, package_files())
+                workspace = Path(self.temp.name) / ("work space-" + runtime); workspace.mkdir()
+                (workspace / "existing.txt").write_text("user work")
+                with patch.object(Path, "home", return_value=home) as global_home:
+                    result, out, err, execute = self.invoke(["--check", "--runtime", runtime, "--workspace", str(workspace)])
+                global_home.assert_not_called()
+                self.assertEqual(result, 0); execute.assert_not_called()
+                directory = self.assert_skill_ready(workspace, runtime)
+                self.assertEqual(json.loads(out)["skill_path"], str(directory / "SKILL.md"))
+                self.assertEqual((workspace / "existing.txt").read_text(), "user work")
+                self.assertEqual(set(p.name for p in home.iterdir()), {"existing-settings"})
+                self.assertEqual((home / "existing-settings").read_text(), "preserve")
+
+    def test_reconnect_reuses_identical_files_configuration_and_queued_work(self):
+        self.assertEqual(self.invoke(["--check", "--runtime", "codex"])[0], 0)
+        directory = self.assert_skill_ready()
+        files = [self.bundle / "config.json", directory / "SKILL.md", directory / "HOOKS-AND-TOOLS.md"]
+        before = {path: (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in files}
+        database = self.bundle / "native-state/native.sqlite"
+        with sqlite3.connect(database) as db:
+            db.execute("INSERT INTO outbox (id,kind,path,method,payload,state,created_at) VALUES (?,?,?,?,?,?,?)",
+                       ("preserved", "message", "/fixture", "POST", "{}", "pending", 1))
+        result, out, err, execute = self.invoke(["--check"])
+        self.assertEqual(result, 0); execute.assert_not_called()
+        self.assertEqual({path: (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns) for path in files}, before)
+        with sqlite3.connect(database) as db:
+            self.assertEqual(db.execute("SELECT id,payload,state FROM outbox").fetchall(), [("preserved", "{}", "pending")])
+
+    def test_existing_skill_conflict_preserves_both_files_and_refuses_launch(self):
+        for conflicting_name in ("SKILL.md", "HOOKS-AND-TOOLS.md"):
+            with self.subTest(name=conflicting_name):
+                workspace = Path(self.temp.name) / ("conflict-" + conflicting_name); workspace.mkdir()
+                directory = self.skill_directory(workspace); directory.mkdir(parents=True)
+                target = directory / conflicting_name; target.write_text("Existing user instructions")
+                self.bundle = Path(self.temp.name) / ("conflict-bundle-" + conflicting_name)
+                self.bundle.mkdir(mode=0o700); installer.write_files(self.bundle, package_files())
+                result, out, err, execute = self.invoke(["--workspace", str(workspace)], ("codex",))
+                self.assertEqual(result, 2); execute.assert_not_called()
+                self.assertIn("existing workspace skill file", err)
+                self.assertEqual(list(directory.iterdir()), [target])
+                self.assertEqual(target.read_text(), "Existing user instructions")
+
+    def test_skill_parent_and_file_symlinks_cannot_redirect_writes(self):
+        for relative in (".agents", ".agents/skills", ".agents/skills/agent-mesh-communication",
+                         ".agents/skills/agent-mesh-communication/SKILL.md",
+                         ".agents/skills/agent-mesh-communication/HOOKS-AND-TOOLS.md"):
+            with self.subTest(path=relative):
+                base = Path(tempfile.mkdtemp(dir=self.temp.name))
+                workspace = base / "workspace"; workspace.mkdir()
+                outside = base / "outside"; outside.mkdir()
+                (outside / "sentinel").write_text("untouched")
+                target = workspace / relative; target.parent.mkdir(parents=True, exist_ok=True)
+                if target.name.endswith(".md"):
+                    source = outside / target.name; source.write_bytes((self.bundle / target.name).read_bytes())
+                else:
+                    source = outside
+                before = {p.name: p.read_bytes() for p in outside.iterdir()}
+                target.symlink_to(source, target_is_directory=source.is_dir())
+                self.bundle = base / "bundle"; self.bundle.mkdir(mode=0o700)
+                installer.write_files(self.bundle, package_files())
+                result, out, err, execute = self.invoke(["--workspace", str(workspace)], ("codex",))
+                self.assertEqual(result, 2); execute.assert_not_called()
+                self.assertIn("linked, conflicting or inaccessible", err)
+                self.assertTrue(target.is_symlink())
+                self.assertEqual({p.name: p.read_bytes() for p in outside.iterdir()}, before)
+
+    def test_explicit_workspace_symlink_ancestor_is_refused(self):
+        real = Path(self.temp.name) / "real"; (real / "workspace").mkdir(parents=True)
+        alias = Path(self.temp.name) / "alias"; alias.symlink_to(real, target_is_directory=True)
+        result, out, err, execute = self.invoke(["--check", "--runtime", "codex", "--workspace", str(alias / "workspace")])
+        self.assertEqual(result, 2); execute.assert_not_called()
+        self.assertIn("symlinks", err)
+        self.assertEqual(list((real / "workspace").iterdir()), [])
+
+    def test_access_failure_prevents_skill_installation(self):
+        FakeHTTP.writable = False
+        result, out, err, execute = self.invoke(["--check", "--runtime", "codex"])
+        self.assertEqual(result, 2); execute.assert_not_called()
+        self.assertFalse((self.bundle / "workspace/.agents").exists())
+
+    def test_invalid_or_secret_guidance_never_reaches_workspace_or_cli(self):
+        for name in GUIDANCE_NAMES:
+            target = self.bundle / name; original = target.read_bytes()
+            for content in (KEY.encode(), b"x" * 32769, b"\x00invalid", b"\xff", b"  \n"):
+                with self.subTest(name=name, content_kind=len(content)):
+                    target.write_bytes(content)
+                    result, out, err, execute = self.invoke(["--check", "--runtime", "codex"])
+                    self.assertEqual(result, 2); execute.assert_not_called()
+                    self.assertFalse((self.bundle / "workspace/.agents").exists())
+            target.unlink(); target.symlink_to(self.bundle / "agent.key")
+            self.assertEqual(self.invoke(["--check", "--runtime", "codex"])[0], 2)
+            self.assertFalse((self.bundle / "workspace/.agents").exists())
+            target.unlink(); target.write_bytes(original); target.chmod(0o600)
 
     def test_binding_rejects_runtime_workspace_and_containing_bundle(self):
         self.invoke(["--check", "--runtime", "codex"])

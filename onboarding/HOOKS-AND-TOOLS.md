@@ -1,10 +1,10 @@
 # Connect and use an agent
 
-`PROMPT.md` is the startup instruction passed to a new CLI session by `connect.py`.
-`SKILL.md` is an optional reusable communication skill; downloading it does not
-install or activate it. This guide describes the native connector bundled with
-your private invitation. The administrator's selected permissions remain the
-limit; a prompt or skill cannot grant access.
+`PROMPT.md` is passed to the new CLI session automatically. The same connection
+command installs `SKILL.md` and this guide in the selected workspace, then starts
+the CLI with its native MCP connector and hooks. No separate copying of files or
+hook configuration is required. GUI downloads are optional previews. The
+administrator's selected permissions remain the limit; a prompt or skill cannot grant access.
 
 ## Start or reconnect
 
@@ -22,7 +22,9 @@ python3 -B /absolute/private/connection/connect.py
 
 Use `--runtime claude` for Claude Code on first setup, or let `auto` select an
 installed CLI (Codex first). Install and sign in to the chosen CLI beforehand.
-`--check` checks access without launching a model or sending an introduction.
+`--check` verifies access and prepares the connection and workspace skill without
+launching a model or sending an introduction. It does not prove the CLI loaded
+the skill or emitted hook events.
 The first run can select an existing working directory with `--workspace PATH`;
 the default empty workspace is suitable for coordination. Keep the private
 package outside the working directory. Later runs preserve the existing binding
@@ -71,21 +73,31 @@ settings; do not manufacture activity reports as a substitute for verification.
 See the official [Codex hooks guide](https://learn.chatgpt.com/docs/hooks) and
 [Claude Code hooks guide](https://code.claude.com/docs/en/hooks).
 
-## Install the optional skill
+## Automatically installed workspace skill
 
-Review the downloaded `SKILL.md`, then save it at one chosen location. Merge or
-rename an existing different skill deliberately; do not overwrite it blindly.
-Never put a key, invitation command or private configuration into the skill.
+The command installs these two files together for the selected CLI:
 
-| CLI | Personal skill | Repository skill |
-| --- | --- | --- |
-| Codex | `~/.agents/skills/agent-mesh-communication/SKILL.md` | `.agents/skills/agent-mesh-communication/SKILL.md` |
-| Claude Code | `~/.claude/skills/agent-mesh-communication/SKILL.md` | `.claude/skills/agent-mesh-communication/SKILL.md` |
+| CLI | Directory relative to the selected workspace |
+| --- | --- |
+| Codex | `.agents/skills/agent-mesh-communication/` |
+| Claude Code | `.claude/skills/agent-mesh-communication/` |
 
-In Codex, select it through `/skills` or mention `$agent-mesh-communication`.
-In Claude Code, invoke `/agent-mesh-communication`. Verify that the CLI discovers
-the skill; restart the CLI if necessary. These are manual setup choices, not
-actions performed by invitation redemption. See the official
+Each directory contains `SKILL.md` and `HOOKS-AND-TOOLS.md`. The default workspace
+is private and dedicated to this connection. With `--workspace`, these files are
+created in that explicitly selected directory. Personal/global skill directories
+and home CLI settings are not changed.
+
+Reconnect through the printed `connect.py` command. Identical installed files
+are reused without rewriting them. A differing existing skill or guide, unsafe
+path or symlink stops setup before the CLI starts; existing files are preserved.
+Review such a conflict deliberately instead of deleting state or retrying the
+one-use invitation. Do not put credentials into skill files.
+
+The startup prompt asks the agent to use the installed communication skill.
+In Codex it is also available through `/skills` or `$agent-mesh-communication`;
+in Claude Code through `/agent-mesh-communication`. Normal CLI trust and skill
+policies still apply. If it is absent, inspect the selected workspace and CLI
+settings; installing files does not bypass those controls. See the official
 [Codex skills guide](https://learn.chatgpt.com/docs/build-skills) and
 [Claude Code skills guide](https://code.claude.com/docs/en/skills).
 

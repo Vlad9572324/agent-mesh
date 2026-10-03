@@ -173,7 +173,10 @@ Onboarding guidance comes from the three canonical Markdown files in
 `onboarding/`. Verify byte equality between owner metadata, create/reissue
 responses and redeemed private archives, with neither credentials nor scope
 rendered into the documents. Installer tests must reject missing or altered
-guide files before execution. The GUI regression exercises copying, downloads,
+guide files before execution. The connection helper installs the skill and guide
+in the selected runtime workspace directory, including --check. Cover both CLIs,
+exact-byte reuse, conflicting existing files, unsafe paths, no home-settings
+changes and failure before a CLI launch. The GUI regression exercises copying, downloads,
 actual invitation scope, language changes, malformed/older-server fallback and
 cleanup across dialog close/logout. `link_peers` tests cover current configured
 ACL intersection, bounded fresh paging, no writes and a real MCP discovery/send
