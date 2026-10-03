@@ -20,6 +20,31 @@ class ArtifactBundleTests(unittest.TestCase):
         (self.source / "sub").mkdir()
         (self.source / "sub/test.go").write_bytes(b"test\x00bytes\n")
 
+    def test_document_upload_title_receipt_and_legacy_wire_compatibility(self):
+        client = object.__new__(ArtifactClient)
+        requests = []
+        def request(path, body):
+            requests.append(body)
+            return {"artifact": {"id": "published", "project_id": "mine", "role": body["role"],
+                    "sha256": body["sha256"], "base_revision": body["base_revision"], "size_bytes": 4,
+                    **({"title": body["title"]} if "title" in body else {})}}
+        client.request = request
+        result = client.upload("mine", "doc", "document", "requirements-v1", b"text", title="Требования")
+        self.assertEqual(result["artifact"]["title"], "Требования")
+        client.upload("mine", "legacy", "test", "base-v1", b"text")
+        self.assertNotIn("title", requests[-1])
+        for title in (None, 4, " ", "line\nbreak", "x" * 201, "я" * 101):
+            with self.subTest(title=title), self.assertRaises(ValueError):
+                client.upload("mine", "bad", "document", "requirements-v1", b"text", title=title)
+        self.assertEqual(len(requests), 2)
+        def wrong(path, body):
+            result = request(path, body)
+            result["artifact"]["title"] = "Changed"
+            return result
+        client.request = wrong
+        with self.assertRaisesRegex(ValueError, "receipt"):
+            client.upload("mine", "doc-2", "document", "requirements-v1", b"text", title="Exact title")
+
     def test_roundtrip_new_directory_only(self):
         data = pack(self.source, ["sub/test.go", "code.go"], "base-v1")
         result = unpack(data, "base-v1", self.root / "receiver")

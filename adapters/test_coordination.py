@@ -94,6 +94,13 @@ class FakeArtifactClient:
 
 
 class CoordinationTests(unittest.TestCase):
+    def test_document_reference_retains_exact_pins_and_strict_role_validation(self):
+        ref = {"artifact_id": "requirements", "sha256": "1" * 64, "role": "document"}
+        self.assertEqual(artifact_refs([ref]), [ref])
+        for bad in ({**ref, "role": "execute"}, {**ref, "sha256": "wrong"}, {**ref, "title": "not a pin"}):
+            with self.assertRaises(CoordinationError):
+                artifact_refs([bad])
+
     def setUp(self):
         temporary=tempfile.TemporaryDirectory(prefix="coordination-offline-")
         self.addCleanup(temporary.cleanup)

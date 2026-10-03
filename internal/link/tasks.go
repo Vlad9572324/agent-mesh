@@ -454,9 +454,7 @@ func taskRefsValid(refs []TaskArtifactRef) bool {
 				return false
 			}
 		}
-		switch v.Role {
-		case "baseline", "implementation", "test", "evidence", "bundle":
-		default:
+		if !validArtifactRole(v.Role) {
 			return false
 		}
 		seen[v.ArtifactID] = true

@@ -22,7 +22,7 @@
     "session": ["channel_id", "agent_id", "session_id", "run_id", "role", "expires_at", "closed_at", "created_at"],
     "task": ["task_id", "owner_id", "reviewer_id", "created_by", "current_run_id", "state", "version", "created_at", "updated_at"],
     "run": ["task_id", "run_id", "state", "version", "review_request_id", "verification_status", "artifact_ids", "created_at", "updated_at"],
-    "artifact": ["author_id", "role", "size_bytes", "created_at"],
+    "artifact": ["author_id", "role", "title", "size_bytes", "created_at"],
     "memory": ["memory_id", "author_id", "updated_by", "version", "created_at", "updated_at"],
     "memory-version": ["memory_id", "author_id", "version", "created_at"],
     "note": ["author_id", "source_message_id", "version", "created_at"],

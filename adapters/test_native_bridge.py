@@ -64,6 +64,8 @@ class FakeAPI(hook_tests.FakeNativeAPI):
                 record = {"id": "artifact-" + body["client_id"], "project_id": "p", "author_id": "a",
                           "role": body["role"], "base_revision": body["base_revision"],
                           "sha256": body["sha256"], "size_bytes": len(base64.b64decode(body["content_base64"]))}
+                if "title" in body:
+                    record["title"] = body["title"]
                 response = {"artifact": record, "replayed": False}
             elif path.endswith("/events"):
                 record = {"id": "event-" + body["client_id"], "task_id": path.split("/")[-2],
@@ -390,6 +392,60 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(len(self.api.published), 1)
         payload = next(iter(self.api.published.values()))[0]
         self.assertEqual(base64.b64decode(payload["content_base64"]), b"selected text")
+
+    def test_document_title_survives_lost_ack_restart_and_exact_replay(self):
+        bridge = self.bridge()
+        self.api.lose_next_ack = True
+        with self.assertRaises(native.NativeError):
+            bridge.publish_artifact("doc", "document", "requirements-v1", "Selected requirements", title="Требования <b>literal</b>")
+        bridge.close()
+        reopened = self.bridge()
+        self.assertEqual(reopened.flush()["sent"], 1)
+        payload = next(iter(self.api.published.values()))[0]
+        self.assertEqual(payload["title"], "Требования <b>literal</b>")
+        self.assertEqual(payload["role"], "document")
+        self.assertEqual(base64.b64decode(payload["content_base64"]), b"Selected requirements")
+        reopened.publish_artifact("doc", "document", "requirements-v1", "Selected requirements", title=payload["title"])
+        with self.assertRaisesRegex(native.NativeError, "client_id_payload_conflict"):
+            reopened.publish_artifact("doc", "document", "requirements-v1", "Selected requirements", title="Changed")
+        self.assertEqual(len(self.api.published), 1)
+
+    def test_artifact_title_validation_before_publication(self):
+        bridge = self.bridge()
+        for title in (None, 3, " ", "line\nbreak", "line\u2028break", "a\x7f", "x" * 201, "я" * 101, "\ud800", "a" * 64):
+            with self.subTest(title=repr(title)), self.assertRaises(native.NativeError):
+                bridge.publish_artifact("invalid", "document", "requirements-v1", "text", title=title)
+        self.assertFalse(any(method == "POST" for method, _, _ in self.api.calls))
+        self.assertEqual(bridge.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
+
+    def test_titled_artifact_receipt_must_echo_title_before_marked_sent(self):
+        bridge = self.bridge()
+        self.api.corrupt_receipt = lambda response: response["artifact"].pop("title", None)
+        with self.assertRaisesRegex(native.NativeError, "receipt_mismatch"):
+            bridge.publish_artifact("doc", "document", "requirements-v1", "text", title="Exact title")
+        self.assertEqual(bridge.status()["pending_publications"], 1)
+        self.api.corrupt_receipt = None
+        self.assertEqual(bridge.flush()["sent"], 1)
+
+    def test_malformed_artifact_metadata_leaves_publication_pending(self):
+        bridge = self.bridge()
+        for index, value in enumerate((None, [], "not metadata", 4)):
+            self.api.corrupt_receipt = lambda response, value=value: response.__setitem__("artifact", value)
+            with self.assertRaisesRegex(native.NativeError, "invalid_publication_receipt"):
+                bridge.publish_artifact("bad-receipt-" + str(index), "document", "requirements-v1", "text", title="Title")
+        self.assertEqual(bridge.status()["pending_publications"], 4)
+        self.api.corrupt_receipt = None
+        self.assertEqual(bridge.flush()["sent"], 4)
+
+    def test_untitled_artifact_retains_old_wire_shape_and_receipt_compatibility(self):
+        bridge = self.bridge()
+        bridge.publish_artifact("legacy", "test", "base-1", "text")
+        bridge.publish_artifact("legacy", "test", "base-1", "text", title="")
+        self.assertEqual(len(self.api.published), 1)
+        payload, result = next(iter(self.api.published.values()))
+        self.assertNotIn("title", payload)
+        self.assertNotIn("title", result["artifact"])
+        self.assertEqual(bridge.status()["pending_publications"], 0)
 
     def test_artifact_receipt_wrong_hash_or_missing_id_not_marked_sent(self):
         for field, bad in (("sha256", "b" * 64), ("id", ""), ("project_id", "other"), ("size_bytes", 99)):

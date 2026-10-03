@@ -24,11 +24,12 @@ def main():
         p.add_argument("--ca-file")
         p.add_argument("--allow-loopback-http", action="store_true")
         p.add_argument("--project", required=True)
-        p.add_argument("--base", required=True)
+        p.add_argument("--base", required=True, help="Exact source or document revision identifier (e.g. requirements-v1); not an invented Git SHA")
         if name == "upload":
             p.add_argument("--input", required=True)
             p.add_argument("--client-id", required=True)
-            p.add_argument("--role", required=True)
+            p.add_argument("--role", required=True, choices=("baseline", "implementation", "test", "evidence", "bundle", "document"))
+            p.add_argument("--title", default="", help="Optional public title, one line and at most 200 UTF-8 bytes")
         else:
             p.add_argument("--artifact", required=True)
             p.add_argument("--sha256", required=True)
@@ -51,7 +52,7 @@ def main():
             data = read_regular(args.input, MAX_ARTIFACT)
             if args.role == "bundle":
                 validate_bundle(data, args.base)
-            result = client.upload(args.project, args.client_id, args.role, args.base, data)
+            result = client.upload(args.project, args.client_id, args.role, args.base, data, title=args.title)
         else:
             data = client.download(args.artifact, args.sha256, args.base, expected_project=args.project)
             write_new(args.output, data)

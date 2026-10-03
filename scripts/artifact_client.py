@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 import re
 import ssl
 import stat
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,7 +22,7 @@ MAX_ARTIFACT = 2 << 20
 MAX_FILES = 32
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 SHA256 = re.compile(r"[a-f0-9]{64}\Z")
-ROLES = {"baseline", "implementation", "test", "evidence", "bundle"}
+ROLES = {"baseline", "implementation", "test", "evidence", "bundle", "document"}
 
 
 def identifier(value):
@@ -196,13 +197,17 @@ class ArtifactClient:
         except urllib.error.URLError:
             raise RuntimeError("artifact API connection failed") from None
 
-    def upload(self, project, client_id, role, base_revision, content):
+    def upload(self, project, client_id, role, base_revision, content, title=""):
         if not all(identifier(v) for v in (project, client_id, base_revision)) or role not in ROLES or not 0 < len(content) <= MAX_ARTIFACT:
             raise ValueError("invalid upload metadata or size")
+        if type(title) is not str or (title != "" and (not title.strip() or len(title.encode()) > 200 or any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in title))):
+            raise ValueError("invalid artifact title")
         body = {"client_id": client_id, "role": role, "base_revision": base_revision, "sha256": digest(content), "content_base64": base64.b64encode(content).decode()}
+        if title:
+            body["title"] = title
         result = self.request("/v1/projects/" + project + "/artifacts", body)
         item = result.get("artifact", {})
-        if item.get("sha256") != body["sha256"] or item.get("base_revision") != base_revision or item.get("project_id") != project or item.get("role") != role or item.get("size_bytes") != len(content) or not identifier(item.get("id")):
+        if item.get("sha256") != body["sha256"] or item.get("base_revision") != base_revision or item.get("project_id") != project or item.get("role") != role or item.get("title", "") != title or item.get("size_bytes") != len(content) or not identifier(item.get("id")):
             raise ValueError("upload receipt mismatch")
         return result
 

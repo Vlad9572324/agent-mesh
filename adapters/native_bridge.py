@@ -15,6 +15,7 @@ import sqlite3
 import ssl
 import stat
 import time
+import unicodedata
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
@@ -601,9 +602,14 @@ class NativeBridge:
                 expected[name] = body.get(name, [] if name == 'artifacts' else None)
         elif row['kind'] == 'artifact':
             item = response.get('artifact', {})
+            if type(item) is not dict:
+                raise NativeError('invalid_publication_receipt')
             expected = {k: body[k] for k in ('role', 'base_revision', 'sha256')}
             expected.update(project_id=self.config['project_id'], author_id=self.config['agent_id'],
                             size_bytes=len(base64.b64decode(body['content_base64'])))
+            # Old servers omit title for legacy untitled publications.
+            expected['title'] = body.get('title', '')
+            item = {**item, 'title': item.get('title', '')}
         elif row['kind'] == 'task_create':
             item = response.get('task', {})
             expected = {k: body[k] for k in ('title', 'owner_id', 'reviewer_id', 'scope', 'acceptance')}
@@ -779,16 +785,21 @@ class NativeBridge:
         return self.sanitize({'artifact': metadata, 'text': preview, 'truncated': len(data) > 16000,
                               'untrusted_content': True, 'redacted': self.key in preview})
 
-    def publish_artifact(self, client_id, role, base_revision, content):
+    def publish_artifact(self, client_id, role, base_revision, content, title=''):
         """Explicit selected text only: never reads files or captures tool IO."""
         self._identifier(client_id)
         self._identifier(base_revision)
-        if role not in ('baseline', 'implementation', 'test', 'evidence', 'bundle') or not text(content, 24576):
+        if role not in ('baseline', 'implementation', 'test', 'evidence', 'bundle', 'document') or not text(content, 24576):
             raise NativeError('invalid_text_artifact')
+        if type(title) is not str or (title != '' and (not text(title, 200) or any(unicodedata.category(c) in ('Cc', 'Zl', 'Zp') for c in title))):
+            raise NativeError('invalid_artifact_title')
         self.reject_secret(content)
+        self.reject_secret(title)
         raw = content.encode('utf-8')
         body = {'client_id': client_id, 'role': role, 'base_revision': base_revision,
                 'sha256': hashlib.sha256(raw).hexdigest(), 'content_base64': base64.b64encode(raw).decode('ascii')}
+        if title:
+            body['title'] = title
         return self._publish('artifact', self.project_path + '/artifacts', body)
 
     def activity(self, channel_id=None, after_seq=0, limit=20):

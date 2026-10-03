@@ -101,7 +101,7 @@ def artifact_refs(values):
     for item in values:
         if (type(item) is not dict or set(item) != {"artifact_id", "sha256", "role"}
                 or not identifier(item["artifact_id"]) or type(item["sha256"]) is not str
-                or not SHA256.fullmatch(item["sha256"]) or item["role"] not in ("baseline", "implementation", "test", "evidence", "bundle")
+                or not SHA256.fullmatch(item["sha256"]) or item["role"] not in ("baseline", "implementation", "test", "evidence", "bundle", "document")
                 or item["artifact_id"] in seen):
             raise CoordinationError("invalid artifact reference")
         seen.add(item["artifact_id"])

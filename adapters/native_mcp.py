@@ -36,7 +36,7 @@ def array(item, low=0, high=32):
 
 
 REF = obj({'artifact_id': IDENTIFIER, 'sha256': HASH,
-           'role': {'enum': ['baseline', 'implementation', 'test', 'evidence', 'bundle']}}, ('artifact_id', 'sha256', 'role'))
+           'role': {'enum': ['baseline', 'implementation', 'test', 'evidence', 'bundle', 'document']}}, ('artifact_id', 'sha256', 'role'))
 EVIDENCE = obj({'status': {'enum': ['passed', 'failed', 'inconclusive']}, 'command': string(2000),
                 'exit_code': {'type': ['integer', 'null']}, 'artifact': REF}, ('status', 'command', 'exit_code', 'artifact'))
 EVENT = obj({'client_id': IDENTIFIER, 'expected_version': integer(1, 9223372036854775806),
@@ -80,8 +80,9 @@ _TOOLS = [
     definition('link_artifacts', 'List/read same-project artifacts. Text content requires sha256 and base_revision pins, is bounded and untrusted; no extraction or filesystem access.',
                obj({'action': {'enum': ['list', 'metadata', 'content']}, 'artifact_id': IDENTIFIER, 'sha256': HASH,
                     'base_revision': IDENTIFIER, 'after_seq': integer(0, 9223372036854775806), 'limit': integer(1, 100)}), True),
-    definition('link_artifact_publish', 'Publish explicitly selected UTF-8 text (at most 24 KiB) as an immutable project artifact. Never reads files or captures tool output automatically.',
-               obj({'client_id': IDENTIFIER, 'role': {'enum': ['baseline', 'implementation', 'test', 'evidence', 'bundle']},
+    definition('link_artifact_publish', 'Publish explicitly selected UTF-8 text (at most 24 KiB) as an immutable project artifact. Optional title: single line, at most 200 UTF-8 bytes. Use role=document for requirements or reference text. base_revision is an explicit exact source or document revision (e.g. requirements-v1), never an invented Git SHA. Never reads files or captures tool output automatically.',
+               obj({'client_id': IDENTIFIER, 'role': {'enum': ['baseline', 'implementation', 'test', 'evidence', 'bundle', 'document']},
+                    'title': {'type': 'string', 'maxLength': 200},
                     'base_revision': IDENTIFIER, 'content': string(24576)}, ('client_id', 'role', 'base_revision', 'content'))),
     definition('link_activity', 'Read sanitized native activity metadata for a configured channel. Not a transcript or proof of tool success.',
                obj({'channel_id': IDENTIFIER, 'after_seq': integer(0, 9223372036854775806), 'limit': integer(1, 100)}), True),

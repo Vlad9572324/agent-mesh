@@ -127,6 +127,8 @@
     "Task runs": "Этапы работы",
     "Events / review": "События / ревью",
     "Artifacts": "Артефакты",
+    "Document": "Документ",
+    "Use a single-line title without control characters.": "Название должно быть одной строкой без управляющих символов.",
     "Memory": "Память",
     "Memory versions": "Версии памяти",
     "Notes": "Заметки",
@@ -1626,7 +1628,7 @@
     if (item.type === "receipt") return tr("Delivery status · {0}", meta.agent_id);
     if (item.type === "session") return tr("Session lease {0}", meta.session_id);
     if (item.type === "run") return tr("Task run {0}", meta.run_id);
-    if (item.type === "artifact") return tr("Artifact {0} · {1}", ARTIFACT_ROLES[meta.role] || meta.role, item.id);
+    if (item.type === "artifact") return meta.title || tr("Artifact {0} · {1}", ARTIFACT_ROLES[meta.role] || meta.role, item.id);
     if (item.type === "task-event") return TASK_EVENTS[meta.type] || item.label;
     if (item.type === "native") return nativeEventLabel(meta.type) || item.label;
     return item.label;
@@ -2445,7 +2447,7 @@
   // so a background refresh cannot silently rebase an in-progress mutation.
   const TASK_STATES = {ready: tr("Ready for work"), running: tr("Work reported"), artifacts_ready: tr("Artifacts submitted"), review_pending: tr("Awaiting review"), approved: tr("Approved by reviewer"), changes_requested: tr("Reviewer requested changes"), completion_reported: tr("Assignee reported completion"), uncertain: tr("Uncertain · decision required"), cancelled: tr("Cancellation recorded")};
   const TASK_EVENTS = {run_started: tr("Declare a new task run"), artifacts_ready: tr("Submit the full artifact set"), review_requested: tr("Request review of the set"), review_result: tr("Publish reviewer decision"), verification_reported: tr("Publish an external verification report"), completion_reported: tr("Report completion"), uncertain: tr("Record uncertainty"), recovery_decided: tr("Record a recovery decision"), cancelled: tr("Record cancellation")};
-  const ARTIFACT_ROLES = {baseline: tr("Baseline"), implementation: tr("Implementation"), test: tr("Test"), evidence: tr("Evidence / report"), bundle: tr("Bundle")};
+  const ARTIFACT_ROLES = {baseline: tr("Baseline"), implementation: tr("Implementation"), test: tr("Test"), evidence: tr("Evidence / report"), bundle: tr("Bundle"), document: tr("Document")};
   const artifactEvents = new Set(["artifacts_ready", "review_requested", "review_result", "verification_reported", "completion_reported"]);
   function newCoordination() {
     return {projectId: state.project?.id, tasks: [], taskId: "", task: null, taskWritable: false, tasksTruncated: false,
@@ -2746,9 +2748,12 @@
     if (data.sessionsTruncated) cards.push(node("p", "field-help", () => (tr("Showing up to 200 sessions; this is not the full archive."))));
     replaceContent("session-list", ...cards);
   }
+  function artifactTitle(artifact) {
+    return typeof artifact.title === "string" && artifact.title ? artifact.title : artifact.id;
+  }
   function renderArtifacts(data) {
     const cards = data.artifacts.map((artifact) => {
-      const card = record(formatText([""," · ",""], () => (ARTIFACT_ROLES[artifact.role] || artifact.role), () => (artifact.role)), "", tr("ID {0}\nBase revision {1}\nSHA-256 {2}\n{3} bytes · author {4}\nStored {5}", () => (artifact.id), () => (artifact.base_revision), () => (artifact.sha256), () => numberText(number(artifact.size_bytes)), () => (artifact.author_id), () => (dateText(artifact.created_at))));
+      const card = record(artifactTitle(artifact), formatText([""," · ",""], () => (ARTIFACT_ROLES[artifact.role] || artifact.role), () => (artifact.role)), tr("ID {0}\nBase revision {1}\nSHA-256 {2}\n{3} bytes · author {4}\nStored {5}", () => (artifact.id), () => (artifact.base_revision), () => (artifact.sha256), () => numberText(number(artifact.size_bytes)), () => (artifact.author_id), () => (dateText(artifact.created_at))));
       card.dataset.artifactId = artifact.id; const button = node("button", "secondary-button", () => (tr("Download bytes after SHA-256 verification")));
       button.type = "button"; button.dataset.focusKey = `artifact:${artifact.id}`; button.disabled = state.coordinationBusy;
       button.addEventListener("click", () => void downloadArtifact(artifact.id)); appendOwned(card, () => (button)); return card;
@@ -2866,11 +2871,12 @@
     const file = $("artifact-file").files[0], context = state.context, projectId = state.project.id, epoch = state.coordinationEpoch;
     try {
       if (!file || file.size < 1 || file.size > 2 * 1024 * 1024) throw new ApiError(413, tr("Select a file from 1 byte to 2 MiB."));
-      const role = $("artifact-role").value, baseRevision = boundedText("artifact-base", 128);
+      const role = $("artifact-role").value, baseRevision = boundedText("artifact-base", 128), title = boundedText("artifact-title", 200, false);
+      if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(title)) throw new ApiError(400, tr("Use a single-line title without control characters."));
       const bytes = new Uint8Array(await file.arrayBuffer()), sha256 = await digest(bytes);
       if (!scopeMatches(context, projectId, epoch)) return;
       let binary = ""; for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-      await coordinationMutation("artifact", coordinationRoute("artifacts"), "POST", {role, base_revision: baseRevision, sha256, content_base64: btoa(binary)}, () => { $("artifact-form").reset(); $("artifact-upload-section").open = false; }, {artifactUpload: true});
+      await coordinationMutation("artifact", coordinationRoute("artifacts"), "POST", {role, ...(title ? {title} : {}), base_revision: baseRevision, sha256, content_base64: btoa(binary)}, () => { $("artifact-form").reset(); $("artifact-upload-section").open = false; }, {artifactUpload: true});
     } catch (error) { if (scopeMatches(context, projectId, epoch)) showError(error, "coordination-error"); }
   }
   async function downloadArtifact(id) {

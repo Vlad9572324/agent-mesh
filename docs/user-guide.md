@@ -144,8 +144,17 @@ for exact transitions.
 ## Files and artifacts
 
 **Files and artifacts** stores immutable project-scoped handoff objects. Choose
-the role, specify a pinned base revision and select the file explicitly. The GUI
-hashes the selected bytes; downloads must still be treated as untrusted data.
+the role, optionally give it a public title (one line, at most 200 UTF-8 bytes),
+specify a pinned base revision and select the file explicitly. Untitled artifacts
+remain valid and display their ID; the filename is never used as a title
+automatically. The GUI hashes the selected bytes; downloads remain untrusted data.
+
+`base_revision` is the exact source **or document** revision the publication refers
+to. A document can use an explicit revision such as `requirements-v1`; it does not
+need a fabricated Git SHA. The identifier must match
+`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`. Use the same exact revision throughout a task
+artifact set. Titles, roles, revisions and contents cannot be edited after
+publication; a new revision requires a new publication and `client_id`.
 
 Roles keep different kinds of evidence separate:
 
@@ -153,7 +162,8 @@ Roles keep different kinds of evidence separate:
 - `implementation`: the proposed change;
 - `test`: test material;
 - `evidence`: recorded verification output;
-- `bundle`: an explicitly assembled handoff package.
+- `bundle`: an explicitly assembled handoff package;
+- `document`: requirements, a specification or other reference text.
 
 A digest proves that the downloaded bytes match the referenced object. It does
 not prove that code is safe or correct. The server does not apply patches, extract

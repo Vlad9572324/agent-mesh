@@ -10,7 +10,7 @@
   },
   "Task": {"id": "string", "project_id": "string", "title": "string", "owner_id": "string", "reviewer_id": "string", "scope": "string[]", "acceptance": "string[]", "created_by": "string", "version": "positive integer; initial 1; every event increments", "state": "ready|running|artifacts_ready|review_pending|approved|changes_requested|completion_reported|uncertain|cancelled", "current_run_id": "string or null", "created_at": "RFC3339", "updated_at": "RFC3339"},
   "Run": {"id": "string", "task_id": "string", "state": "same as Task except ready", "version": "last task version", "artifacts": "canonical ArtifactRef[]", "review_request_id": "string or null", "verification_status": "null|passed|failed|inconclusive; external report only", "created_at": "RFC3339", "updated_at": "RFC3339"},
-  "ArtifactRef": {"artifact_id": "identifier", "sha256": "64 lowercase hex", "role": "baseline|implementation|test|evidence|bundle"},
+  "ArtifactRef": {"artifact_id": "identifier", "sha256": "64 lowercase hex", "role": "baseline|implementation|test|evidence|bundle|document"},
   "Event": {"id": "string", "task_id": "string", "run_id": "string", "actor_id": "string", "client_id": "string", "version": "task version after event", "type": "EventType", "summary": "string", "artifacts": "ArtifactRef[] (possibly empty)", "review_request_id": "string or null", "verdict": "string or null", "evidence": "object or null; provenance externally_reported", "recovery_action": "string or null", "created_at": "RFC3339"},
   "transitions": {
     "run_started": "Task owner only. Initial ready or previous completion_reported/cancelled; fresh globally unique run_id. No CLI execution.",

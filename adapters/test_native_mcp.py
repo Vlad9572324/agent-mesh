@@ -97,6 +97,20 @@ class ProtocolTests(unittest.TestCase):
         listing[0]['name'] = 'mutated'
         self.assertEqual(tools()[0]['name'], 'link_status')
 
+    def test_artifact_document_title_schema_and_task_reference(self):
+        schemas = {item['name']: item['inputSchema'] for item in tools()}
+        value = {'client_id': 'doc-1', 'role': 'document', 'base_revision': 'requirements-v1', 'content': 'Selected text'}
+        validate(value, schemas['link_artifact_publish'])
+        validate({**value, 'title': 'Требования'}, schemas['link_artifact_publish'])
+        validate({**value, 'title': ''}, schemas['link_artifact_publish'])
+        for changes in ({'role': 'execute'}, {'title': None}, {'title': 4}, {'title': 'x' * 201}, {'base_revision': ''}):
+            with self.assertRaises(NativeError):
+                validate({**value, **changes}, schemas['link_artifact_publish'])
+        validate({'task_id': 'task-1', 'event': {'client_id': 'refs', 'expected_version': 2,
+                  'type': 'artifacts_ready', 'run_id': 'run-1', 'summary': 'Referenced requirements',
+                  'artifacts': [{'artifact_id': 'doc-1', 'sha256': '1' * 64, 'role': 'document'}]}},
+                 schemas['link_task_event'])
+
     def test_unknown_method_tool_and_argument_validation(self):
         self.ready()
         self.assertEqual(self.server.handle(rpc(2, 'resources/list'))['error']['code'], -32601)

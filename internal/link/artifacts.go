@@ -12,7 +12,10 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -31,6 +34,7 @@ type Artifact struct {
 	ProjectID    string    `json:"project_id"`
 	AuthorID     string    `json:"author_id"`
 	Role         string    `json:"role"`
+	Title        string    `json:"title"`
 	BaseRevision string    `json:"base_revision"`
 	SHA256       string    `json:"sha256"`
 	SizeBytes    int64     `json:"size_bytes"`
@@ -43,20 +47,26 @@ type artifactInput struct {
 	BaseRevision  string `json:"base_revision"`
 	SHA256        string `json:"sha256"`
 	ContentBase64 string `json:"content_base64"`
+	// Omit the empty title to preserve the pre-title canonical request hash.
+	Title string `json:"title,omitempty"`
 }
 
-const artifactColumns = `id,seq,project_id,author_id,role,base_revision,sha256,size_bytes,created_at`
+const artifactColumns = `id,seq,project_id,author_id,role,title,base_revision,sha256,size_bytes,created_at`
 
 func validArtifactRole(role string) bool {
 	switch role {
-	case "baseline", "implementation", "test", "evidence", "bundle":
+	case "baseline", "implementation", "test", "evidence", "bundle", "document":
 		return true
 	}
 	return false
 }
 
+func validArtifactTitle(title string) bool {
+	return title == "" || (len(title) <= 200 && utf8.ValidString(title) && strings.TrimSpace(title) != "" && strings.IndexFunc(title, unicode.IsControl) < 0 && !strings.ContainsAny(title, "\u2028\u2029"))
+}
+
 func validateArtifact(in artifactInput) ([]byte, bool) {
-	if !validID(in.ClientID) || !validArtifactRole(in.Role) || !validID(in.BaseRevision) || !artifactHashPattern.MatchString(in.SHA256) || len(in.ContentBase64) > base64.StdEncoding.EncodedLen(artifactMaxBytes) {
+	if !validID(in.ClientID) || !validArtifactRole(in.Role) || !validArtifactTitle(in.Title) || !validID(in.BaseRevision) || !artifactHashPattern.MatchString(in.SHA256) || len(in.ContentBase64) > base64.StdEncoding.EncodedLen(artifactMaxBytes) {
 		return nil, false
 	}
 	content, err := base64.StdEncoding.Strict().DecodeString(in.ContentBase64)
@@ -74,7 +84,7 @@ func validateArtifact(in artifactInput) ([]byte, bool) {
 
 func scanArtifact(row pgx.Row) (Artifact, error) {
 	var a Artifact
-	err := row.Scan(&a.ID, &a.Seq, &a.ProjectID, &a.AuthorID, &a.Role, &a.BaseRevision, &a.SHA256, &a.SizeBytes, &a.CreatedAt)
+	err := row.Scan(&a.ID, &a.Seq, &a.ProjectID, &a.AuthorID, &a.Role, &a.Title, &a.BaseRevision, &a.SHA256, &a.SizeBytes, &a.CreatedAt)
 	return a, err
 }
 
@@ -162,7 +172,7 @@ func (s *Server) postArtifact(w http.ResponseWriter, r *http.Request) {
 		internal(w)
 		return
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO link_artifacts(id,project_id,author_id,client_id,role,base_revision,sha256,size_bytes,payload,request_hash,seq) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, project, p.ID, in.ClientID, in.Role, in.BaseRevision, in.SHA256, len(content), content, hash, sequence)
+	_, err = tx.Exec(ctx, `INSERT INTO link_artifacts(id,project_id,author_id,client_id,role,base_revision,sha256,size_bytes,payload,request_hash,seq,title) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, project, p.ID, in.ClientID, in.Role, in.BaseRevision, in.SHA256, len(content), content, hash, sequence, in.Title)
 	if err != nil {
 		internal(w)
 		return

@@ -149,7 +149,7 @@ No per-entry delete API is implemented. Contract:
 
 | Method and path | Purpose |
 | --- | --- |
-| `POST /v1/projects/{project}/artifacts` | Publish explicit Base64 bytes with role, base revision, SHA-256 and `client_id`. |
+| `POST /v1/projects/{project}/artifacts` | Publish explicit Base64 bytes with role (including `document`), optional immutable `title`, exact source/document base revision, SHA-256 and `client_id`. |
 | `GET /v1/projects/{project}/artifacts` | Page metadata by ascending project-local `after_seq`. |
 | `GET /v1/artifacts/{artifact}` | Read authorized metadata. |
 | `GET /v1/artifacts/{artifact}/content` | Download an `application/octet-stream` attachment with `X-Content-SHA256`. |
