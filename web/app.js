@@ -8,6 +8,40 @@
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
     "Key issued": "Ключ выдан",
+    "Delivery alerts": "Уведомления о доставке",
+    "Delivery monitoring is off": "Проверка сроков доставки выключена",
+    "Configure deadlines": "Настроить сроки",
+    "Checking delivery deadlines…": "Проверяем сроки доставки…",
+    "Delivery status unavailable": "Статус доставки недоступен",
+    "No overdue messages in the latest check": "В последней проверке просроченных сообщений нет",
+    "{0} overdue recipient deliveries": "Просроченных доставок адресатам: {0}",
+    "Last checked: {0}": "Последняя проверка: {0}",
+    "Monitoring is disabled until an owner saves enabled settings.": "Проверка выключена, пока владелец явно не сохранит включённые настройки.",
+    "The current delivery state is unknown. Refresh to check again.": "Текущее состояние доставки неизвестно. Обновите данные для новой проверки.",
+    "No acknowledgement by the deadline": "Нет подтверждения к установленному сроку",
+    "No direct reply by the deadline": "Нет прямого ответа к установленному сроку",
+    "Message {0} · #{1} · project {2}": "Сообщение {0} · #{1} · проект {2}",
+    "{0} → {1} · sent {2} · deadline {3}": "{0} → {1} · отправлено {2} · срок {3}",
+    "Open message": "Открыть сообщение",
+    "No report": "Нет отчёта",
+    "Adapter delivered": "Доставка подтверждена адаптером",
+    "Adapter accepted": "Приём подтверждён адаптером",
+    "Direct reply recorded": "Прямой ответ записан",
+    "{0} loaded · {1} currently overdue in this window · checked {2}": "Загружено {0} · сейчас просрочено в этом окне: {1} · проверено {2}",
+    "Deadlines through {0}": "Сроки до {0}",
+    "Updates available. Refresh the list when ready; the displayed rows are from its previous check.": "Есть обновления. Обновите список, когда удобно; показанные строки относятся к предыдущей проверке.",
+    "The displayed list is not current. Refresh to verify its status.": "Показанный список не подтверждён как актуальный. Обновите его для проверки.",
+    "No overdue messages were returned by this check.": "В этой проверке просроченных сообщений нет.",
+    "Delivery alerts have not been loaded yet.": "Уведомления о доставке ещё не загружены.",
+    "Settings saved. New addressed messages are monitored from the enabled time.": "Настройки сохранены. Новые адресные сообщения проверяются с момента включения.",
+    "Settings saved. Deadline monitoring is off.": "Настройки сохранены. Проверка сроков выключена.",
+    "Settings changed on the server. Your draft is preserved; replace it with current settings before saving again.": "Настройки изменились на сервере. Черновик сохранён; замените его текущими настройками перед новой записью.",
+    "Saving deadlines… The request is not retried automatically.": "Сохраняем сроки… Запрос не повторяется автоматически.",
+    "Saving was not confirmed. Reload server settings before trying again; your draft is preserved.": "Сохранение не подтверждено. Перед новой попыткой загрузите настройки сервера; черновик сохранён.",
+    "Server settings loaded. Monitoring changes only when you save.": "Настройки сервера загружены. Проверка изменится только после сохранения.",
+    "Enter an acknowledgement deadline of 1–1440 minutes and an optional reply deadline between that value and 10080 minutes, to the nearest second.": "Укажите срок подтверждения от 1 до 1440 минут и, при необходимости, срок ответа не меньше него и до 10080 минут, с точностью до секунды.",
+    "The alert list changed. Refresh it before loading another page.": "Список уведомлений изменился. Обновите его перед загрузкой следующей страницы.",
+    "Message access or identity changed. Reload the alert list.": "Доступ к сообщению или его данные изменились. Обновите список уведомлений.",
     "GUI read positions": "Отметки прочтения в интерфейсе",
     "{0} unread": "{0} непрочитанных",
     "All caught up": "Всё прочитано",
@@ -769,6 +803,11 @@
     adminReadSeq: 0, adminWriteVersion: 0, adminLoadBackground: false,
     coordination: null, coordinationEpoch: 0, coordinationBusy: false, downloads: new Set(),
     overview: null, adminSection: "accounts", accessRecheckUntil: 0,
+    deliveryAlerts: null, deliveryDraft: null, deliveryDirty: false, deliveryConflict: false,
+    deliverySeq: 0, deliveryWriteSeq: 0, deliveryLoading: false, deliverySaving: false, deliveryPolicyLoading: false,
+    deliveryDraftSeq: 0, deliveryDenied: false,
+    deliveryTimer: null, deliveryLastAttempt: 0, deliveryNotice: "", deliveryError: "", deliveryPolicyError: "",
+    deliveryLinkSeq: 0, highlightMessage: "",
     projectNative: null, projectNativeEpoch: 0,
     projectMap: null, projectMapEpoch: 0,
     // Display preference lasts for this page session, across views and accounts.
@@ -936,6 +975,7 @@
 
   function stopNetwork(endSession = false) {
     state.context += 1;
+    invalidateDeliveryAlerts(endSession);
     clearNativeReceipts();
     for (const controller of state.requests) controller.abort();
     state.requests.clear();
@@ -1113,11 +1153,12 @@
     if (!open) scheduleChannelRead();
   }
   function setAdminSection(section) {
-    if (!["onboarding", "accounts", "projects", "access", "diagnostics"].includes(section)) return;
+    if (!["onboarding", "accounts", "projects", "access", "diagnostics", "delivery-alerts"].includes(section)) return;
     state.adminSection = section;
     $("admin-panel").querySelector(".admin-heading").hidden = section === "onboarding";
     const groups = {
       onboarding: [$("admin-onboarding-panel")],
+      "delivery-alerts": [$("admin-delivery-alerts-panel")],
       accounts: [$("admin-principal-list").closest("section"), $("admin-principal-form").closest("section")],
       projects: [$("admin-project-list").closest("section"), $("admin-project-form").closest("section"), $("admin-channel-form").closest("section")],
       access: [$("admin-access-form").closest("section")],
@@ -1417,6 +1458,7 @@
     const openedDetails = new Set([...scroller.querySelectorAll(".message-details[open]")].map((item) => item.dataset.messageId));
     replaceContent("message-list", ...shown.map((message) => {
       const article = node("article", "message"); article.dataset.messageId = message.id; article.dataset.messageSeq = String(message.seq);
+      if (state.highlightMessage === message.id) { article.dataset.alertTarget = "true"; article.dataset.focusKey = `alert-message:${message.id}`; article.tabIndex = -1; }
       const content = node("div", "message-content");
       const meta = node("div", "message-meta");
       appendOwned(meta, () => (node("span", "message-author", () => (displayName(message.author_id)))), () => (node("time", "message-time", () => (dateText(message.created_at)))));
@@ -2880,7 +2922,287 @@
     setText($("admin-delete-cancel"), () => (state.adminDeleteSubmitting ? tr("Close (request already sent)") : tr("Cancel")));
   }
 
+  function deliveryOwner() {
+    return Boolean(state.key) && isOwner();
+  }
+
+  function invalidateDeliveryAlerts(clear = false) {
+    clearTimeout(state.deliveryTimer); state.deliveryTimer = null;
+    state.deliverySeq += 1; state.deliveryWriteSeq += 1; state.deliveryLinkSeq += 1;
+    state.highlightMessage = ""; state.deliveryLoading = false; state.deliveryPolicyLoading = false;
+    if (state.deliverySaving) { state.deliveryConflict = true; state.deliveryPolicyError = tr("Saving was not confirmed. Reload server settings before trying again; your draft is preserved."); }
+    state.deliverySaving = false;
+    if (clear) {
+      state.deliveryAlerts = state.deliveryDraft = null;
+      state.deliveryDirty = state.deliveryConflict = state.deliveryDenied = false;
+      state.deliveryLastAttempt = 0; state.deliveryNotice = state.deliveryError = state.deliveryPolicyError = "";
+      state.deliveryDraftSeq += 1;
+    } else {
+      if (state.deliveryAlerts) state.deliveryAlerts.status = "stale";
+      scheduleDeliveryPoll(1000);
+    }
+    renderDeliveryAlerts();
+  }
+
+  function validateDeliveryPolicy(policy) {
+    if (!policy || typeof policy.enabled !== "boolean" || !Number.isSafeInteger(policy.version) || policy.version < 0 ||
+        !Number.isSafeInteger(policy.ack_timeout_seconds) || policy.ack_timeout_seconds < 60 || policy.ack_timeout_seconds > 86400 ||
+        !Number.isSafeInteger(policy.reply_timeout_seconds) || policy.reply_timeout_seconds !== 0 && (policy.reply_timeout_seconds < policy.ack_timeout_seconds || policy.reply_timeout_seconds > 604800) ||
+        !nativeReceiptTime(policy.enabled_at) || !nativeReceiptTime(policy.updated_at) || !policy.updated_at || policy.enabled && !policy.enabled_at) throw new Error("Invalid delivery policy");
+    return {...policy};
+  }
+
+  function validateDeliveryAlertPage(data) {
+    const policy = validateDeliveryPolicy(data?.policy);
+    const id = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value);
+    if (!Array.isArray(data.alerts) || data.alerts.length > 50 || !Number.isSafeInteger(data.total) || data.total < data.alerts.length ||
+        typeof data.truncated !== "boolean" || !nativeReceiptTime(data.generated_at) || !data.generated_at || !nativeReceiptTime(data.as_of) || !data.as_of ||
+        !(data.next_cursor === null || typeof data.next_cursor === "string" && data.next_cursor.length > 0 && data.next_cursor.length <= 4096) ||
+        data.truncated !== Boolean(data.next_cursor) || !policy.enabled && (data.alerts.length || data.total || data.truncated)) throw new Error("Invalid delivery alert page");
+    const pairs = new Set();
+    for (const row of data.alerts) {
+      if (!row || ![row.message_id, row.project_id, row.channel_id, row.author_id, row.recipient_id].every(id) ||
+          !Number.isSafeInteger(row.message_seq) || row.message_seq < 1 || !["unacknowledged", "unanswered"].includes(row.reason) ||
+          !row.created_at || !row.due_at || ![row.created_at, row.due_at, row.offered_at, row.seen_at, row.accepted_at, row.delivered_at, row.legacy_accepted_at, row.answered_at].every(nativeReceiptTime)) throw new Error("Invalid delivery alert");
+      const pair = JSON.stringify([row.message_id, row.recipient_id]);
+      if (pairs.has(pair)) throw new Error("Duplicate delivery alert");
+      pairs.add(pair);
+    }
+    return {...data, policy};
+  }
+
+  function setDeliveryPolicy(policy, replaceDraft = false) {
+    if (replaceDraft || !state.deliveryDraft || !state.deliveryDirty && !state.deliveryConflict) {
+      state.deliveryDraft = {enabled: policy.enabled, ack: String(policy.ack_timeout_seconds / 60), replyEnabled: policy.reply_timeout_seconds !== 0,
+        reply: String((policy.reply_timeout_seconds || Math.max(1800, policy.ack_timeout_seconds)) / 60), version: policy.version};
+      state.deliveryDirty = state.deliveryConflict = false;
+      state.deliveryDraftSeq += 1;
+    } else if (state.deliveryDraft.version !== policy.version) {
+      state.deliveryConflict = true;
+      state.deliveryPolicyError = tr("Settings changed on the server. Your draft is preserved; replace it with current settings before saving again.");
+    }
+  }
+
+  async function loadDeliveryAlerts({more = false, preserveList = false} = {}) {
+    if (!deliveryOwner() || document.hidden || navigator.onLine === false || state.deliverySaving || state.deliveryPolicyLoading || state.deliveryDenied || preserveList && state.deliveryLoading) return;
+    const previous = state.deliveryAlerts;
+    if (more && (state.deliveryLoading || previous?.status !== "ready" || !previous?.cursor || previous.policy.version !== previous.listPolicyVersion)) return;
+    const auth = state.authVersion, context = state.context, request = ++state.deliverySeq;
+    const cursor = more ? previous.cursor : null;
+    const valid = () => deliveryOwner() && currentAuth(auth) && current(context) && state.deliverySeq === request;
+    state.deliveryLoading = true; state.deliveryLastAttempt = Date.now(); state.deliveryError = "";
+    if (previous && !more) previous.status = "stale";
+    renderDeliveryAlerts();
+    try {
+      const page = validateDeliveryAlertPage(await api(`/v1/admin/delivery-alerts?limit=50${cursor ? `&cursor=${pathId(cursor)}` : ""}`));
+      if (!valid()) return;
+      if (more && (state.deliveryAlerts !== previous || previous.listPolicyVersion !== page.policy.version || previous.cursor !== cursor || previous.windowAt !== page.as_of)) throw new Error("Changed delivery alert page");
+      setDeliveryPolicy(page.policy);
+      const holdList = !more && preserveList && previous &&
+        (previous.expanded || $("delivery-alert-list").contains(document.activeElement));
+      const rows = more ? [...previous.rows] : page.alerts;
+      if (more) for (const row of page.alerts) {
+        const index = rows.findIndex(item => item.message_id === row.message_id && item.recipient_id === row.recipient_id);
+        if (index < 0) rows.push(row); else rows[index] = row;
+      }
+      state.deliveryAlerts = {policy: page.policy, total: page.total, generatedAt: page.generated_at, asOf: page.as_of, status: "ready",
+        rows: holdList ? previous.rows : rows, listTotal: holdList ? previous.listTotal : page.total,
+        listAt: holdList ? previous.listAt : page.generated_at, windowAt: holdList ? previous.windowAt : page.as_of, cursor: holdList ? previous.cursor : page.next_cursor,
+        listPolicyVersion: holdList ? previous.listPolicyVersion : page.policy.version,
+        expanded: more || Boolean(holdList && previous.expanded), updates: Boolean(holdList)};
+    } catch (error) {
+      if (!valid()) return;
+      if ([401, 403].includes(error.status)) {
+        state.deliveryAlerts = state.deliveryDraft = null; state.deliveryDirty = state.deliveryConflict = false;
+        state.deliveryDenied = true; clearTimeout(state.deliveryTimer); state.deliveryTimer = null;
+      } else if (state.deliveryAlerts) state.deliveryAlerts.status = "unavailable";
+      state.deliveryError = error.status === 409 ? tr("The alert list changed. Refresh it before loading another page.") : tr("The current delivery state is unknown. Refresh to check again.");
+    } finally {
+      if (valid()) { state.deliveryLoading = false; renderDeliveryAlerts(); }
+    }
+  }
+
+  function scheduleDeliveryPoll(delay = 25000) {
+    clearTimeout(state.deliveryTimer); state.deliveryTimer = null;
+    if (!deliveryOwner() || document.hidden || navigator.onLine === false || state.deliveryDenied) return;
+    const auth = state.authVersion;
+    state.deliveryTimer = setTimeout(async () => {
+      state.deliveryTimer = null;
+      if (!deliveryOwner() || !currentAuth(auth) || document.hidden) return;
+      const pending = loadDeliveryAlerts({preserveList: true}), request = state.deliverySeq;
+      await pending;
+      if (deliveryOwner() && currentAuth(auth) && request === state.deliverySeq) scheduleDeliveryPoll();
+    }, delay);
+  }
+
+  function deliveryConnectivityChanged() {
+    if (!deliveryOwner()) return;
+    clearTimeout(state.deliveryTimer); state.deliveryTimer = null;
+    state.deliverySeq += 1; state.deliveryLoading = false;
+    if (state.deliveryAlerts) state.deliveryAlerts.status = "unavailable";
+    state.deliveryError = tr("The current delivery state is unknown. Refresh to check again.");
+    renderDeliveryAlerts();
+    if (navigator.onLine !== false) scheduleDeliveryPoll(0);
+  }
+
+  function captureDeliveryDraft() {
+    if (!deliveryOwner() || !state.deliveryDraft || state.deliverySaving || state.deliveryPolicyLoading) return;
+    const draft = state.deliveryDraft;
+    draft.enabled = $("delivery-policy-enabled").checked; draft.ack = $("delivery-policy-ack").value;
+    draft.replyEnabled = $("delivery-policy-reply-enabled").checked; draft.reply = $("delivery-policy-reply").value;
+    state.deliveryDirty = true; state.deliveryDraftSeq += 1; state.deliveryNotice = "";
+    renderDeliveryAlerts();
+  }
+
+  function deliveryPolicyPayload(draft) {
+    const ack = Number(draft.ack) * 60, reply = draft.replyEnabled ? Number(draft.reply) * 60 : 0;
+    if (!Number.isFinite(ack) || !Number.isFinite(reply) || Math.abs(ack - Math.round(ack)) > 1e-6 || Math.abs(reply - Math.round(reply)) > 1e-6 ||
+        ack < 60 || ack > 86400 || draft.replyEnabled && (reply < ack || reply > 604800)) return null;
+    return {enabled: draft.enabled, ack_timeout_seconds: Math.round(ack), reply_timeout_seconds: Math.round(reply), expected_version: draft.version};
+  }
+
+  async function reloadDeliveryPolicy() {
+    if (!deliveryOwner() || state.deliverySaving || state.deliveryPolicyLoading) return;
+    const auth = state.authVersion, context = state.context, request = ++state.deliveryWriteSeq, draftSeq = state.deliveryDraftSeq;
+    state.deliverySeq += 1; state.deliveryLoading = false; state.deliveryPolicyLoading = true;
+    const valid = () => deliveryOwner() && currentAuth(auth) && current(context) && request === state.deliveryWriteSeq;
+    renderDeliveryAlerts();
+    try {
+      const policy = validateDeliveryPolicy((await api("/v1/admin/delivery-policy")).policy);
+      if (!valid() || draftSeq !== state.deliveryDraftSeq) return;
+      setDeliveryPolicy(policy, true); state.deliveryPolicyError = ""; state.deliveryDenied = false;
+      state.deliveryNotice = tr("Server settings loaded. Monitoring changes only when you save.");
+    } catch (error) {
+      if (valid()) {
+        if ([401, 403].includes(error.status)) { state.deliveryAlerts = state.deliveryDraft = null; state.deliveryDenied = true; }
+        state.deliveryPolicyError = tr("The current delivery state is unknown. Refresh to check again.");
+      }
+    } finally {
+      if (valid()) { state.deliveryPolicyLoading = false; renderDeliveryAlerts(); scheduleDeliveryPoll(0); }
+    }
+  }
+
+  async function saveDeliveryPolicy(event) {
+    event?.preventDefault();
+    if (!deliveryOwner() || state.view !== "admin" || state.adminSection !== "delivery-alerts" || !state.deliveryDraft || state.deliveryConflict || state.deliverySaving || state.deliveryPolicyLoading || state.deliveryDenied) return;
+    captureDeliveryDraft();
+    const body = deliveryPolicyPayload(state.deliveryDraft);
+    if (!body) { state.deliveryPolicyError = tr("Enter an acknowledgement deadline of 1–1440 minutes and an optional reply deadline between that value and 10080 minutes, to the nearest second."); renderDeliveryAlerts(); return; }
+    const auth = state.authVersion, context = state.context, request = ++state.deliveryWriteSeq;
+    const valid = () => deliveryOwner() && currentAuth(auth) && current(context) && request === state.deliveryWriteSeq;
+    state.deliverySeq += 1; state.deliveryLoading = false; state.deliverySaving = true; state.deliveryPolicyError = "";
+    state.deliveryNotice = tr("Saving deadlines… The request is not retried automatically.");
+    if (state.deliveryAlerts) state.deliveryAlerts.status = "stale";
+    renderDeliveryAlerts();
+    try {
+      const policy = validateDeliveryPolicy((await api("/v1/admin/delivery-policy", {method: "PUT", body})).policy);
+      if (!valid()) return;
+      if (policy.version !== body.expected_version + 1 || policy.enabled !== body.enabled || policy.ack_timeout_seconds !== body.ack_timeout_seconds || policy.reply_timeout_seconds !== body.reply_timeout_seconds) throw new Error("Unconfirmed policy write");
+      setDeliveryPolicy(policy, true);
+      state.deliveryAlerts = null;
+      state.deliveryNotice = policy.enabled ? tr("Settings saved. New addressed messages are monitored from the enabled time.") : tr("Settings saved. Deadline monitoring is off.");
+    } catch (error) {
+      if (!valid()) return;
+      if ([401, 403].includes(error.status)) { state.deliveryAlerts = state.deliveryDraft = null; state.deliveryDenied = true; }
+      state.deliveryConflict = true;
+      state.deliveryPolicyError = error.status === 409 ? tr("Settings changed on the server. Your draft is preserved; replace it with current settings before saving again.") : tr("Saving was not confirmed. Reload server settings before trying again; your draft is preserved.");
+      state.deliveryNotice = "";
+    } finally {
+      if (valid()) { state.deliverySaving = false; renderDeliveryAlerts(); scheduleDeliveryPoll(0); }
+    }
+  }
+
+  function renderDeliveryAlerts() {
+    const owner = deliveryOwner(), data = state.deliveryAlerts, draft = state.deliveryDraft;
+    $("delivery-alert-banner").hidden = !owner;
+    if (!owner) {
+      $("delivery-alert-list").replaceChildren(); $("delivery-alert-list").deliveryRows = null; $("delivery-policy-form").reset();
+      for (const id of ["delivery-alert-banner-title", "delivery-alert-banner-detail", "delivery-policy-status", "delivery-policy-error", "delivery-alert-status", "delivery-alert-error"]) setText($(id), "");
+      return;
+    }
+    const ready = data?.status === "ready" && !state.deliveryError;
+    const title = ready ? !data.policy.enabled ? tr("Delivery monitoring is off") : data.total ? tr("{0} overdue recipient deliveries", data.total) : tr("No overdue messages in the latest check") : state.deliveryLoading ? tr("Checking delivery deadlines…") : tr("Delivery status unavailable");
+    $("delivery-alert-banner").dataset.state = ready ? !data.policy.enabled ? "off" : data.total ? "overdue" : "clear" : state.deliveryLoading ? "loading" : "unavailable";
+    setText($("delivery-alert-banner-title"), title);
+    setText($("delivery-alert-banner-detail"), ready ? data.policy.enabled ? joinText([tr("Last checked: {0}", dateText(data.generatedAt)), tr("Deadlines through {0}", dateText(data.asOf))], " · ") : tr("Monitoring is disabled until an owner saves enabled settings.") : tr("The current delivery state is unknown. Refresh to check again."));
+    setText($("delivery-alert-open"), ready && !data.policy.enabled ? tr("Configure deadlines") : tr("Delivery alerts"));
+    const disabled = !draft || state.deliverySaving || state.deliveryPolicyLoading || state.deliveryDenied;
+    for (const id of ["delivery-policy-enabled", "delivery-policy-ack", "delivery-policy-reply-enabled", "delivery-policy-reply"]) $(id).disabled = disabled;
+    if (draft) {
+      $("delivery-policy-enabled").checked = draft.enabled; $("delivery-policy-ack").value = draft.ack;
+      $("delivery-policy-reply-enabled").checked = draft.replyEnabled; $("delivery-policy-reply").value = draft.reply;
+      $("delivery-policy-reply").disabled = disabled || !draft.replyEnabled;
+    }
+    $("delivery-policy-save").disabled = disabled || state.deliveryConflict;
+    $("delivery-policy-reload").disabled = state.deliverySaving || state.deliveryPolicyLoading;
+    setText($("delivery-policy-status"), state.deliveryNotice);
+    setText($("delivery-policy-error"), state.deliveryPolicyError); $("delivery-policy-error").hidden = !state.deliveryPolicyError;
+    setText($("delivery-alert-error"), state.deliveryError); $("delivery-alert-error").hidden = !state.deliveryError;
+    const status = data ? [tr("{0} loaded · {1} currently overdue in this window · checked {2}", data.rows.length, data.listTotal, dateText(data.listAt)), tr("Deadlines through {0}", dateText(data.windowAt)),
+      data.updates ? tr("Updates available. Refresh the list when ready; the displayed rows are from its previous check.") : "", !ready ? tr("The displayed list is not current. Refresh to verify its status.") : ""].filter(Boolean) : [tr("Delivery alerts have not been loaded yet.")];
+    setText($("delivery-alert-status"), joinText(status, " "));
+    // Preserve row nodes/focus during summary-only polls and form editing.
+    const rows = data?.rows || null;
+    const emptyState = !ready ? "unconfirmed" : !data?.policy.enabled ? "off" : "empty";
+    if ($("delivery-alert-list").deliveryRows !== rows || !rows?.length && $("delivery-alert-list").deliveryEmptyState !== emptyState) {
+      $("delivery-alert-list").deliveryRows = rows;
+      $("delivery-alert-list").deliveryEmptyState = emptyState;
+      replaceContent("delivery-alert-list", ...list(rows).map(row => {
+        const card = node("article", "admin-record delivery-alert-row"); card.dataset.alertMessage = row.message_id; card.dataset.alertRecipient = row.recipient_id;
+        appendOwned(card, () => node("h4", "", () => row.reason === "unacknowledged" ? tr("No acknowledgement by the deadline") : tr("No direct reply by the deadline")),
+          () => node("p", "field-help", () => tr("Message {0} · #{1} · project {2}", row.message_id, row.channel_id, row.project_id)),
+          () => node("p", "field-help", () => tr("{0} → {1} · sent {2} · deadline {3}", row.author_id, row.recipient_id, dateText(row.created_at), dateText(row.due_at))));
+        const stages = node("div", "receipt-states");
+        for (const [name, timestamp] of [[tr("Offered to the CLI"), row.offered_at], [tr("Viewed"), row.seen_at], [tr("Reported acceptance"), row.accepted_at], [tr("Adapter delivered"), row.delivered_at], [tr("Adapter accepted"), row.legacy_accepted_at], [tr("Direct reply recorded"), row.answered_at]]) appendOwned(stages, () => node("span", "receipt-state", () => formatText(["", ": ", ""], name, timestamp ? dateText(timestamp) : tr("No report"))));
+        const open = node("button", "text-button", () => tr("Open message")); open.type = "button"; open.dataset.focusKey = `delivery:${row.message_id}:${row.recipient_id}`;
+        open.addEventListener("click", () => void openDeliveryMessage(row)); appendOwned(card, () => stages, () => open); return card;
+      }));
+      if (data && !rows.length) appendOwned($("delivery-alert-list"), () => node("p", "empty-state", () => !ready ? tr("The displayed list is not current. Refresh to verify its status.") : !data.policy.enabled ? tr("Monitoring is disabled until an owner saves enabled settings.") : tr("No overdue messages were returned by this check.")));
+    }
+    $("delivery-alert-more").hidden = !data?.cursor;
+    $("delivery-alert-more").disabled = state.deliveryLoading || !ready || data?.policy.version !== data?.listPolicyVersion;
+    $("delivery-alert-refresh").disabled = state.deliverySaving || state.deliveryPolicyLoading;
+  }
+
+  async function openDeliveryMessage(row) {
+    if (!deliveryOwner()) return;
+    const auth = state.authVersion;
+    let context = state.context, request = ++state.deliveryLinkSeq;
+    const valid = () => deliveryOwner() && currentAuth(auth) && current(context) && request === state.deliveryLinkSeq;
+    try {
+      const message = (await api(`/v1/messages/${pathId(row.message_id)}`)).message;
+      if (!valid()) return;
+      if (!message || message.id !== row.message_id || message.channel_id !== row.channel_id || message.seq !== row.message_seq || message.author_id !== row.author_id || !list(message.recipient_ids).includes(row.recipient_id)) throw new Error("Message identity changed");
+      const projects = list((await api("/v1/projects")).projects);
+      if (!valid()) return;
+      const project = projects.find(item => item.id === row.project_id && !item.archived_at);
+      if (!project) throw new Error("Project unavailable");
+      let pending = selectProject(project, "chat"); context = state.context; request = state.deliveryLinkSeq; await pending;
+      if (!valid() || state.project?.id !== row.project_id) return;
+      const channel = state.channels.find(item => item.id === row.channel_id && item.project_id === row.project_id);
+      if (!channel) throw new Error("Channel unavailable");
+      pending = selectChannel(channel); context = state.context; request = state.deliveryLinkSeq; await pending;
+      if (!valid() || state.channel?.id !== row.channel_id) return;
+      // A directly fetched target may be ahead of REST replay. Keep messageSeq
+      // unchanged so jumping never acknowledges unseen messages in that gap.
+      state.messages.set(message.id, message); state.highlightMessage = message.id; renderMessages();
+      const article = [...$("message-list").querySelectorAll("[data-message-id]")].find(item => item.dataset.messageId === message.id && item.classList.contains("message"));
+      article?.scrollIntoView({block: "center"}); article?.focus({preventScroll: true});
+    } catch (error) {
+      if (valid()) { state.deliveryError = tr("Message access or identity changed. Reload the alert list."); renderDeliveryAlerts(); }
+    }
+  }
+
+  async function selectDeliveryAlerts() {
+    if (!deliveryOwner()) return;
+    if (state.view !== "admin") await selectAdmin();
+    if (!deliveryOwner() || state.view !== "admin") return;
+    setAdminSection("delivery-alerts"); renderDeliveryAlerts();
+    await loadDeliveryAlerts(); scheduleDeliveryPoll();
+  }
+
   function clearAdminData() {
+    invalidateDeliveryAlerts(true);
     clearAdminKey(); clearAdminDelete(); state.admin = null; state.adminLoading = false; state.adminBusy = false;
     state.onboarding = null;
     state.adminReadSeq += 1; state.adminLoadBackground = false;
@@ -3401,7 +3723,16 @@
   for (const button of document.querySelectorAll("[data-overview-target]")) button.addEventListener("click", () => {
     const target = $(button.dataset.overviewTarget); target.scrollIntoView({block: "center"}); target.focus({preventScroll: true});
   });
-  for (const button of $("admin-section-nav").querySelectorAll("button")) button.addEventListener("click", () => setAdminSection(button.dataset.adminSection));
+  for (const button of $("admin-section-nav").querySelectorAll("button")) button.addEventListener("click", () => {
+    setAdminSection(button.dataset.adminSection);
+    if (button.dataset.adminSection === "delivery-alerts") { renderDeliveryAlerts(); void loadDeliveryAlerts(); scheduleDeliveryPoll(); }
+  });
+  $("delivery-alert-open").addEventListener("click", () => void selectDeliveryAlerts());
+  $("delivery-policy-form").addEventListener("submit", saveDeliveryPolicy);
+  for (const id of ["delivery-policy-enabled", "delivery-policy-ack", "delivery-policy-reply-enabled", "delivery-policy-reply"]) $(id).addEventListener("input", captureDeliveryDraft);
+  $("delivery-policy-reload").addEventListener("click", () => void reloadDeliveryPolicy());
+  $("delivery-alert-refresh").addEventListener("click", () => { void loadDeliveryAlerts(); scheduleDeliveryPoll(); });
+  $("delivery-alert-more").addEventListener("click", () => void loadDeliveryAlerts({more: true}));
   setAdminSection("accounts");
   $("nav-admin").addEventListener("click", () => { if (state.view !== "admin") void selectAdmin(); });
   $("nav-connect-agent").addEventListener("click", () => { setAdminSection("onboarding"); if (state.view !== "admin") void selectAdmin(); });
@@ -3524,7 +3855,7 @@
       setText($("profile-role"), () => (isOwner() ? tr("Owner · {0}", () => (state.me.id)) : isWriter() ? tr("Agent · {0}", () => (state.me.id)) : tr("Read-only · {0}", () => (state.me.id))));
       setText($("access-label"), () => (isOwner() ? tr("Owner · reads all published context") : isWriter() ? tr("Author: {0} · permissions checked by the server", () => (state.me.id)) : tr("Viewer · read-only")));
       renderNavigation(); updatePermissions();
-      void startStream(authVersion); startPolling();
+      void startStream(authVersion); startPolling(); scheduleDeliveryPoll(0);
       if (state.projects.length) await selectProject(state.projects[0]);
       else if (isOwner()) await selectAdmin();
       else { state.dataReady = true; renderConnection(); setText($("empty-panel"), () => (tr("No available projects. New projects and granted access will appear automatically."))); }
@@ -3591,7 +3922,15 @@
   $("note-cancel").addEventListener("click", () => { if (!state.publishing) $("note-dialog").close(); });
   $("note-dialog").addEventListener("cancel", (event) => { if (state.publishing) event.preventDefault(); });
   window.addEventListener("pagehide", () => lock());
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.key) { scheduleRefresh(); scheduleChannelRead(); } });
+  window.addEventListener("offline", deliveryConnectivityChanged);
+  window.addEventListener("online", deliveryConnectivityChanged);
+  document.addEventListener("visibilitychange", () => {
+    clearTimeout(state.deliveryTimer); state.deliveryTimer = null;
+    state.deliverySeq += 1; state.deliveryLoading = false;
+    if (state.deliveryAlerts) state.deliveryAlerts.status = "stale";
+    renderDeliveryAlerts();
+    if (!document.hidden && state.key) { scheduleRefresh(); scheduleChannelRead(); scheduleDeliveryPoll(0); }
+  });
 
   captureStaticTranslations();
   $("language-select")?.addEventListener("change", () => applyLanguage($("language-select").value, true));

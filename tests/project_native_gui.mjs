@@ -3,6 +3,7 @@
 // seed credentials, agentlink_e2e dependency, production URL or model invocation.
 // Run only after the backend/web changes are integrated: node tests/project_native_gui.mjs
 // Focused quiet-feed regression: node tests/project_native_gui.mjs --quiet-only
+// Owner deadline regression: node tests/project_native_gui.mjs --delivery-alerts-only
 // Focused sender receipt regression: node tests/project_native_gui.mjs --receipts-only
 import {readFile, writeFile, mkdtemp, mkdir, copyFile, rm, open, lstat} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
@@ -18,7 +19,8 @@ process.umask(0o077);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const quietOnly = process.argv.includes('--quiet-only');
 const receiptsOnly = process.argv.includes('--receipts-only');
-if (quietOnly && receiptsOnly) throw new Error('Choose one focused browser suite');
+const deliveryOnly = process.argv.includes('--delivery-alerts-only');
+if ([quietOnly, receiptsOnly, deliveryOnly].filter(Boolean).length > 1) throw new Error('Choose one focused browser suite');
 const technicalTypes = new Set(['session.started', 'session.ended', 'turn.started', 'turn.completed',
   'tool.started', 'tool.completed', 'agent.waiting', 'inbox.offered']);
 const quietTechnical = [], quietImportant = [];
@@ -27,11 +29,11 @@ const run = `project-native-${randomUUID().slice(0, 8)}`;
 const schema = `project_native_gui_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const ids = Object.fromEntries(['owner', 'writer', 'peer', 'viewer', 'project', 'other', 'alpha', 'beta', 'quiet', 'private', 'other-channel'].map(name => [name, `${run}-${name}`]));
 const readPaths = new Set(['alpha', 'beta', 'quiet', 'other-channel'].map(name => `/v1/channels/${ids[name]}/read`));
-const allowedBrowserRequest = item => item.method === 'GET' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
+const allowedBrowserRequest = item => item.method === 'GET' || deliveryOnly && item.tab === 'owner' && item.method === 'PUT' && item.path === '/v1/admin/delivery-policy' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
 const report = {run, schema, database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
   browser_errors: [], requests: [], layouts: [], screenshots: [], models_started: 0,
   scope: 'Owned isolated schema, loopback TLS API and Chromium; no shared fixture keys or production requests'};
-report.mode = receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
+report.mode = deliveryOnly ? 'delivery-alerts' : receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
 const tabs = [], keys = {}, secrets = new Set(), publicEvents = [], privateEvents = [];
 const js = JSON.stringify, pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -155,7 +157,7 @@ async function fixtures() {
     for (const name of ['alpha', 'beta', 'quiet', 'other-channel']) await grant(actor, 'channel', name, access);
   }
   await grant('writer', 'channel', 'private', 'write');
-  if (receiptsOnly) return;
+  if (receiptsOnly || deliveryOnly) return;
   oldQuiet = await activity('session.ended', 'quiet', 'peer');
   // Backdate only this owned schema's fixture to check stale-event truthfulness
   // without waiting five minutes or altering production/browser wall clocks.
@@ -181,7 +183,9 @@ class CDP {
         const {request, requestId} = message.params, url = new URL(request.url);
         const deny = url.origin !== new URL(base).origin || !allowedBrowserRequest({method: request.method, path: url.pathname, tab: name});
         if (deny) report.browser_guard_failed = true;
-        if (!deny && receiptsOnly && this.failNextNativeReceipt && url.pathname.endsWith('/native-receipts')) {
+        if (!deny && deliveryOnly && this.failNextDeliveryAlert && url.pathname === '/v1/admin/delivery-alerts') {
+          this.failNextDeliveryAlert = false; void this.call('Fetch.fulfillRequest', {requestId, responseCode: 503, body: ''}).catch(() => {});
+        } else if (!deny && receiptsOnly && this.failNextNativeReceipt && url.pathname.endsWith('/native-receipts')) {
           this.failNextNativeReceipt = false;
           // One explicit browser-boundary fault, restricted to the owned origin.
           // The next refresh again receives the real authenticated aggregate.
@@ -251,11 +255,12 @@ async function browsers() {
     const tab = new CDP(targets.find(item => item.id === target.targetId).webSocketDebuggerUrl, actor); tabs.push(tab);
     for (const method of ['Page.enable', 'Runtime.enable', 'Network.enable']) await tab.call(method);
     await tab.call('Page.addScriptToEvaluateOnNewDocument', {source: testingTransport});
-    if (receiptsOnly) {
+    if (receiptsOnly || deliveryOnly) {
       // Isolate the actual SSE refresh path: suppress only the eight-second
       // fallback poll, while preserving all fetch/timeout/refresh behavior.
       await tab.call('Page.addScriptToEvaluateOnNewDocument', {source: `(()=>{const timeout=window.setTimeout.bind(window);window.__suppressedPolls=0;window.setTimeout=(fn,delay,...args)=>{if(delay===8000){window.__suppressedPolls++;return timeout(()=>{},delay);}return timeout(fn,delay,...args);};})()`});
     }
+    if (deliveryOnly) await tab.call('Page.addScriptToEvaluateOnNewDocument', {source: `(()=>{const original=window.fetch.bind(window);window.__suppressedSSE=0;window.fetch=(input,init)=>{const url=new URL(typeof input==='string'?input:input.url,location.href);if(url.pathname==='/v1/workspace/stream'){window.__suppressedSSE++;return Promise.resolve(new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode(': inert isolated stream\\n\\n'));}}),{headers:{'Content-Type':'text/event-stream'}}));}return original(input,init);};})()`});
     await tab.call('Fetch.enable', {patterns: [{urlPattern: '*', requestStage: 'Request'}]});
     await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
     await tab.call('Page.navigate', {url: new URL('?lang=ru', base).href}); await tab.wait(`document.readyState==='complete' && !!document.getElementById('nav-project-native')`, 'project feed page', 15000);
@@ -269,7 +274,7 @@ async function login(tab, actor) {
   await project(tab);
   // The historical regression deliberately inspects every archived event.
   // The quiet regression keeps the product's default until testing the toggle.
-  if (!quietOnly && !receiptsOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
+  if (!quietOnly && !receiptsOnly && !deliveryOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
 }
 async function project(tab, name = 'project') {
   await tab.click(`#project-switcher [data-focus-key="project:${ids[name]}"]`);
@@ -294,6 +299,102 @@ async function screenshot(tab, label, width) {
 async function stopChild(child) {
   for (const signal of ['SIGTERM', 'SIGKILL']) if (child?.pid && child.exitCode === null && child.signalCode === null) { child.kill(signal); await Promise.race([new Promise(resolveExit => child.once('exit', resolveExit)), pause(2500)]); }
   return !child || !child.pid || child.exitCode !== null || child.signalCode !== null;
+}
+
+async function deliveryCases() {
+  let target;
+  const banner = `document.getElementById('delivery-alert-banner').dataset.state`;
+  const count = `document.querySelectorAll('#delivery-alert-list [data-alert-message]').length`;
+  const open = async () => { await owner.click('#delivery-alert-open'); await owner.wait(`!document.getElementById('admin-delivery-alerts-panel').hidden && !document.getElementById('delivery-policy-save').disabled`, 'delivery settings ready'); await owner.wait(`${banner}==='off'||${banner}==='overdue'||${banner}==='clear'`, 'current delivery snapshot'); };
+  await check('monitoring starts disabled, never auto-enables and is only requested by the owner', async () => {
+    await isolatedServer(); await fixtures(); await browsers();
+    await owner.wait(`${banner}==='off'`, 'explicit off state');
+    assert(await writer.eval(`document.getElementById('delivery-alert-banner').hidden`) && await viewer.eval(`document.getElementById('delivery-alert-banner').hidden`), 'Nonowner sees owner banner');
+    assert(!report.requests.some(item => item.path.startsWith('/v1/admin/delivery-') && item.tab !== 'owner'), 'Nonowner requested delivery metadata');
+    assert(!report.requests.some(item => item.method === 'PUT' && item.path === '/v1/admin/delivery-policy'), 'Page auto-enabled monitoring');
+    await open(); assert(!await owner.eval(`document.getElementById('delivery-policy-enabled').checked`), 'Initial policy checkbox enabled');
+  });
+  await check('explicit owner opt-in catches a deadline outside administration with SSE and fallback polling silenced', async () => {
+    await owner.click('#delivery-policy-enabled'); await owner.fill('delivery-policy-ack', '1'); await owner.click('#delivery-policy-reply-enabled'); await owner.click('#delivery-policy-save');
+    await owner.wait(`${banner}==='clear' && /сохранены/.test(document.getElementById('delivery-policy-status').textContent)`, 'enabled policy saved');
+    const policy = (await api('/v1/admin/delivery-policy')).policy;
+    assert(policy.enabled && policy.ack_timeout_seconds === 60 && policy.reply_timeout_seconds === 0 && policy.version === 1, 'Explicit opt-in payload wrong');
+    target = await message('alpha', 'Deadline fixture body must not leak into the alert list', 'writer');
+    await feed(owner); await owner.wait(`${banner}==='clear'`, 'outside-admin current baseline');
+    assert(await owner.eval(`window.__suppressedSSE>0 && window.__suppressedPolls>0`), 'Deadline timer not isolated from SSE/fallback');
+    assert(/^[a-f0-9]{32}$/.test(target.id), 'Unexpected owned message ID');
+    await sql(`UPDATE "${schema}".delivery_alert_policy SET enabled_at=clock_timestamp()-interval '10 minutes'; UPDATE "${schema}".messages SET created_at=clock_timestamp()-interval '57 seconds' WHERE id='${target.id}';`, 'deadline-without-journal-event');
+    const before = owner.requests.filter(item => item.path === '/v1/admin/delivery-alerts').length;
+    await owner.wait(`${banner}==='overdue'`, 'independent deadline poll', 35000);
+    assert(owner.requests.filter(item => item.path === '/v1/admin/delivery-alerts').length > before, 'No new timer request');
+    assert(await owner.eval(`!document.getElementById('project-native-panel').hidden`), 'Deadline did not appear outside admin');
+    await open(); await owner.wait(`${count}===1`, 'actual overdue recipient row');
+    assert(!await owner.eval(`document.getElementById('delivery-alert-list').textContent.includes(${js(target.body)})`), 'Alert list leaked message body');
+  });
+  await check('offered is not acknowledgement, viewed changes the reason to unanswered without inventing acceptance', async () => {
+    await activity('inbox.offered', 'alpha', 'peer', target.id); await owner.click('#delivery-alert-refresh');
+    await owner.wait(`${count}===1 && /Нет подтверждения/.test(document.getElementById('delivery-alert-list').textContent)`, 'offered remains overdue');
+    await owner.click('#delivery-policy-reply-enabled'); await owner.fill('delivery-policy-reply', '1'); await owner.click('#delivery-policy-save');
+    await owner.wait(`!document.getElementById('delivery-policy-save').disabled && /сохранены/.test(document.getElementById('delivery-policy-status').textContent)`, 'reply deadline enabled');
+    await activity('inbox.seen', 'alpha', 'peer', target.id); await owner.click('#delivery-alert-refresh');
+    await owner.wait(`${count}===1 && /Нет прямого ответа/.test(document.getElementById('delivery-alert-list').textContent)`, 'viewed still awaiting direct reply');
+    const actual = (await api('/v1/admin/delivery-alerts')).alerts[0];
+    assert(actual.reason === 'unanswered' && actual.seen_at && !actual.accepted_at && !actual.delivered_at && !actual.legacy_accepted_at, 'Stage independence lost');
+    assert(await owner.eval(`document.getElementById('delivery-alert-list').textContent.includes('Нет отчёта')`), 'Missing receipt stages falsely confirmed');
+  });
+  await check('expanded pages and focus survive the independent periodic count refresh', async () => {
+    const seeded = [];
+    for (let i = 0; i < 52; i++) seeded.push(await message('beta', `Private fixture body ${i}`, 'writer'));
+    assert(seeded.every(item => /^[a-f0-9]{32}$/.test(item.id)), 'Unexpected owned message IDs');
+    await sql(`UPDATE "${schema}".messages SET created_at=clock_timestamp()-interval '5 minutes' WHERE id IN (${seeded.map(item => "'" + item.id + "'").join(',')});`, 'age-owned-page-fixtures');
+    await owner.click('#delivery-alert-refresh'); await owner.wait(`${count}===50 && !document.getElementById('delivery-alert-more').hidden`, 'first bounded page');
+    await owner.click('#delivery-alert-more'); await owner.wait(`${count}===53`, 'second page appended');
+    await owner.eval(`window.__keptDeliveryRow=document.querySelector('#delivery-alert-list [data-alert-message]');window.__keptDeliveryButton=window.__keptDeliveryRow.querySelector('button');window.__keptDeliveryButton.focus();`);
+    await owner.wait(`/Есть обновления/.test(document.getElementById('delivery-alert-status').textContent)`, 'periodic retained-list notice', 35000);
+    assert(await owner.eval(`${count}===53 && document.querySelector('#delivery-alert-list [data-alert-message]')===window.__keptDeliveryRow && document.activeElement===window.__keptDeliveryButton`), 'Periodic refresh reset pages or focus');
+  });
+  await check('server CAS conflict preserves typed settings and explicit reload replaces only the draft', async () => {
+    await owner.fill('delivery-policy-ack', '2'); await owner.fill('delivery-policy-reply', '3');
+    const prior = (await api('/v1/admin/delivery-policy')).policy;
+    await api('/v1/admin/delivery-policy', 'PUT', {enabled: true, ack_timeout_seconds: 60, reply_timeout_seconds: 60, expected_version: prior.version});
+    await owner.click('#delivery-policy-save');
+    await owner.wait(`document.getElementById('delivery-policy-save').disabled && /Черновик сохранён/.test(document.getElementById('delivery-policy-error').textContent)`, 'CAS conflict preserved draft');
+    assert(await owner.eval(`document.getElementById('delivery-policy-ack').value==='2' && document.getElementById('delivery-policy-reply').value==='3'`), 'Conflict overwrote input');
+    await owner.click('#delivery-policy-reload'); await owner.wait(`!document.getElementById('delivery-policy-save').disabled && document.getElementById('delivery-policy-ack').value==='1'`, 'explicit server draft reload');
+  });
+  await check('exact message link selects the correct channel; API failure never retains a green status', async () => {
+    await owner.click('#delivery-alert-refresh'); await owner.wait(`${count}===50`, 'fresh bounded list');
+    const entry = await owner.eval(`(()=>{const e=document.querySelector('#delivery-alert-list [data-alert-message]');return {id:e.dataset.alertMessage,recipient:e.dataset.alertRecipient};})()`);
+    const reference = (await api(`/v1/messages/${entry.id}`)).message;
+    await owner.click(`#delivery-alert-list [data-alert-message="${entry.id}"] button`);
+    await owner.wait(`!!document.querySelector('#message-list article[data-message-id="${entry.id}"][data-alert-target="true"]')`, 'exact highlighted message');
+    assert(await owner.eval(`document.querySelector('[data-focus-key="channel:${reference.channel_id}"]').getAttribute('aria-pressed')==='true'`), 'Wrong channel selected');
+    await owner.eval(`document.getElementById('refresh-button').click()`);
+    await owner.wait(`!document.getElementById('refresh-button').disabled && document.activeElement?.dataset.focusKey===${js('alert-message:')}+${js(entry.id)}`, 'message focus survives refresh');
+    await open(); await pause(1200); owner.failNextDeliveryAlert = true; await owner.click('#delivery-alert-refresh');
+    await owner.wait(`${banner}==='unavailable' && !document.getElementById('delivery-alert-error').hidden`, 'API unknown state');
+    await owner.click('#delivery-alert-refresh'); await owner.wait(`${banner}==='overdue'`, 'real API recovery');
+  });
+  await check('Russian English mobile layout and logout preserve boundaries and clear pending data', async () => {
+    await owner.call('Network.emulateNetworkConditions', {offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1});
+    await owner.wait(`${banner}==='unavailable'`, 'offline immediately removes confirmed status');
+    await owner.call('Network.emulateNetworkConditions', {offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1});
+    await owner.wait(`${banner}==='overdue'`, 'online triggers fresh server check');
+    for (const language of ['en', 'ru']) {
+      await owner.filter('language-select', language);
+      assert((language === 'en' ? /overdue/ : /Просроченных/).test(await owner.eval(`document.getElementById('delivery-alert-banner-title').textContent`)), 'Banner did not translate');
+    }
+    for (const width of [360, 390]) {
+      await owner.call('Emulation.setDeviceMetricsOverride', {width, height: 1000, deviceScaleFactor: 1, mobile: true});
+      assert(await owner.eval(`document.documentElement.scrollWidth<=innerWidth+1`), 'Mobile page overflows');
+      await screenshot(owner, `delivery-alerts-${width}`, width);
+    }
+    await owner.eval(`window.__holdNextProjectFeed='/v1/admin/delivery-alerts';`); await owner.click('#delivery-alert-refresh'); await owner.wait(`window.__heldFeedReady`, 'real response held before logout');
+    await owner.eval(`document.getElementById('logout-button').click();window.__releaseFeed();`);
+    await owner.wait(`!document.getElementById('login-panel').hidden && document.getElementById('delivery-alert-banner').hidden && document.getElementById('delivery-alert-list').textContent===''`, 'logout clears pending private alerts');
+    const requestCount = owner.requests.length; await pause(1200); assert(owner.requests.length === requestCount, 'Logout continued authenticated requests');
+    assert(!report.browser_guard_failed && report.browser_errors.length === 0 && report.requests.every(allowedBrowserRequest), 'Unexpected browser mutation or runtime error');
+  });
 }
 
 async function receiptCases() {
@@ -508,7 +609,9 @@ async function quietCases() {
 }
 
 try {
-  if (receiptsOnly) {
+  if (deliveryOnly) {
+    await deliveryCases();
+  } else if (receiptsOnly) {
     await receiptCases();
   } else if (quietOnly) {
     await quietCases();
@@ -642,7 +745,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === (receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === (deliveryOnly ? 7 : receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/project-native-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});
