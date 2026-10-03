@@ -551,6 +551,24 @@ dialog::backdrop { background: #15293875; }
 #admin-onboarding-dialog { max-width:760px; }
 #admin-onboarding-command { font-family:monospace; font-size:12px; background:#f0f4f7; overflow-wrap:anywhere; }
 #admin-onboarding-list { margin-top:14px; }
+.onboarding-learning { margin:16px 0; padding:14px 16px; border:1px solid var(--line); border-radius:9px; background:#f8fafb; }
+.onboarding-learning > summary { font-weight:600; cursor:pointer; line-height:1.5; }
+.onboarding-learning > p { margin-top:12px; }
+.onboarding-steps { margin:12px 0; padding-left:22px; font-size:13px; line-height:1.7; }
+.onboarding-steps li + li { margin-top:7px; }
+.onboarding-documents { display:grid; gap:9px; margin-top:12px; min-width:0; }
+.onboarding-document { min-width:0; padding:11px 12px; border:1px solid var(--line); border-radius:7px; background:#fff; }
+.onboarding-document > summary { display:flex; flex-wrap:wrap; gap:4px 12px; justify-content:space-between; cursor:pointer; font-size:13px; }
+.onboarding-document > summary::before { content:"▸"; color:var(--muted); }
+.onboarding-document[open] > summary::before { content:"▾"; }
+.onboarding-document > summary > span { flex:1; }
+.onboarding-document code { font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.onboarding-document p { margin-top:10px; }
+.onboarding-document textarea { display:block; width:100%; min-width:0; margin:10px 0; padding:10px; border:1px solid var(--line); border-radius:5px; background:#f8fafb; color:var(--ink); font:12px/1.6 monospace; resize:vertical; }
+.onboarding-document .dialog-actions { margin-top:8px; }
+.onboarding-scope { display:grid; grid-template-columns:minmax(85px,1fr) minmax(0,3fr); gap:6px 12px; margin:14px 0; padding:12px; border:1px solid var(--line); border-radius:7px; font-size:12px; }
+.onboarding-scope dt { color:var(--muted); }
+.onboarding-scope dd { margin:0; overflow-wrap:anywhere; }
 @media(max-width:640px) { .onboarding-form { grid-template-columns:minmax(0,1fr); } }
 
 /* Message notifications are compact and separate from connector telemetry. */

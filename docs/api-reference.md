@@ -89,6 +89,13 @@ invalid local build stamp, the corresponding fields are `null` and the source is
 `unavailable`; no release is inferred from the other side. Build metadata is for
 diagnostics, not proof of integrity or an authorization decision.
 
+Native `link_peers` reads the existing project agents endpoint, then intersects
+peer channels with the caller's currently authorized configured channels. It
+returns actual agent IDs/names, shared channel IDs and the caller's channel write
+flags; self and non-agent identities are excluded. It is a bounded, freshly
+authorized directory, not online status or proof of model execution. See the
+[native contract](../native-contract.json) for arguments and pagination.
+
 ## Messages, legacy receipts and notes
 
 | Method and path | Purpose |

@@ -76,6 +76,24 @@
     "Command copied. Share it only with this agent.": "Команда скопирована. Передайте её только этому агенту.",
     "Automatic copying is unavailable. Copy the selected command manually.": "Автоматическое копирование недоступно. Скопируйте выделенную команду вручную.",
     "Onboarding invitations": "Приглашения для подключения",
+    "Start prompt": "Стартовый промпт",
+    "Optional skill": "Необязательный навык",
+    "Hooks and tools": "Хуки и инструменты",
+    "Loaded automatically when the connection starts a new CLI session.": "Загружается автоматически при запуске новой CLI-сессии через подключение.",
+    "Install manually only if useful; see the installation locations in HOOKS-AND-TOOLS.md.": "Устанавливайте вручную при необходимости; расположения для установки указаны в HOOKS-AND-TOOLS.md.",
+    "Setup, inbox polling and delivery reports. Hooks and MCP are configured for each launch.": "Настройка, проверка входящих и отчёты о доставке. Хуки и MCP настраиваются для каждого запуска.",
+    "Checking guide files…": "Проверяем файлы инструкций…",
+    "Guide files are unavailable from this server. You can still use the connection command.": "Этот сервер не предоставил файлы инструкций. Командой подключения по-прежнему можно пользоваться.",
+    "Guide files failed validation. Copying and downloading them are unavailable; the connection command is separate.": "Файлы инструкций не прошли проверку. Их копирование и скачивание недоступны; команда подключения находится отдельно.",
+    "English originals · SHA-256 checked against API metadata.": "Английские оригиналы · SHA-256 сверены с метаданными API.",
+    "Copy text": "Копировать текст",
+    "Download {0}": "Скачать {0}",
+    "Copied {0}. No connection command was included.": "Скопирован {0}. Команда подключения в него не включена.",
+    "Automatic copying is unavailable. Copy the selected document manually.": "Автоматическое копирование недоступно. Скопируйте выделенный документ вручную.",
+    "Requested CLI": "Выбранный CLI",
+    "Agent": "Агент",
+    "Auto · chosen locally on first run": "Автоматически · определяется локально при первом запуске",
+    "Invitation scope · verify current access with link_status after connecting.": "Область приглашения · после подключения проверьте текущий доступ через link_status.",
 
     " {0} technical relationships hidden. Turn on “Show technical events” to view them.": " Технических связей скрыто: {0}. Включите «Показывать технические события», чтобы увидеть их.",
     "Only technical relationships are loaded for this entity. Turn on “Show technical events” to view them.": "Для этой сущности загружены только технические связи. Включите «Показывать технические события», чтобы увидеть их.",
@@ -810,6 +828,7 @@
     loginBusy: false, loading: false, dataReady: false, projectReady: false,
     admin: null, adminLoading: false, adminBusy: false, adminKey: "", adminKeyVersion: 0,
     onboarding: null, onboardingCommand: "", onboardingVersion: 0, onboardingDownload: "",
+    onboardingGuidance: {guide: null, result: null}, onboardingGuideSeq: 0, onboardingGuideURLs: new Map(),
     adminDelete: null, adminDeleteEpoch: 0, adminDeleteLoading: false, adminDeleteSubmitting: false,
     adminReadSeq: 0, adminWriteVersion: 0, adminLoadBackground: false,
     coordination: null, coordinationEpoch: 0, coordinationBusy: false, downloads: new Set(),
@@ -3290,6 +3309,7 @@
     invalidateDeliveryAlerts(true);
     clearAdminKey(); clearAdminDelete(); state.admin = null; state.adminLoading = false; state.adminBusy = false;
     state.onboarding = null;
+    clearOnboardingGuidance("guide");
     state.adminReadSeq += 1; state.adminLoadBackground = false;
     for (const id of ["admin-principal-list", "admin-project-list", "admin-audit-list", "admin-delivery-list", "admin-access-agent", "admin-access-project", "admin-access-channel", "admin-channel-project", "admin-onboarding-list", "admin-onboarding-project", "admin-onboarding-channels"]) $(id).replaceChildren();
     for (const id of ["admin-principal-form", "admin-project-form", "admin-channel-form", "admin-access-form", "admin-onboarding-form"]) {
@@ -3670,8 +3690,133 @@
     }
   }
 
+  const ONBOARDING_DOCUMENTS = ["PROMPT.md", "SKILL.md", "HOOKS-AND-TOOLS.md"];
+
+  function clearOnboardingGuidance(area) {
+    state.onboardingGuidance[area] = null;
+    for (const [url, owner] of state.onboardingGuideURLs) if (owner === area) {
+      URL.revokeObjectURL(url); state.onboardingGuideURLs.delete(url);
+    }
+    $("admin-onboarding-" + area + "-files").replaceChildren();
+    setText($("admin-onboarding-" + area + "-status"), "");
+  }
+
+  function onboardingGuidanceFiles(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== "files,version" ||
+        value.version !== 1 || !Array.isArray(value.files) || value.files.length !== 3) throw new Error("Invalid guidance");
+    const files = value.files.map(file => {
+      if (!file || typeof file !== "object" || Array.isArray(file) || Object.keys(file).sort().join(",") !== "content,name,sha256" ||
+          !ONBOARDING_DOCUMENTS.includes(file.name) || typeof file.content !== "string" || !file.content || file.content.includes("\0") ||
+          utf8.encode(file.content).length > 32768 || typeof file.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("Invalid guidance file");
+      return {name: file.name, content: file.content, sha256: file.sha256};
+    });
+    if (new Set(files.map(file => file.name)).size !== 3) throw new Error("Duplicate guidance file");
+    return ONBOARDING_DOCUMENTS.map(name => files.find(file => file.name === name));
+  }
+
+  function onboardingGuidanceCurrent(area, slot, context = state.context, auth = state.authVersion) {
+    return current(context) && auth === state.authVersion && isOwner() && state.view === "admin" && state.onboardingGuidance[area] === slot &&
+      (area !== "result" || $("admin-onboarding-dialog").open && slot.version === state.onboardingVersion);
+  }
+
+  async function loadOnboardingGuidance(area, value) {
+    if (!isOwner() || state.view !== "admin") { clearOnboardingGuidance(area); return; }
+    let files, problem = "";
+    try { files = onboardingGuidanceFiles(value); }
+    catch { files = []; problem = value == null ? "unavailable" : "invalid"; }
+    const signature = problem || JSON.stringify(files);
+    const previous = state.onboardingGuidance[area];
+    if (previous?.signature === signature && (previous.files.length || previous.problem || previous.context === state.context && previous.auth === state.authVersion)) return;
+    clearOnboardingGuidance(area);
+    const slot = {signature, files: [], version: state.onboardingVersion, seq: ++state.onboardingGuideSeq, problem,
+      context: state.context, auth: state.authVersion};
+    state.onboardingGuidance[area] = slot;
+    const status = $("admin-onboarding-" + area + "-status"), context = state.context, auth = state.authVersion;
+    if (problem) {
+      setText(status, () => problem === "unavailable" ? tr("Guide files are unavailable from this server. You can still use the connection command.") :
+        tr("Guide files failed validation. Copying and downloading them are unavailable; the connection command is separate."));
+      return;
+    }
+    setText(status, () => tr("Checking guide files…"));
+    try {
+      for (const file of files) if (await digest(utf8.encode(file.content)) !== file.sha256) throw new Error("Guidance hash mismatch");
+      if (!onboardingGuidanceCurrent(area, slot, context, auth)) return;
+      slot.files = files;
+      renderOnboardingGuidance(area, slot);
+      setText(status, () => tr("English originals · SHA-256 checked against API metadata."));
+    } catch {
+      if (onboardingGuidanceCurrent(area, slot, context, auth)) {
+        slot.problem = "invalid";
+        setText(status, () => tr("Guide files failed validation. Copying and downloading them are unavailable; the connection command is separate."));
+      }
+    }
+  }
+
+  function renderOnboardingGuidance(area, slot) {
+    const labels = [tr("Start prompt"), tr("Optional skill"), tr("Hooks and tools")];
+    const descriptions = [tr("Loaded automatically when the connection starts a new CLI session."),
+      tr("Install manually only if useful; see the installation locations in HOOKS-AND-TOOLS.md."),
+      tr("Setup, inbox polling and delivery reports. Hooks and MCP are configured for each launch.")];
+    replaceContent("admin-onboarding-" + area + "-files", ...slot.files.map((file, index) => {
+      const details = node("details", "onboarding-document"), summary = node("summary");
+      details.dataset.guidanceFile = file.name;
+      appendOwned(summary, () => node("span", "", labels[index]), () => node("code", "", file.name));
+      const text = node("textarea"); text.readOnly = true; text.spellcheck = false; text.rows = 9; text.value = file.content;
+      text.id = `onboarding-${area}-document-${index}`; text.lang = "en";
+      text.setAttribute("aria-label", file.name);
+      const actions = node("div", "dialog-actions");
+      for (const [action, label] of [["copy", tr("Copy text")], ["download", tr("Download {0}", file.name)]]) {
+        const button = node("button", "secondary-button", label); button.type = "button"; button.dataset.guidanceAction = action;
+        button.addEventListener("click", () => action === "copy" ? void copyOnboardingDocument(area, file.name) : downloadOnboardingDocument(area, file.name));
+        appendOwned(actions, () => button);
+      }
+      appendOwned(details, () => summary, () => node("p", "field-help", descriptions[index]), () => text, () => actions);
+      return details;
+    }));
+  }
+
+  async function copyOnboardingDocument(area, name) {
+    const slot = state.onboardingGuidance[area], file = slot?.files.find(item => item.name === name);
+    if (!file || !onboardingGuidanceCurrent(area, slot)) return;
+    const context = state.context, auth = state.authVersion;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(file.content);
+      if (onboardingGuidanceCurrent(area, slot, context, auth)) setText($("admin-onboarding-" + area + "-status"), () => tr("Copied {0}. No connection command was included.", name));
+    } catch {
+      if (!onboardingGuidanceCurrent(area, slot, context, auth)) return;
+      const text = $(`onboarding-${area}-document-${ONBOARDING_DOCUMENTS.indexOf(name)}`);
+      text.focus(); text.select();
+      setText($("admin-onboarding-" + area + "-status"), () => tr("Automatic copying is unavailable. Copy the selected document manually."));
+    }
+  }
+
+  function downloadOnboardingDocument(area, name) {
+    const slot = state.onboardingGuidance[area], file = slot?.files.find(item => item.name === name);
+    if (!file || !onboardingGuidanceCurrent(area, slot)) return;
+    const url = URL.createObjectURL(new Blob([file.content], {type: "text/markdown;charset=utf-8"}));
+    state.onboardingGuideURLs.set(url, area);
+    const link = node("a"); link.href = url; link.download = file.name; appendOwned(document.body, () => link); link.click(); link.remove();
+    setTimeout(() => { URL.revokeObjectURL(url); state.onboardingGuideURLs.delete(url); }, 1000);
+  }
+
+  function renderOnboardingScope(invitation) {
+    const validID = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value);
+    if (!invitation || !validID(invitation.agent_id) || !validID(invitation.project_id) ||
+        !Array.isArray(invitation.channel_ids) || !invitation.channel_ids.length || invitation.channel_ids.length > 8 ||
+        !invitation.channel_ids.every(validID) || new Set(invitation.channel_ids).size !== invitation.channel_ids.length ||
+        !["auto", "codex", "claude"].includes(invitation.runtime)) throw new Error("Invalid invitation scope");
+    const name = typeof invitation.agent_name === "string" && utf8.encode(invitation.agent_name).length <= 200 ? invitation.agent_name : "";
+    const rows = [[tr("Agent"), name && name !== invitation.agent_id ? `${name} (${invitation.agent_id})` : invitation.agent_id], [tr("Project"), invitation.project_id], [tr("Channels"), invitation.channel_ids.join(", ")],
+      [tr("Requested CLI"), invitation.runtime === "auto" ? tr("Auto · chosen locally on first run") : invitation.runtime === "claude" ? "Claude Code" : "Codex"]];
+    replaceContent("admin-onboarding-scope", ...rows.flatMap(([label, value]) => [node("dt", "", label), node("dd", "", value)]));
+  }
+
   function clearOnboardingResult() {
     state.onboardingCommand = ""; state.onboardingVersion += 1;
+    clearOnboardingGuidance("result");
+    $("admin-onboarding-scope").replaceChildren();
+    $("admin-onboarding-result-guide").open = false;
     $("admin-onboarding-command").value = "";
     setText($("admin-onboarding-target"), () => (""));
     setText($("admin-onboarding-copy-status"), () => (""));
@@ -3710,6 +3855,7 @@
 
   function renderOnboarding() {
     const config = state.onboarding;
+    void loadOnboardingGuidance("guide", config?.guidance);
     setText($("admin-onboarding-availability"), () => config?.enabled === true
       ? tr("Connection address: {0}", () => config.public_url)
       : tr("Connection generation is unavailable. Configure the server’s public HTTPS address and CA certificate."));
@@ -3746,6 +3892,7 @@
         repository.protocol !== "https:" || repository.username || repository.password ||
         !/^sha256\/\/[A-Za-z0-9+/]{43}=$/.test(result.spki_pin) || !/^[a-f0-9]{64}$/.test(result.token) ||
         !result.invitation?.agent_id || !result.invitation?.expires_at) throw new Error("Invalid onboarding response");
+    renderOnboardingScope(result.invitation);
     const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
     const pipeline = 'curl --disable -fkSs --noproxy "*" --proto "=https" --connect-timeout 10 --max-time 60 --pinnedpubkey "$2" "$1/connect/install.sh" | bash -s -- "$@"';
     state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}`;
@@ -3754,6 +3901,7 @@
     const {agent_id: agentId, expires_at: expiresAt} = result.invitation;
     setText($("admin-onboarding-target"), () => tr("Agent {0}. Use once before {1}.", () => agentId, () => dateText(expiresAt)));
     $("admin-onboarding-dialog").showModal(); $("admin-onboarding-copy").focus();
+    void loadOnboardingGuidance("result", result.guidance);
   }
 
   async function onboardingAction(invite, action) {

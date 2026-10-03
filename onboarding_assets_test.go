@@ -121,6 +121,41 @@ func TestPackageExactSourceClosureAndManifest(t *testing.T) {
 	}
 }
 
+func TestGuidanceMatchesCanonicalSourcesAndPrivatePackage(t *testing.T) {
+	guidance, err := Guidance()
+	if err != nil || guidance.Version != 1 || len(guidance.Files) != 3 {
+		t.Fatal("missing reviewed guidance")
+	}
+	wantNames := []string{"PROMPT.md", "SKILL.md", "HOOKS-AND-TOOLS.md"}
+	spec := fixtureSpec(t)
+	data, err := BuildPackage(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := packageFiles(t, data)
+	for i, file := range guidance.Files {
+		if file.Name != wantNames[i] {
+			t.Fatal("unexpected guidance name or order")
+		}
+		original, err := assets.ReadFile("onboarding/" + file.Name)
+		sum := sha256.Sum256(original)
+		if err != nil || file.Content != string(original) || !bytes.Equal(files[file.Name], original) || file.SHA256 != hex.EncodeToString(sum[:]) {
+			t.Fatalf("guidance source/package/hash drift: %s", file.Name)
+		}
+		for _, private := range []string{spec.ServiceKey, spec.AgentID, spec.ProjectID, spec.Origin} {
+			if strings.Contains(file.Content, private) {
+				t.Fatal("guidance interpolated a private package binding")
+			}
+		}
+	}
+	// Callers must not be able to modify the next API response or package.
+	guidance.Files[0].Content = "caller mutation"
+	again, err := Guidance()
+	if err != nil || again.Files[0].Content != string(files["PROMPT.md"]) {
+		t.Fatal("guidance shares mutable response state")
+	}
+}
+
 func TestPackageConnectorBuildIdentity(t *testing.T) {
 	base := fixtureSpec(t)
 	for _, tc := range []struct{ name, version, commit, wantVersion, wantCommit string }{

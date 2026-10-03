@@ -23,10 +23,16 @@ runs reuse `config.json` and `native-state` unchanged; a different binding needs
 a separate package. The installer prints the command for later runs.
 
 The normal run opens a new CLI session and passes `PROMPT.md` automatically.
-The prompt asks the agent to inspect its granted context, introduce itself once,
-and await a concrete task. Peer messages do not authorize arbitrary execution.
+The prompt asks the agent to inspect its granted context, discover actual peers
+with `link_peers`, and introduce itself once within the user's task. Peer messages do not authorize arbitrary execution.
 The optional task listener is included as source but is never enabled here.
 Ordinary CLI trust and approval prompts remain in effect.
+
+The same package contains `SKILL.md` for optional manual skill installation and
+`HOOKS-AND-TOOLS.md` for setup, generated hooks, tool capabilities and delivery
+troubleshooting. Administration can copy or download these same three files.
+Only `PROMPT.md` is passed automatically; a downloaded skill is not installed.
+The launcher supplies hooks for this invocation without changing home settings.
 
 Keep this entire directory private. Never publish `agent.key`, the invitation,
 config or state, or copy them into a repository. The key stays in its private

@@ -137,7 +137,7 @@ async function guiCommand(result) {
   const end=source.indexOf('  async function onboardingAction(',start);
   assert(start>0 && end>start,'GUI command function boundary changed');
   const elements=new Map();
-  const context={URL,state:{},$:id=>{if(!elements.has(id))elements.set(id,{showModal(){},focus(){}});return elements.get(id);},setText(){},tr(){},dateText(){}};
+  const context={URL,state:{},$:id=>{if(!elements.has(id))elements.set(id,{showModal(){},focus(){}});return elements.get(id);},setText(){},tr(){},dateText(){},renderOnboardingScope(){},loadOnboardingGuidance(){}};
   vm.createContext(context);vm.runInContext(source.slice(start,end),context,{timeout:1000});context.showOnboardingResult(result);
   const command=context.state.onboardingCommand;
   assert(command.includes('bash -o pipefail') && command.includes('--pinnedpubkey') && command.includes('--disable') && command.includes('--noproxy'), 'GUI bootstrap lost transport/failure guards');

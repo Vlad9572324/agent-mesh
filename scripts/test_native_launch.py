@@ -73,6 +73,7 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertNotIn('--strict-mcp-config', launch['argv'])
         self.assertNotIn('--setting-sources', launch['argv'])
         instructions = launch['argv'][launch['argv'].index('--append-system-prompt') + 1]
+        self.assertIn('link_peers to discover actual recipient IDs', instructions)
         self.assertIn('nonempty recipient_ids', instructions)
         self.assertIn('link_broadcast only intentionally', instructions)
         self.assertIn('no native inbox delivery', instructions)

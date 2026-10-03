@@ -52,6 +52,7 @@ CONNECTOR_FILES = (
 ONBOARDING_FILES = (
     "onboarding/install.sh", "onboarding/install.py", "onboarding/connect.py",
     "onboarding/README.md", "onboarding/PROMPT.md",
+    "onboarding/SKILL.md", "onboarding/HOOKS-AND-TOOLS.md",
 )
 # The server embeds these exact committed connector sources for invitations.
 EMBED_FILES = (*CONNECTOR_FILES, *LICENSE_FILES, "CLI-CONNECTION.md", NOTICES_SOURCE,

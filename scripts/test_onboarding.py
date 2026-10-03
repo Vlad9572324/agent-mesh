@@ -30,7 +30,8 @@ def module(name, path):
 
 release = module("onboarding_release_test", ROOT / "scripts/build-release.py")
 connect = module("onboarding_connect_test", ROOT / "onboarding/connect.py")
-paths = ["connect.py", "README.md", "PROMPT.md", "profile.json", "agent.key", "ca.crt"]
+GUIDANCE_NAMES = ("PROMPT.md", "SKILL.md", "HOOKS-AND-TOOLS.md")
+paths = ["connect.py", "README.md", *GUIDANCE_NAMES, "profile.json", "agent.key", "ca.crt"]
 paths += ["connectors/" + name for name in (*release.CONNECTOR_FILES, "LICENSE", "NOTICE", "CLI-CONNECTION.md", "docs/third-party-notices.md")]
 paths += ["connectors/RELEASE.json"]
 installer_source = (ROOT / "onboarding/install.py").read_text().replace("__PACKAGE_PATHS_JSON__", repr(paths))
@@ -56,7 +57,7 @@ def package_files():
             files[name] = json.dumps({"version": "v1.2.3-test.4", "source_commit": "a" * 40}).encode()
         elif name.startswith("connectors/"):
             files[name] = (ROOT / name[len("connectors/"):]).read_bytes()
-        elif name in ("connect.py", "README.md", "PROMPT.md"):
+        elif name in ("connect.py", "README.md", *GUIDANCE_NAMES):
             files[name] = (ROOT / "onboarding" / name).read_bytes()
     files.update({"agent.key": (KEY + "\n").encode(), "ca.crt": b"fixture-public-certificate",
                   "profile.json": json.dumps(profile()).encode()})
@@ -99,6 +100,26 @@ class InstallerTests(unittest.TestCase):
         for item in [path, *path.rglob("*")]:
             self.assertEqual(item.stat().st_mode & 0o777, 0o700 if item.is_dir() else 0o600)
         self.assertNotIn(KEY, out.getvalue()); self.assertNotIn(TOKEN, out.getvalue())
+        for name in GUIDANCE_NAMES:
+            self.assertEqual((path / name).read_bytes(), (ROOT / "onboarding" / name).read_bytes())
+
+    def test_missing_or_tampered_guidance_refuses_before_exec(self):
+        for name in GUIDANCE_NAMES:
+            for missing in (True, False):
+                with self.subTest(name=name, missing=missing):
+                    files = package_files()
+                    if missing:
+                        files.pop(name)
+                    else:
+                        files[name] += b"\nUntrusted changed guidance\n"
+                    path = self.root / (name + ("-missing" if missing else "-tampered"))
+                    with patch.object(installer, "redeem", return_value=archive(files)) as redeem, \
+                            patch.object(installer.os, "execv") as execute, contextlib.redirect_stderr(io.StringIO()):
+                        result = installer.main([ORIGIN, PIN, TOKEN, "--install-dir", str(path), "--check", "--runtime", "codex"])
+                    self.assertEqual(result, 2)
+                    redeem.assert_called_once()
+                    execute.assert_not_called()
+                    self.assertFalse(path.exists())
 
     def test_existing_directory_and_symlink_refuse_before_redemption(self):
         existing = self.root / "existing"; existing.mkdir()

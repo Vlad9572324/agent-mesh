@@ -18,11 +18,13 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // These are actual repository sources, not a second vendored connector copy.
 //
 //go:embed onboarding/install.sh onboarding/install.py onboarding/connect.py onboarding/README.md onboarding/PROMPT.md
+//go:embed onboarding/SKILL.md onboarding/HOOKS-AND-TOOLS.md
 //go:embed scripts/agent-link-cli.py scripts/native_launch.py scripts/agent-link-hook.py scripts/agent-link-mcp.py
 //go:embed adapters/native_bridge.py adapters/native_hooks.py adapters/native_mcp.py
 //go:embed scripts/agent-link-listener.py adapters/task_listener.py adapters/coordination.py scripts/dev_trial_runtimes.py
@@ -36,6 +38,35 @@ var connectorFiles = []string{
 	"scripts/agent-link-listener.py", "adapters/task_listener.py", "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
 	"scripts/artifact_client.py", "scripts/agent-link-artifacts.py", "docs/task-listener.md", "listener-contract.json",
 	"LICENSE", "NOTICE", "CLI-CONNECTION.md", "docs/third-party-notices.md",
+}
+
+// GuidanceFile is reviewed static text, never a rendered invitation or profile.
+type GuidanceFile struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+	SHA256  string `json:"sha256"`
+}
+
+type GuidanceBundle struct {
+	Version int            `json:"version"`
+	Files   []GuidanceFile `json:"files"`
+}
+
+var guidanceNames = [...]string{"PROMPT.md", "SKILL.md", "HOOKS-AND-TOOLS.md"}
+
+// Guidance returns a fresh, secret-free copy of the same bytes shipped in private
+// packages. It is available without configured invitations or any service key.
+func Guidance() (GuidanceBundle, error) {
+	result := GuidanceBundle{Version: 1, Files: make([]GuidanceFile, 0, len(guidanceNames))}
+	for _, name := range guidanceNames {
+		data, err := assets.ReadFile("onboarding/" + name)
+		if err != nil || len(data) > 32768 || !utf8.Valid(data) || len(bytes.TrimSpace(data)) == 0 || bytes.IndexByte(data, 0) >= 0 {
+			return GuidanceBundle{}, errors.New("invalid embedded onboarding guidance")
+		}
+		hash := sha256.Sum256(data)
+		result.Files = append(result.Files, GuidanceFile{Name: name, Content: string(data), SHA256: hex.EncodeToString(hash[:])})
+	}
+	return result, nil
 }
 
 // Spec is supplied only by the server's validated deployment configuration and
@@ -119,7 +150,8 @@ func InstallScript() []byte {
 }
 
 func packagePaths() []string {
-	paths := []string{"connect.py", "README.md", "PROMPT.md", "profile.json", "agent.key", "ca.crt", "connectors/RELEASE.json"}
+	paths := []string{"connect.py", "README.md", "profile.json", "agent.key", "ca.crt", "connectors/RELEASE.json"}
+	paths = append(paths, guidanceNames[:]...)
 	for _, name := range connectorFiles {
 		paths = append(paths, "connectors/"+name)
 	}
@@ -145,12 +177,19 @@ func BuildPackage(s Spec) ([]byte, error) {
 		}
 		files["connectors/"+name] = data
 	}
-	for _, name := range []string{"connect.py", "README.md", "PROMPT.md"} {
+	for _, name := range []string{"connect.py", "README.md"} {
 		data, err := assets.ReadFile("onboarding/" + name)
 		if err != nil {
 			return nil, errors.New("missing embedded onboarding asset")
 		}
 		files[name] = data
+	}
+	guidance, err := Guidance()
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range guidance.Files {
+		files[file.Name] = []byte(file.Content)
 	}
 	profile := map[string]any{"version": 1, "agent_id": s.AgentID, "project_id": s.ProjectID,
 		"url": s.Origin, "channel_ids": s.ChannelIDs, "runtime": s.Runtime, "repository": s.Repository, "connector_dir": "connectors"}

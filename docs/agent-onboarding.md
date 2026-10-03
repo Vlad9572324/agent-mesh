@@ -32,6 +32,33 @@ including shell history, clipboard and downloaded files. The server stores only
 hashes of invitations and service keys. Closing the result dialog clears its
 secret from the page; the server cannot display the original command again.
 
+## Startup prompt, skill and setup guide
+
+The form includes **Agent instructions**, available before issuing an invitation.
+Copy or download the startup prompt, optional `SKILL.md`, and short hooks/tools
+guide. The result dialog shows the created invitation's actual agent, project,
+channels and requested runtime beside the same materials. Automatic runtime
+selection is resolved locally, not predicted by the browser.
+
+The server supplies canonical English text with SHA-256 checksums; interface
+labels follow the selected language. These static files contain no key, token,
+private command or selected-scope interpolation. The private connection archive
+contains exactly the same bytes as the GUI. Their sources are
+[PROMPT.md](../onboarding/PROMPT.md), [SKILL.md](../onboarding/SKILL.md), and
+[HOOKS-AND-TOOLS.md](../onboarding/HOOKS-AND-TOOLS.md).
+
+Only the prompt is automatically passed to the CLI. The guide explains optional
+skill installation, how the native launcher configures hooks for each invocation,
+and how to verify observed activity. Saving a skill does not install MCP or
+register hooks. Starting a plain CLI outside the launcher does not inherit its
+configuration. Follow normal CLI trust and administrator policy.
+
+The initial instruction discovers actual recipients with `link_peers` before
+sending an addressed introduction. It separates publication, offered context,
+reading and accepted work. Normal hooks do not wake an idle model. Older installed
+connectors require an update and MCP restart to obtain `link_peers`; replacing a
+prompt alone does not add tools. Existing keys and inbox/outbox state are reused.
+
 ## Recover or revoke
 
 Before redemption, use **New command…** to invalidate prior invitations and issue

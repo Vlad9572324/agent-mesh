@@ -33,6 +33,7 @@ SELF_PREFIXES = ('mcp__agent_link_native__', 'mcp__agent_link_native', 'mcp__age
 CONFIG_FIELDS = frozenset(('version', 'url', 'ca_file', 'key_file', 'agent_id', 'project_id',
     'channel_ids', 'state_dir', 'runtime', 'workspace_root'))
 MAX_ROWS = 50000
+PEER_CONTEXT_BUDGET = 16 * 1024
 
 
 class NativeError(ValueError):
@@ -735,6 +736,58 @@ class NativeBridge:
                 'pending_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
                 'blocked_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0],
                 'auto_execution': False, 'legacy_heartbeat_changed': False})
+
+    def peers(self, channel_id=None, after_id=None, limit=50):
+        """Read a fresh, bounded directory of addressable configured-channel peers."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise NativeError('invalid_peer_limit')
+        if channel_id is not None:
+            self._identifier(channel_id)
+        if after_id is not None:
+            self._identifier(after_id)
+        allowed = self._authorize()
+        if channel_id is not None:
+            self._channel(channel_id, allowed)
+            allowed = {channel_id: allowed[channel_id]}
+        response = self._request('GET', self.project_path + '/agents')
+        rows = response.get('agents') if type(response) is dict else None
+        if type(rows) is not list or len(rows) > MAX_ROWS:
+            raise NativeError('invalid_peer_directory')
+        peers, seen = [], set()
+        for row in rows:
+            if (type(row) is not dict or not identifier(row.get('id')) or row['id'] in seen
+                    or row.get('kind') not in ('agent', 'viewer', 'owner')):
+                raise NativeError('invalid_peer_directory')
+            seen.add(row['id'])
+            name, channels = row.get('name'), row.get('channel_ids')
+            try:
+                valid_name = type(name) is str and 0 < len(name.encode('utf-8')) <= 200 and '\x00' not in name
+            except UnicodeError:
+                valid_name = False
+            if (not valid_name or type(channels) is not list or len(channels) > MAX_ROWS
+                    or not all(identifier(value) for value in channels) or len(set(channels)) != len(channels)):
+                raise NativeError('invalid_peer_directory')
+            shared = sorted(set(channels).intersection(allowed))
+            if row['kind'] != 'agent' or row['id'] == self.config['agent_id'] or not shared:
+                continue
+            self._identifier(row['id'])
+            if after_id is None or row['id'] > after_id:
+                peers.append({'id': row['id'], 'name': self.sanitize(name), 'channel_ids': shared})
+        peers.sort(key=lambda peer: peer['id'])
+        result = {'agent_id': self.config['agent_id'], 'project_id': self.config['project_id'],
+                  'channels': [{'id': channel, 'can_write': allowed[channel]} for channel in sorted(allowed)],
+                  'peers': [], 'has_more': False, 'next_after_id': None, 'untrusted_peer_data': True}
+        for index, peer in enumerate(peers[:limit]):
+            candidate = {**result, 'peers': [*result['peers'], peer], 'has_more': index + 1 < len(peers),
+                         'next_after_id': peer['id'] if index + 1 < len(peers) else None}
+            if len(canonical(candidate).encode('utf-8')) > PEER_CONTEXT_BUDGET:
+                break
+            result = candidate
+        # Bounds above guarantee at least one complete peer fits. Never return
+        # an empty advancing page or silently claim the directory was exhausted.
+        if peers and not result['peers']:
+            raise NativeError('peer_directory_entry_exceeds_budget')
+        return result
 
     def _publish(self, kind, path, body, *, method='POST', channel=None):
         allowed = self._authorize()

@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / 'adapters'))
 EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionEnd')
 INSTRUCTIONS = (
     'Agent Mesh connects this existing working session to its configured project. '
+    'Use link_peers to discover actual recipient IDs and shared configured channels; choose a channel with can_write before sending. '
     'Use link_status and link_inbox to check context, link_message to read a full message, '
     'and inspect fetch_has_more separately from offer_has_more. Default inbox offers '
     'rotate fairly; use cursor="" then next_cursor for a stable local review. Check '

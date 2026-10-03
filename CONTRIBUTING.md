@@ -169,6 +169,16 @@ immutable titled document publication/read round trip over real MCP and HTTPS.
 Document artifacts must keep legacy untitled request hashes replayable across
 migration; named documents never substitute for an `evidence` verification role.
 
+Onboarding guidance comes from the three canonical Markdown files in
+`onboarding/`. Verify byte equality between owner metadata, create/reissue
+responses and redeemed private archives, with neither credentials nor scope
+rendered into the documents. Installer tests must reject missing or altered
+guide files before execution. The GUI regression exercises copying, downloads,
+actual invitation scope, language changes, malformed/older-server fallback and
+cleanup across dialog close/logout. `link_peers` tests cover current configured
+ACL intersection, bounded fresh paging, no writes and a real MCP discovery/send
+round trip. These checks do not require a provider session.
+
 Delivery-policy integration tests use real PostgreSQL with synthetic timestamps
 to cover deadline boundaries, independent receipt stages, exact reply identity,
 policy persistence, update conflicts and fresh owner authorization. Browser

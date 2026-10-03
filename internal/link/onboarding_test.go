@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	onboard "agent-link"
 )
 
 func onboardingConfig(t *testing.T) *OnboardingConfig {
@@ -160,6 +162,93 @@ func TestOnboardingOnceOnlyScopedKeyAndSanitizedMetadata(t *testing.T) {
 	var keys, claims int
 	if err := f.s.Pool.QueryRow(context.Background(), "SELECT (SELECT count(*) FROM principals WHERE id=$1 AND key_hash=$2),(SELECT count(*) FROM admin_audit WHERE action='onboarding.claim' AND target_id=$3)", p.AgentID, digest(p.ServiceKey), id).Scan(&keys, &claims); err != nil || keys != 1 || claims != 1 {
 		t.Fatal("missing atomic claim audit/key")
+	}
+}
+
+func TestOnboardingGuidanceDisabled(t *testing.T) {
+	server := &Server{}
+	result := server.onboardingMetadata()
+	guidance, err := onboard.Guidance()
+	want, _ := json.Marshal(guidance)
+	got, _ := json.Marshal(result["guidance"])
+	if err != nil || result["enabled"] != false || !bytes.Equal(got, want) {
+		t.Fatal("static guidance must remain available when invitations are disabled")
+	}
+}
+
+func TestOnboardingGuidanceOwnerResponsesMatchRedeemedPackage(t *testing.T) {
+	f, cfg := onboardingFixture(t)
+	cfg.Package = func(_ context.Context, p OnboardingPackage) ([]byte, error) {
+		return onboard.BuildPackage(onboard.Spec{AgentID: p.AgentID, ProjectID: p.ProjectID, ChannelIDs: p.ChannelIDs,
+			Runtime: p.Runtime, ServiceKey: p.ServiceKey, Origin: p.Origin, SPKIPin: p.SPKIPin,
+			Repository: p.Repository, CertificateCA: p.CertificateCA})
+	}
+	guidance, err := onboard.Guidance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := json.Marshal(guidance)
+	check := func(result map[string]any) {
+		t.Helper()
+		raw, err := json.Marshal(result["guidance"])
+		var decoded onboard.GuidanceBundle
+		if err != nil || json.Unmarshal(raw, &decoded) != nil {
+			t.Fatal("invalid owner guidance response")
+		}
+		got, _ := json.Marshal(decoded)
+		if !bytes.Equal(got, want) {
+			t.Fatal("owner guidance differs from canonical assets")
+		}
+		if token, ok := result["token"].(string); ok && bytes.Contains(got, []byte(token)) {
+			t.Fatal("guidance contains invitation credential")
+		}
+	}
+	check(f.expect("GET", "/v1/admin/onboarding", "owner", nil, 200))
+	input := onboardingInput("guidance-agent")
+	input["name"] = "Untrusted name must not become instructions"
+	created := f.expect("POST", "/v1/admin/onboarding", "owner", input, 201)
+	check(created)
+	id := created["invitation"].(map[string]any)["id"].(string)
+	reissued := f.expect("POST", "/v1/admin/onboarding/"+id+"/reissue", "owner", map[string]any{"expires_in_hours": 1}, 201)
+	check(reissued)
+	response := redeem(f, reissued["token"].(string))
+	if response.err != nil || response.status != 200 {
+		t.Fatal("real private package redemption failed")
+	}
+	compressed, err := gzip.NewReader(bytes.NewReader(response.body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer compressed.Close()
+	archive := tar.NewReader(compressed)
+	files := map[string][]byte{}
+	for {
+		header, err := archive.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[header.Name], err = io.ReadAll(archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range guidance.Files {
+		if string(files[file.Name]) != file.Content || bytes.Contains(want, bytes.TrimSpace(files["agent.key"])) {
+			t.Fatal("private package guidance differs or leaks a service key")
+		}
+	}
+	for _, actor := range []string{"claude-pilot", "viewer-pilot"} {
+		f.expect("GET", "/v1/admin/onboarding", actor, nil, 403)
+	}
+	f.expect("GET", "/v1/admin/onboarding", "", nil, 401)
+	cfg.Origin = ""
+	disabled := f.expect("GET", "/v1/admin/onboarding", "owner", nil, 200)
+	check(disabled)
+	if disabled["enabled"] != false {
+		t.Fatal("guidance must not enable unconfigured invitations")
 	}
 }
 

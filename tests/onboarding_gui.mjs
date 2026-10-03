@@ -29,7 +29,7 @@ const allowedReads = new Set(sidebarOnly ? ['alpha', 'beta', 'quiet', 'other-cha
 const js = JSON.stringify, pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const assert = (value, message) => { if (!value) throw new Error(message); };
-let directory, scratch, base, ca, pgEnv, sourceDSNHash, ownerKeyPath, childSerial = 0;
+let directory, scratch, base, ca, pgEnv, sourceDSNHash, ownerKeyPath, downloads, expectedGuidance, childSerial = 0;
 let server, serverLog, browser, browserLog, browserCDP, profile, schemaCreated = false, writer, viewer, owner;
 let confirmNext = false;
 let actorName = 'Agent <img src=x onerror=window.nativeFeedInjected=1>';
@@ -202,10 +202,15 @@ async function browsers() {
   for (let i = 0; i < 100; i++) { assert(!failed && browser.exitCode === null, 'Owned browser exited'); try { port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); if (port) break; } catch {} await pause(100); }
   assert(port > 0, 'Owned browser not ready'); const address = `http://127.0.0.1:${port}`;
   browserCDP = new CDP((await (await fetch(`${address}/json/version`)).json()).webSocketDebuggerUrl, 'browser');
+  if (!sidebarOnly) {
+    downloads = `${scratch}/browser-downloads`; await mkdir(downloads, {mode: 0o700});
+    await browserCDP.call('Browser.setDownloadBehavior', {behavior: 'allow', downloadPath: downloads});
+  }
   for (const actor of ['writer', 'viewer', 'owner']) {
     const target = await browserCDP.call('Target.createTarget', {url: 'about:blank'}), targets = await (await fetch(`${address}/json/list`)).json();
     const tab = new CDP(targets.find(item => item.id === target.targetId).webSocketDebuggerUrl, actor); tabs.push(tab);
     for (const method of ['Page.enable', 'Runtime.enable', 'Network.enable']) await tab.call(method);
+    if (!sidebarOnly) await tab.call('Page.addScriptToEvaluateOnNewDocument', {source: `Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.__copiedGuide=text;}}});`});
     await tab.call('Fetch.enable', {patterns: [{urlPattern: '*', requestStage: 'Request'}]});
     await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
     await tab.call('Page.navigate', {url: new URL('?lang=ru', base).href}); await tab.wait(`document.readyState==='complete' && !!document.getElementById('nav-admin')`, 'project feed page', 15000);
@@ -249,12 +254,19 @@ async function generatedCommand() {
     && value.includes('--noproxy'), 'Connection command lost its origin, failure boundary, TLS pin or curl configuration isolation');
   assert(!value.includes(keys.owner), 'Owner key appeared in agent onboarding command');
   assert(await owner.eval(`localStorage.length===0 && sessionStorage.length===0 && !location.href.includes(${js(token)})`), 'Invitation persisted in browser storage or URL');
+  if (expectedGuidance) {
+    await owner.wait(`document.querySelectorAll('#admin-onboarding-result-files [data-guidance-file]').length===3`, 'verified result guides');
+    const texts = await owner.eval(`Array.from(document.querySelectorAll('#admin-onboarding-result-files [data-guidance-file]')).map(e=>({name:e.dataset.guidanceFile,content:e.querySelector('textarea').value}))`);
+    assert(texts.every(file => expectedGuidance.files.some(expected => expected.name === file.name && expected.content === file.content)), 'Result guides differ from canonical API files');
+    assert(texts.every(file => !file.content.includes(token) && !file.content.includes(keys.owner)), 'Result guide contains an invitation or owner key');
+  }
   return token;
 }
 async function closeCommand(token) {
   await owner.click('#admin-onboarding-close');
   await owner.wait(`!document.getElementById('admin-onboarding-dialog').open && document.getElementById('admin-onboarding-command').value===''`, 'close forgets command');
   assert(await owner.eval(`!document.body.innerText.includes(${js(token)})`), 'Closed invitation remains in visible text');
+  assert(await owner.eval(`document.getElementById('admin-onboarding-result-files').textContent==='' && document.getElementById('admin-onboarding-scope').textContent===''`), 'Closed result retains documents or scope');
 }
 async function invitationAction(invitation, action) {
   allowedMutations.add(`POST /v1/admin/onboarding/${invitation.id}/${action}`);
@@ -275,9 +287,9 @@ with tarfile.open(sys.argv[1], 'r:gz') as archive:
  manifest=json.loads(files.pop('MANIFEST.json'))
  assert manifest['version']==1 and set(manifest['files'])==set(files)
  assert all(meta['size']==len(files[name]) and meta['sha256']==hashlib.sha256(files[name]).hexdigest() for name,meta in manifest['files'].items())
- required={'profile.json','agent.key','ca.crt','connect.py','README.md','PROMPT.md','connectors/scripts/agent-link-cli.py','connectors/LICENSE','connectors/NOTICE'}
+ required={'profile.json','agent.key','ca.crt','connect.py','README.md','PROMPT.md','SKILL.md','HOOKS-AND-TOOLS.md','connectors/scripts/agent-link-cli.py','connectors/LICENSE','connectors/NOTICE'}
  assert required<=set(files)
- print(json.dumps({'profile':json.loads(files['profile.json']),'key':files['agent.key'].decode().strip(),'file_count':len(files)+1,'ca_sha256':hashlib.sha256(files['ca.crt']).hexdigest()}))
+ print(json.dumps({'profile':json.loads(files['profile.json']),'key':files['agent.key'].decode().strip(),'file_count':len(files)+1,'ca_sha256':hashlib.sha256(files['ca.crt']).hexdigest(),'guidance':{name:hashlib.sha256(files[name]).hexdigest() for name in ['PROMPT.md','SKILL.md','HOOKS-AND-TOOLS.md']}}))
 `;
   return JSON.parse((await command('python3', ['-B', '-c', inspect, packagePath], 'inspect-private-package')).toString('utf8'));
 }
@@ -486,6 +498,26 @@ try {
     assert(!inventory.principals.some(item => item.id === ids.invalid) && !inventory.project_members.some(item => item.agent_id === ids.invalid)
       && !(await api('/v1/admin/onboarding')).invitations.some(item => item.agent_id === ids.invalid), 'Invalid onboarding partially committed');
   });
+  await check('persistent instructions are canonical, copyable and localized before creating any agent', async () => {
+    expectedGuidance = (await api('/v1/admin/onboarding')).guidance;
+    assert(expectedGuidance?.version === 1 && expectedGuidance.files.length === 3, 'Guidance contract missing');
+    await owner.click('#admin-onboarding-guide > summary');
+    await owner.wait(`document.querySelectorAll('#admin-onboarding-guide-files [data-guidance-file]').length===3`, 'persistent guides loaded');
+    await owner.click('#admin-onboarding-guide-files [data-guidance-file="SKILL.md"] > summary');
+    for (const language of ['en', 'ru']) {
+      await owner.filter('language-select', language);
+      const summary = await owner.eval(`document.querySelector('#admin-onboarding-guide-files [data-guidance-file="SKILL.md"]').textContent`);
+      assert(language === 'ru' ? /Необязательный навык/.test(summary) && /Устанавливайте вручную/.test(summary) : /Optional skill/.test(summary) && /Install manually/.test(summary), 'Document labels or descriptions do not localize');
+      const texts = await owner.eval(`Array.from(document.querySelectorAll('#admin-onboarding-guide-files [data-guidance-file]')).map(e=>({name:e.dataset.guidanceFile,content:e.querySelector('textarea').value}))`);
+      assert(texts.length === 3 && texts.every(file => expectedGuidance.files.some(expected => expected.name === file.name && expected.content === file.content && hash(Buffer.from(file.content)) === expected.sha256)), 'API documents changed in GUI');
+    }
+    await owner.click('#admin-onboarding-guide-files [data-guidance-file="SKILL.md"] [data-guidance-action="copy"]');
+    assert(await owner.eval(`window.__copiedGuide===${js(expectedGuidance.files.find(file => file.name === 'SKILL.md').content)}`), 'Copy button did not copy exact guide');
+    await owner.click('#refresh-button'); await owner.wait(`!document.getElementById('refresh-button').disabled`, 'guide refresh complete');
+    assert(await owner.eval(`document.getElementById('admin-onboarding-guide').open && document.querySelector('#admin-onboarding-guide-files [data-guidance-file="SKILL.md"]').open`), 'Refresh collapsed reading state');
+    assert(report.requests.every(item => item.method === 'GET'), 'Learning guides caused a mutation');
+    await owner.click('#admin-onboarding-guide > summary');
+  });
   await check('owner creates an inactive agent with exactly selected communication scope and a one-use command', async () => {
     await owner.fill('admin-onboarding-id', ids.invitee);
     await owner.fill('admin-onboarding-name', 'New helper <img src=x onerror=window.onboardingInjected=1>');
@@ -507,8 +539,28 @@ try {
     assert(projects.length === 1 && projects[0].project_id === ids.project && projects[0].can_write && channels.length === 2
       && channels.every(item => [ids.alpha, ids.beta].includes(item.channel_id) && item.can_write), 'Wizard granted a broader or read-only scope');
     assert(!JSON.stringify([inventory, await api('/v1/admin/onboarding'), await api('/v1/admin/audit')]).includes(token), 'Raw invitation leaked through administrative history');
-    await closeCommand(token);
     assert(await owner.eval(`!document.querySelector('#admin-onboarding-list img') && !window.onboardingInjected`), 'Agent name executed as markup');
+  });
+  await check('result scope and downloadable documents stay separate from the secret command', async () => {
+    const scope = await owner.eval(`document.getElementById('admin-onboarding-scope').textContent`);
+    assert([ids.invitee, ids.project, ids.alpha, ids.beta].every(id => scope.includes(id)) && /Автоматически|Auto/.test(scope), 'Result scope differs from actual invitation');
+    assert(scope.includes('<img src=x onerror=window.onboardingInjected=1>') && !await owner.eval(`!!document.querySelector('#admin-onboarding-scope img')`), 'Invitation name is interpreted as markup');
+    await owner.click('#admin-onboarding-result-guide > summary');
+    const command = await owner.eval(`document.getElementById('admin-onboarding-command').value`);
+    for (const file of expectedGuidance.files) {
+      const selector = `#admin-onboarding-result-files [data-guidance-file="${file.name}"]`;
+      await owner.click(`${selector} > summary`);
+      await owner.click(`${selector} [data-guidance-action="copy"]`);
+      assert(await owner.eval(`window.__copiedGuide===${js(file.content)}`), 'Result copy differs from API guide');
+      await owner.click(`${selector} [data-guidance-action="download"]`);
+      await owner.wait(async () => { try { return hash(await readFile(`${downloads}/${file.name}`)) === file.sha256; } catch { return false; } }, 'actual browser download matches canonical bytes');
+    }
+    for (const language of ['en', 'ru']) {
+      await owner.filter('language-select', language);
+      assert(await owner.eval(`document.getElementById('admin-onboarding-command').value===${js(command)}`), 'Language switch changed secret command');
+    }
+    await closeCommand(token);
+    assert(await owner.eval(`document.querySelectorAll('#admin-onboarding-guide-files [data-guidance-file]').length===3`), 'Closing secret command removed reusable guides');
   });
   await check('reissue and revoke invalidate previous commands while closed results stay forgotten', async () => {
     const first = token;
@@ -526,6 +578,7 @@ try {
     const response = await request('/connect/redeem', 'POST', {token}, null, true);
     assert(response.status === 200 && response.headers['cache-control'] === 'no-store' && response.headers['x-content-type-options'] === 'nosniff', 'Secret package transport headers or status differ');
     const contents = await inspectPackage(response.data); secrets.add(contents.key); keys.invitee = contents.key;
+    assert(expectedGuidance.files.every(file => contents.guidance[file.name] === file.sha256), 'Private package instructions differ from displayed API instructions');
     assert(/^[0-9a-f]{64}$/.test(contents.key) && contents.ca_sha256 === hash(ca), 'Package key or configured trust certificate differs');
     const profile = contents.profile;
     assert(profile.version === 1 && profile.agent_id === ids.invitee && profile.project_id === ids.project && profile.url === new URL(base).origin
@@ -550,13 +603,14 @@ try {
       assert((language === 'ru' ? /агент/i : /agent/i).test(title), 'Onboarding title not translated');
     }
     await screenshot(owner, 'onboarding-desktop', 1440);
+    await owner.click('#admin-onboarding-guide > summary');
     await owner.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
     assert(await owner.eval('document.documentElement.scrollWidth<=innerWidth+1'), 'Onboarding wizard overflows mobile viewport');
     await screenshot(owner, 'onboarding-mobile-390', 390);
     for (const tab of tabs) {
       await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
       await tab.click('#logout-button');
-      await tab.wait(`!document.getElementById('login-panel').hidden && document.getElementById('admin-onboarding-command').value==='' && document.getElementById('admin-onboarding-list').textContent==='' && localStorage.length===0 && sessionStorage.length===0`, 'logout clears onboarding data');
+      await tab.wait(`!document.getElementById('login-panel').hidden && document.getElementById('admin-onboarding-command').value==='' && document.getElementById('admin-onboarding-list').textContent==='' && document.getElementById('admin-onboarding-guide-files').textContent==='' && document.getElementById('admin-onboarding-result-files').textContent==='' && localStorage.length===0 && sessionStorage.length===0`, 'logout clears onboarding data');
     }
     assert(!report.browser_guard_failed && report.browser_errors.length === 0, 'Browser crossed mutation/origin boundary or raised a runtime error');
   });
@@ -577,7 +631,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === (sidebarOnly ? 8 : 6) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === 8 && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/onboarding-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});

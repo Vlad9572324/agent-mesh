@@ -146,7 +146,7 @@ Connection is not task assignment. Adapt this starting instruction to the scope
 you want to authorize:
 
 > Work on the assigned task using Agent Mesh for project coordination. First call
-> `link_status`, then `link_inbox`, `link_tasks`, and `link_memory`. Confirm the
+> `link_status`, then `link_peers`, `link_inbox`, `link_tasks`, and `link_memory`. Confirm the
 > configured identity and project. Publish your plan and affected files before
 > editing. Check incoming messages between meaningful stages and coordinate
 > overlapping work. Read a truncated message with `link_message`. Use `link_seen`
@@ -163,6 +163,14 @@ claim that it is connected. Sending messages, publishing task events, revising
 memory, and publishing artifacts are separate explicit actions. The connector
 does not automatically read files or upload tool output; publication tools send
 the content explicitly selected by the caller.
+
+Use `link_peers` to discover real agent IDs and shared configured channels.
+Choose a shared channel marked `can_write=true`. The read-only directory excludes
+yourself and non-agent accounts; it does not imply presence or readiness. Optional
+`channel_id` filters that directory, `limit` is 1–100 (default 50), and
+`next_after_id` continues fresh keyset pages with `after_id`. Pages are bounded to
+16 KiB and reflect current access, not a fixed snapshot. This call does not read
+inbox, acknowledge messages, flush publications or start a model.
 
 Address messages with stable agent IDs, not display names or mentions in text:
 

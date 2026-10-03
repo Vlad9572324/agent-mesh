@@ -84,7 +84,10 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         listing = self.server.handle(rpc(2, 'tools/list'))['result']['tools']
         names = {v['name'] for v in listing}
-        self.assertEqual(len(names), 17)
+        self.assertEqual(len(names), 18)
+        peers = next(v for v in listing if v['name'] == 'link_peers')
+        self.assertTrue(peers['annotations']['readOnlyHint'])
+        self.assertEqual(peers['inputSchema']['required'], [])
         self.assertIn('link_broadcast', names)
         send = next(v for v in listing if v['name'] == 'link_send')
         self.assertEqual(set(send['inputSchema']['required']), {'channel_id', 'body'})
@@ -188,6 +191,7 @@ class PipeTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         (self.root / 'workspace').mkdir(mode=0o700)
         self.api = FakeAPI()
+        self.peers = [{'id': 'peer', 'name': 'Existing developer', 'kind': 'agent', 'channel_ids': ['c']}]
         self.api.messages = [{'id': 'message-1', 'seq': 1, 'channel_id': 'c', 'author_id': 'peer',
                               'recipient_ids': ['a'], 'reply_to': 'earlier', 'body': 'fixture-only message'}]
         self.requests = []
@@ -206,6 +210,8 @@ class PipeTests(unittest.TestCase):
                 fixture.requests.append((self.command, self.path))
                 if self.command == 'GET' and self.path == '/v1/messages/message-1':
                     result = {'message': fixture.api.messages[0]}
+                elif self.command == 'GET' and self.path == '/v1/projects/p/agents':
+                    result = {'agents': fixture.peers}
                 else:
                     try:
                         result = fixture.api.request(self.command, self.path, body)
@@ -287,6 +293,23 @@ class PipeTests(unittest.TestCase):
             self.assertTrue(answer['result']['isError'])
             self.assertIn('recipient_ids_required_use_link_broadcast', canonical(answer))
         self.assertEqual(self.requests, [])
+
+    def test_stdio_peer_discovery_then_addressed_introduction(self):
+        answers = self.run_pipe([initialize(), READY, rpc(2, 'tools/call', {'name': 'link_peers'})])
+        self.assertFalse(answers[1]['result']['isError'], answers)
+        directory = answers[1]['result']['structuredContent']
+        self.assertEqual(directory['peers'], [{'id': 'peer', 'name': 'Existing developer', 'channel_ids': ['c']}])
+        self.assertEqual(self.requests, [('GET', '/v1/me'), ('GET', '/v1/projects/p/channels'), ('GET', '/v1/projects/p/agents')])
+        self.assertEqual(self.api.published, {})
+        peer = directory['peers'][0]
+        channel = next(item['id'] for item in directory['channels'] if item['can_write'] and item['id'] in peer['channel_ids'])
+        sent = self.run_pipe([initialize(), READY, rpc(2, 'tools/call', {'name': 'link_send', 'arguments': {
+            'channel_id': channel, 'recipient_ids': [peer['id']], 'body': 'Available for scoped coordination.', 'client_id': 'introduction'}})])
+        self.assertFalse(sent[1]['result']['isError'], sent)
+        payload = self.api.published[('/v1/channels/c/messages', 'introduction')][0]
+        self.assertEqual(payload['recipient_ids'], ['peer'])
+        self.assertNotIn('channel_only', payload)
+        self.assertEqual(self.api.activity, {})
 
     def test_stdio_reply_infers_only_parent_author_and_explicit_recipients_win(self):
         self.api.messages[0]['recipient_ids'] = ['a', 'third-party']

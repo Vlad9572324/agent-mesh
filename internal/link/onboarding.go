@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	onboard "agent-link"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -105,6 +107,11 @@ func scanInvitation(row pgx.Row) (onboardingInvitation, error) {
 
 func (s *Server) onboardingMetadata() map[string]any {
 	result := map[string]any{"enabled": false, "public_url": "", "spki_pin": "", "repository": ""}
+	// Static guidance is useful before invitations are configured. It carries no
+	// scope or credentials and is shared with the redeemed package's exact bytes.
+	if guidance, err := onboard.Guidance(); err == nil {
+		result["guidance"] = guidance
+	}
 	if s.Onboarding != nil && s.Onboarding.Validate() == nil {
 		result["enabled"], result["public_url"] = true, s.Onboarding.Origin
 		result["spki_pin"], result["repository"] = s.Onboarding.SPKIPin, s.Onboarding.Repository
