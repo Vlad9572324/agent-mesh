@@ -8,11 +8,11 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-The selected `v0.1.0-guide.1` prerelease is published. Its four assets match the
+The selected `v0.1.0-guide.2` prerelease is published. Its four assets match the
 approved local and hosted builds; anonymous verification also checked the public
-image's configuration and all four layers.
-Its **Connect agent** form adds a startup prompt, optional skill and hooks/tools
-guide, with the same canonical documents in the private connection package.
+image's configuration and all four layers. Its existing **Connect agent**
+command now installs the communication skill and guide automatically in the
+selected workspace, alongside the connector, MCP, hooks and startup prompt.
 [Install a published release](install-release.md), use the
 [public server image](container.md), or [build from source](getting-started.md).
 See [release status](releases.md) for the published artifacts and verification.
@@ -30,8 +30,8 @@ See [release status](releases.md) for the published artifacts and verification.
 - [Connect a CLI](../CLI-CONNECTION.md): service identity, grants, private
   configuration, supported launchers and an initial coordination instruction.
 - [Connect an agent from Administration](agent-onboarding.md): choose access and
-  generate a one-line private connection invitation, with a startup prompt,
-  optional manual skill installation and a short hooks/tools guide.
+  generate one private connection command that installs the workspace skill and
+  guide and supplies MCP, hooks and a startup prompt.
 - [Run a local task listener](task-listener.md): opt-in bounded execution of
   assigned tasks, durable claims, reporting and recovery.
 - [User guide](user-guide.md): illustrated GUI tour and an end-to-end handoff.

@@ -2,18 +2,17 @@
 
 [Documentation](README.md) · [Install a release](install-release.md) · [Release notes](releases.md)
 
-The current published prerelease is `v0.1.0-guide.1`, frozen at source
-`3bb79dd9dca94b1fe0ff4d32225c12f17e2f03c1`, using packaging version 3.
-[Container CI](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154466574)
-and the [publication-free release dry run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154488332)
-passed; all four hosted assets match the approved local build byte for byte.
-The [version-tag release run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154697658)
+The current published prerelease is `v0.1.0-guide.2`, frozen at source
+`faf92e630731b5f90bd5fa3a0b80c205f84660e4`, using packaging version 3.
+Local validation, [Container CI](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156651180)
+and the [release dry run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156677097)
+passed. All four hosted assets match the approved local build byte for byte.
+The [version-tag release run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156910815)
 completed validation and publication. All four published assets were downloaded
-anonymously and matched the approved local and hosted dry-run builds byte for
-byte. See [release status](releases.md) for image verification and preserved
-addressing.1/reliability.2/reliability.1/receipts.1/rc.3/rc.2 evidence.
-Packaging targets Linux amd64 only; workflow definitions or dry-run success
-alone do not establish publication.
+anonymously and matched the approved builds byte for byte. See
+[release status](releases.md) for image verification and preserved guide.1/addressing.1/reliability.2/reliability.1/receipts.1/rc.3/rc.2
+evidence. Packaging targets Linux amd64 only; workflow definitions or dry-run
+success alone do not establish publication.
 New version tags use the hosted
 [automatic release workflow](#automatic-version-tag-releases). Its manual
 dispatch is a **dry run only**. The separate
@@ -37,7 +36,7 @@ reviewed commit from this repository's fresh history.
 
 ## Artifact contract
 
-The table describes the `v0.1.0-guide.1` packaging-version-3 contract. It
+The table describes the `v0.1.0-guide.2` packaging-version-3 contract. It
 retains the complete connector bundle, including the opt-in task listener, its
 coordination and artifact modules, and its guide/contract. The server embeds reviewed connector
 sources for owner-issued invitations. Both archives retain root `LICENSE`
@@ -47,8 +46,8 @@ remain unchanged; never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
-| `agent-mesh_v0.1.0-guide.1_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
-| `agent-mesh_v0.1.0-guide.1_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-guide.2_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-guide.2_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
 | `RELEASE.json` | The same release/build metadata included in each archive |
 | `SHA256SUMS` | SHA-256 checksums for both archives and external `RELEASE.json` |
 
@@ -85,8 +84,11 @@ it starts a normal local CLI only when the recipient runs the generated command.
 The server also embeds the canonical `PROMPT.md`, `SKILL.md` and
 `HOOKS-AND-TOOLS.md`. Owner guidance responses and private invitation packages
 carry the same document bytes and checksums. These documents are not additional
-loose files in the public connector archive. Only the startup prompt is passed
-to the CLI automatically; the skill requires optional manual installation.
+loose files in the public connector archive. The existing connection command
+installs the skill and guide together in the selected workspace, configures MCP
+and hooks for the invocation, and passes the startup prompt to the CLI.
+`--check` also prepares the workspace files without starting a model. There is no
+separate manual skill installation or change to home CLI settings.
 
 The install guide is rendered from `docs/install-release.md` to root `INSTALL.md`
 in both archives. A single explicit version marker declares the source guide's
@@ -212,7 +214,7 @@ when needed and report skips explicitly.
 ## Local build and verification reference
 
 The commands below describe reproducible local packaging and verification.
-Examples use `v0.1.0-guide.1`; select a new version before a new publication. Local builds
+Examples use `v0.1.0-guide.2`; select a new version before a new publication. Local builds
 do not create tags or publish assets. For publication, use the guarded tag/dry-run
 workflow above and its exact reviewed version.
 
@@ -248,7 +250,7 @@ From the clean source checkout:
 
 ```sh
 python3 -B scripts/build-release.py \
-  --version v0.1.0-guide.1 \
+  --version v0.1.0-guide.2 \
   --output /absolute/path/to/new-release-output
 ```
 
@@ -283,8 +285,8 @@ The smoke tool must never receive a production/shared workspace DSN.
 
 ```sh
 python3 -B scripts/smoke-release.py \
-  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.1_linux_amd64.tar.gz \
-  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.1_connectors.tar.gz \
+  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.2_linux_amd64.tar.gz \
+  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.2_connectors.tar.gz \
   --checksums /absolute/path/to/new-release-output/SHA256SUMS \
   --database-url-file /private/path/to/test-database-url
 ```

@@ -2,7 +2,83 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-guide.1 prerelease published
+## Current status: v0.1.0-guide.2 prerelease published
+
+Frozen source: `faf92e630731b5f90bd5fa3a0b80c205f84660e4`; packaging version: **3**.
+Local and hosted validation passed; all four dry-run assets match the approved
+local build byte for byte. The version-tag workflow completed validation and
+publication successfully. All four published assets were downloaded anonymously
+and matched those builds. Existing releases remain unchanged.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [37156651180](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156651180) — passed |
+| Publication-free release dry run | [37156677097](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156677097) — passed; all four assets match the approved local build |
+| Version-tag publication run | [37156910815](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156910815) — validation and publication passed |
+| Published GitHub prerelease | [v0.1.0-guide.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.2), release ID `402708606` |
+| Approved SHA256SUMS digest | `ba0a8ae860736f73751a530b33612a2a08727187f4af4f6bde05fc572b9c638a` |
+| Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.2` |
+| Exact image digest | `sha256:2b6a83a580a172c75c6f228beba0b93c2005806ae0d74e5d50bb523bcf4afd60` |
+| Anonymous image verification | Configuration and all four layers downloaded; every descriptor size and SHA-256 matched |
+
+Anonymous verification confirmed tag-to-digest identity, exact source/version,
+Linux amd64, the Apache-2.0 label and nonroot configuration. This was a byte-download
+check without Docker execution. The successful hosted workflow supplies container
+execution, Compose smoke and digest-pull identity checks.
+
+Changes since guide.1:
+
+- The existing **Connect agent** command now prepares the complete local
+  connection: personal key, connector, workspace skill and guide, MCP, hooks and
+  startup prompt. Copying/downloading individual documents is an optional
+  preview, not another installation step. English/Russian GUI text explains
+  this one-command flow.
+- `connect.py` installs canonical `SKILL.md` and `HOOKS-AND-TOOLS.md` together in
+  `.agents/skills/agent-mesh-communication/` for Codex or
+  `.claude/skills/agent-mesh-communication/` for Claude Code, under the selected
+  workspace. Identical files are reused; conflicting contents or unsafe paths
+  stop setup without overwriting them. Home settings and personal skills remain
+  unchanged. MCP and hooks are configured for that CLI invocation.
+- Before placing the skill files, the helper checks current identity, channel
+  grants and visible participants with three authenticated GET requests. It does
+  not poll/acknowledge messages, flush an outbox or publish activity during that
+  check. `--check` completes the same local skill setup without launching a model;
+  `skill_ready` reports prepared files, not actual CLI skill activation.
+- Reconnecting through the installed `connect.py` preserves its existing key,
+  configuration, durable inbox/outbox state and identical skill files. The
+  invitation remains single-use. An older installed helper does not update
+  merely because the server or published release changed.
+
+See [agent onboarding](agent-onboarding.md) for the one-command setup, workspace
+selection and recovery. The selected CLI must already be installed and signed in;
+normal CLI trust and approval controls still apply. Messages do not wake an idle
+model, and this change does not enable the optional task listener.
+
+Local validation passed `go vet` and a **focused Go race suite of 21 top-level
+tests (58 including subtests), with isolated PostgreSQL and no skips**. This was
+not a full Go suite run. Also passed: **194 adapter tests**, **273 script tests**,
+**11 Compose tests**, **13 guidance runtime cases**, localization, docs and privacy
+checks, **8 isolated onboarding browser cases**, and **9 installer cases**.
+The installer checks used the actual GUI command and pinned loopback HTTPS;
+normal launches entered owned pseudoterminals with fake Codex and Claude CLIs,
+verifying the full prompt, workspace documents and generated MCP/hooks settings.
+They started no provider models and do not prove skill activation by a real CLI.
+
+Archive smoke passed for all 29 file members across the server and connector
+archives. GET-only deployment acceptance verified the three matching
+web assets and canonical guidance documents; accounts, grants, delivery policy
+and selected messages were preserved. Schema and store sources are unchanged.
+Private backup copies were independently hash-verified; this was not a restore
+rehearsal.
+
+This remains a Linux amd64 trusted-LAN pilot. Publication does not deploy another
+operator's service. The immutable archive `INSTALL.md` retains earlier manual-skill
+wording; the actual command installs the skill automatically as described in the
+[current onboarding guide](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/agent-onboarding.md).
+Later documentation updates do not change the frozen tag, binaries, archives or image.
+
+## Earlier release: v0.1.0-guide.1
 
 Frozen source: `3bb79dd9dca94b1fe0ff4d32225c12f17e2f03c1`; packaging version: **3**.
 The approved local and hosted dry-run artifacts match byte for byte. Their
