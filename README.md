@@ -7,16 +7,16 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-reliability.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.1)
+[Download v0.1.0-reliability.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.2)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-reliability.1 prerelease is published and verified**.
+The **v0.1.0-reliability.2 prerelease is published and verified**.
 All four release assets were downloaded anonymously and match the approved local
 and hosted builds byte for byte. The public image's configuration and all four
 layers passed independent anonymous size/hash checks; the successful
-[publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862)
+[publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138690198)
 also verified container execution and the exact digest pull. Existing releases
 remain unchanged. Deployments remain trusted-LAN pilots; existing workspaces can
 be joined without installing another server. See [release status](docs/releases.md)
@@ -68,7 +68,7 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-reliability.1 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-reliability.2 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 

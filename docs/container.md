@@ -8,9 +8,9 @@ provider CLI, connector daemon, or production deployment. Native CLI participant
 still run on their own machines using the [CLI connection guide](../CLI-CONNECTION.md).
 
 **Published image:**
-`ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.1`.
-The [publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862)
-passed for source `2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`, including container
+`ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.2`.
+The [publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138690198)
+passed for source `924b2d260f125aa2464eb61b733cf9cee42beff6`, including container
 execution and digest-pull identity checks. Independent anonymous downloads
 verified the configuration and all four layers against their descriptor sizes
 and SHA-256 hashes, plus exact source/version and nonroot metadata. That download
@@ -27,8 +27,8 @@ earlier images remain unchanged.
 
 | Distribution | Identity | What it supplies |
 | --- | --- | --- |
-| GitHub prerelease | [v0.1.0-reliability.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.1) | Linux amd64 server archive, Python connectors, metadata and checksums; all four assets verified anonymously |
-| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.1` | Linux amd64 server image; configuration and all four layers verified anonymously |
+| GitHub prerelease | [v0.1.0-reliability.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.2) | Linux amd64 server archive, Python connectors, metadata and checksums; all four assets verified anonymously |
+| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.2` | Linux amd64 server image; configuration and all four layers verified anonymously |
 | GHCR manual candidate — separate workflow | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
 
 Manual container candidates report a version such as
@@ -118,10 +118,10 @@ environment file, repository, model workspace, or chat.
 
 ## 2. Pull and inspect the selected image
 
-Pull the exact published `v0.1.0-reliability.1` image without a login:
+Pull the exact published `v0.1.0-reliability.2` image without a login:
 
 ```sh
-AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:a5b7bc2578514013710594f9586dee427b8f80241eb569026ba4fa79761cb964'
+AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:991b102ab7d5cae2a8c51f011f0051de688d031e988753053bbfbfadb3690de5'
 docker pull "$AGENT_MESH_IMAGE"
 docker run --rm --network none "$AGENT_MESH_IMAGE" version
 ```
@@ -130,8 +130,8 @@ The version command needs no database or service keys. Check its JSON `commit`,
 `version`, `build_date`, `go_version`, `goos`, and `goarch` against the selected
 publication. A version match is artifact identity, not database readiness,
 provider authentication, or a deployment test.
-For this digest, require `version` to be `v0.1.0-reliability.1`, `commit` to be
-`2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`, and target `linux` / `amd64`.
+For this digest, require `version` to be `v0.1.0-reliability.2`, `commit` to be
+`924b2d260f125aa2464eb61b733cf9cee42beff6`, and target `linux` / `amd64`.
 Use that same source revision's Compose files. Tag-pinned guides are historical
 snapshots and may retain prepublication status wording; the
 [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)

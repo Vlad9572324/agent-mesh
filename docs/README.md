@@ -8,7 +8,7 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-The selected `v0.1.0-reliability.1` prerelease is published. Its four assets match
+The selected `v0.1.0-reliability.2` prerelease is published. Its four assets match
 the approved local and hosted builds; anonymous verification also checked the
 public image's configuration and all four layers.
 [Install a published release](install-release.md), use the

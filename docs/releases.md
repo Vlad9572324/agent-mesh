@@ -2,7 +2,79 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-reliability.1 prerelease published
+## Current status: v0.1.0-reliability.2 prerelease published
+
+Frozen source: `924b2d260f125aa2464eb61b733cf9cee42beff6`; packaging version: **3**.
+The version-tag workflow completed validation and publication successfully.
+All four release assets were downloaded anonymously and match the approved local
+and hosted dry-run artifacts byte for byte. The approved `SHA256SUMS` digest is
+`ea508fafef7d350e6e5aa1123dec6055d160e790fe30494d4d6cc0c16a370a9d`.
+Existing releases remain unchanged.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [37137893124](https://github.com/Vlad9572324/agent-mesh/actions/runs/37137893124) — passed |
+| Publication-free release dry run | [37138184099](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138184099) — passed; all four assets match the approved local build |
+| Version-tag publication run | [37138690198](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138690198) — validation and publication passed |
+| Published GitHub prerelease | [v0.1.0-reliability.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.2), release ID `402605099` |
+| Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.2` |
+| Exact image digest | `sha256:991b102ab7d5cae2a8c51f011f0051de688d031e988753053bbfbfadb3690de5` |
+| Anonymous image verification | Configuration and all four layers downloaded; every descriptor size and SHA-256 matched |
+
+Anonymous verification confirmed tag-to-digest identity, exact source/version,
+Linux amd64, the Apache-2.0 label and nonroot configuration. This was a byte-download
+check without Docker execution. The successful hosted workflow supplies container
+execution, Compose smoke and digest-pull identity checks.
+
+Changes since reliability.1:
+
+- `link_status` reports the loaded connector's version/source separately from
+  the current authenticated server build. Missing identity stays explicitly
+  unavailable. Updating connector files requires restarting the MCP process;
+  version metadata does not prove integrity or execution. New owner-issued
+  connection packages carry the issuing build's connector identity.
+- `link_delivery` lets a sender or addressed participant inspect one message's
+  recipient statuses without a local inbox row. Native offered/viewed/accepted
+  reports, legacy adapter receipts and qualifying direct replies retain their
+  independent timestamps. Delivery, acceptance and reply do not prove completed
+  work. Detailed aggregates are limited to exact-message reads, preserving
+  bounded message-list and inbox responses.
+- Hook previews include an exact `link_message` call for each returned message,
+  including compact references. Empty or truncated previews are not empty
+  messages. The guidance fits the offer budget; full reads do not implicitly
+  mark a message viewed or accepted.
+- Artifacts accept an optional immutable title of at most 200 UTF-8 bytes and
+  the `document` role through the API, CLI/MCP tools, GUI and task references.
+  `base_revision` identifies the actual source or document revision; a document
+  revision identifier is allowed without fabricating a Git SHA. Titles are not
+  inferred from filenames.
+  Untitled publications keep their previous idempotency hash, and a document
+  does not replace the `evidence` role required for verification.
+
+Local validation passed **133 top-level Go tests with `-race`, real isolated PostgreSQL
+and no skips**, **174 adapter tests**, **264 script tests**, **31 UI runtime
+cases**, **22 end-to-end cases** across real stdio MCP/HTTPS, **6 isolated document
+browser cases** and **6 isolated receipt browser cases**. The checks started
+**zero provider models** and cleaned up their owned resources. Hosted ordinary
+Go tests can skip database integration without a test DSN; hosted Compose
+scenarios and local Go race coverage are separate evidence. Release archive smoke
+checks passed. A restored-snapshot rehearsal verified the migration and the exact
+predecessor binary's read compatibility while preserving existing records and
+delivery policy; the backup was independently verified off-container.
+
+The artifact migration adds an empty-default title column and extends the exact
+legacy role constraint with `document`. Existing artifact bytes and request
+hashes remain unchanged. Code rollback retains the migrated data; old clients
+do not gain title or document-publishing support. Take and test a private backup
+before updating an existing service.
+
+This remains a Linux amd64 trusted-LAN pilot. This release adds no automatic
+idle-agent wakeup, model scheduling or external notifications. Publication does
+not deploy an operator's service. Later documentation corrections must not
+change the frozen tag, binaries, archives or image.
+
+## Earlier release: v0.1.0-reliability.1
 
 Frozen source: `2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`; packaging version: **3**.
 The version-tag workflow completed validation and publication successfully.
