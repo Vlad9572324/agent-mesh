@@ -272,6 +272,7 @@ class ReleaseTests(unittest.TestCase):
             raise AssertionError(args)
 
         def fake_build(source, binary, info, env):
+            self.assertEqual(info["source_commit"], self.commit)
             self.assertEqual({str(p.relative_to(source)) for p in source.rglob("*") if p.is_file()}, set((*release.BUILD_FILES, *release.EMBED_FILES)))
             for name in (*release.BUILD_FILES, *release.EMBED_FILES):
                 self.assertEqual((source / name).read_bytes(), blobs[name])
@@ -310,6 +311,13 @@ class ReleaseTests(unittest.TestCase):
                              {"INSTALL.md", "RELEASE.json", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}})
             self.assertEqual(len(files), 9 if kind == "linux_amd64" else 20)
             self.assertEqual(files[root + "/RELEASE.json"], (first / "RELEASE.json").read_bytes())
+            identity = json.loads(files[root + "/RELEASE.json"])
+            self.assertEqual((identity["version"], identity["source_commit"]),
+                             ("v0.1.0-rc.1", self.commit))
+            if kind == "connectors":
+                bridge_root = str(Path(root + "/adapters/native_bridge.py").parent.parent)
+                self.assertEqual(bridge_root, root)
+                self.assertIn(bridge_root + "/RELEASE.json", files)
             self.assertEqual(files[root + "/INSTALL.md"], blobs[release.INSTALL_SOURCE])
             self.assertEqual(files[root + "/THIRD_PARTY_NOTICES.md"], blobs[release.NOTICES_SOURCE])
             for name in release.LICENSE_FILES:

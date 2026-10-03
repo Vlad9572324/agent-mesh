@@ -45,10 +45,30 @@ type Spec struct {
 	ChannelIDs                                       []string
 	Runtime, ServiceKey, Origin, SPKIPin, Repository string
 	CertificateCA                                    []byte
+	// These identify the connector sources embedded in the server binary. They
+	// come from its build stamps, never invitation input, cwd or a Git checkout.
+	ConnectorVersion, ConnectorSourceCommit string
 }
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`)
 var keyPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var sourceCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var releaseVersionPattern = regexp.MustCompile(`^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$`)
+
+func connectorMetadata(s Spec) ([]byte, error) {
+	version, commit := s.ConnectorVersion, s.ConnectorSourceCommit
+	if version == "" && commit == "" {
+		version, commit = "dev", "unknown"
+	}
+	if (version != "dev" || commit != "unknown") &&
+		(len(version) > 64 || !releaseVersionPattern.MatchString(version) || !sourceCommitPattern.MatchString(commit)) {
+		return nil, errors.New("invalid embedded connector build identity")
+	}
+	return json.MarshalIndent(struct {
+		Version      string `json:"version"`
+		SourceCommit string `json:"source_commit"`
+	}{version, commit}, "", "  ")
+}
 
 func validSpec(s Spec) bool {
 	if !identifier.MatchString(s.AgentID) || !identifier.MatchString(s.ProjectID) || !keyPattern.MatchString(s.ServiceKey) ||
@@ -99,7 +119,7 @@ func InstallScript() []byte {
 }
 
 func packagePaths() []string {
-	paths := []string{"connect.py", "README.md", "PROMPT.md", "profile.json", "agent.key", "ca.crt"}
+	paths := []string{"connect.py", "README.md", "PROMPT.md", "profile.json", "agent.key", "ca.crt", "connectors/RELEASE.json"}
 	for _, name := range connectorFiles {
 		paths = append(paths, "connectors/"+name)
 	}
@@ -113,7 +133,11 @@ func BuildPackage(s Spec) ([]byte, error) {
 	if !validSpec(s) {
 		return nil, errors.New("invalid onboarding package specification")
 	}
-	files := map[string][]byte{}
+	metadata, err := connectorMetadata(s)
+	if err != nil {
+		return nil, err
+	}
+	files := map[string][]byte{"connectors/RELEASE.json": append(metadata, '\n')}
 	for _, name := range connectorFiles {
 		data, err := assets.ReadFile(name)
 		if err != nil {

@@ -3,6 +3,9 @@
 This private package connects one agent to the existing project and channels
 selected by its owner. It does not create another project or change home CLI
 settings. The source repository URL is recorded in `profile.json`.
+`connectors/RELEASE.json` identifies the connector code embedded in the issuing
+server binary. Unstamped development builds use `dev` / `unknown`. Build metadata
+does not establish runtime compatibility or task execution.
 
 Run `python3 -B /absolute/path/to/connect.py`. Python 3.10+ and an installed,
 authenticated Codex CLI or Claude Code are required. The invitation selects

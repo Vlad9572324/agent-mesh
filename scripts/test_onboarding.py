@@ -32,6 +32,7 @@ release = module("onboarding_release_test", ROOT / "scripts/build-release.py")
 connect = module("onboarding_connect_test", ROOT / "onboarding/connect.py")
 paths = ["connect.py", "README.md", "PROMPT.md", "profile.json", "agent.key", "ca.crt"]
 paths += ["connectors/" + name for name in (*release.CONNECTOR_FILES, "LICENSE", "NOTICE", "CLI-CONNECTION.md", "docs/third-party-notices.md")]
+paths += ["connectors/RELEASE.json"]
 installer_source = (ROOT / "onboarding/install.py").read_text().replace("__PACKAGE_PATHS_JSON__", repr(paths))
 installer = types.ModuleType("onboarding_installer_test")
 exec(compile(installer_source, str(ROOT / "onboarding/install.py"), "exec"), installer.__dict__)
@@ -51,7 +52,9 @@ def profile():
 def package_files():
     files = {}
     for name in paths:
-        if name.startswith("connectors/"):
+        if name == "connectors/RELEASE.json":
+            files[name] = json.dumps({"version": "v1.2.3-test.4", "source_commit": "a" * 40}).encode()
+        elif name.startswith("connectors/"):
             files[name] = (ROOT / name[len("connectors/"):]).read_bytes()
         elif name in ("connect.py", "README.md", "PROMPT.md"):
             files[name] = (ROOT / "onboarding" / name).read_bytes()
@@ -89,6 +92,10 @@ class InstallerTests(unittest.TestCase):
         redeem.assert_called_once_with(ORIGIN, PIN, TOKEN)
         execute.assert_called_once_with(sys.executable, [sys.executable, "-B", str(path / "connect.py"), "--runtime", "codex", "--check"])
         self.assertEqual(set(str(p.relative_to(path)) for p in path.rglob("*") if p.is_file()), set(paths) | {"MANIFEST.json"})
+        bridge = path / "connectors/adapters/native_bridge.py"
+        metadata = bridge.parent.parent / "RELEASE.json"
+        self.assertEqual(json.loads(metadata.read_bytes()),
+                         {"version": "v1.2.3-test.4", "source_commit": "a" * 40})
         for item in [path, *path.rglob("*")]:
             self.assertEqual(item.stat().st_mode & 0o777, 0o700 if item.is_dir() else 0o600)
         self.assertNotIn(KEY, out.getvalue()); self.assertNotIn(TOKEN, out.getvalue())
@@ -112,7 +119,9 @@ class InstallerTests(unittest.TestCase):
             info = tarfile.TarInfo(name); info.type = kind; info.linkname = "outside" if kind == tarfile.SYMTYPE else ""
             with self.subTest(name=name, kind=kind), self.assertRaises(installer.InstallError):
                 installer.unpack(archive(package_files(), info), ORIGIN)
-        for transform in (lambda files: files.pop("agent.key"), lambda files: files.update({"connect.py": b"changed"})):
+        for transform in (lambda files: files.pop("agent.key"), lambda files: files.update({"connect.py": b"changed"}),
+                          lambda files: files.pop("connectors/RELEASE.json"),
+                          lambda files: files.update({"connectors/RELEASE.json": b'{"version":"dev","source_commit":"unknown"}'})):
             files = package_files(); transform(files)
             with self.assertRaises(installer.InstallError): installer.unpack(archive(files), ORIGIN)
         with self.assertRaises(installer.InstallError): installer.unpack(archive(package_files()), "https://other.invalid")

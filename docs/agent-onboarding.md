@@ -72,6 +72,12 @@ commands after a certificate/key change.
 
 The binary embeds the reviewed connector source from the same release. No GitHub
 download, external hosting process, or permanent public secret URL is needed.
+Its private package includes `connectors/RELEASE.json`, recording the server
+binary's embedded connector version and source commit. The native bridge reads
+this metadata beside its own code; an unstamped source build reports
+`dev` / `unknown`. This is build provenance, not proof of runtime compatibility
+or a provider session. The ordinary release connector archive includes the same
+identity fields in its root `RELEASE.json`.
 `GET /connect/install.sh` is public, static code; `POST /connect/redeem` requires
 an unexpired unused invitation in its JSON body. It cannot create arbitrary
 accounts or change the invitation's permissions.

@@ -99,8 +99,11 @@ func TestPackageExactSourceClosureAndManifest(t *testing.T) {
 		if meta.Size != len(content) || meta.SHA256 != hex.EncodeToString(sum[:]) {
 			t.Fatalf("wrong digest %s", name)
 		}
-		if strings.HasPrefix(name, "connectors/") {
-			original, _ := assets.ReadFile(strings.TrimPrefix(name, "connectors/"))
+		if strings.HasPrefix(name, "connectors/") && name != "connectors/RELEASE.json" {
+			original, err := assets.ReadFile(strings.TrimPrefix(name, "connectors/"))
+			if err != nil {
+				t.Fatal(err)
+			}
 			if !bytes.Equal(content, original) {
 				t.Fatalf("source drift %s", name)
 			}
@@ -115,6 +118,47 @@ func TestPackageExactSourceClosureAndManifest(t *testing.T) {
 	}
 	if profile["runtime"] != "auto" || profile["project_id"] != s.ProjectID || profile["url"] != s.Origin {
 		t.Fatal("profile binding mismatch")
+	}
+}
+
+func TestPackageConnectorBuildIdentity(t *testing.T) {
+	base := fixtureSpec(t)
+	for _, tc := range []struct{ name, version, commit, wantVersion, wantCommit string }{
+		{"unspecified", "", "", "dev", "unknown"},
+		{"development", "dev", "unknown", "dev", "unknown"},
+		{"release", "v1.2.3-test.4", strings.Repeat("a", 40), "v1.2.3-test.4", strings.Repeat("a", 40)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := base
+			s.ConnectorVersion, s.ConnectorSourceCommit = tc.version, tc.commit
+			data, err := BuildPackage(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := packageFiles(t, data)
+			var metadata map[string]string
+			if err := json.Unmarshal(files["connectors/RELEASE.json"], &metadata); err != nil {
+				t.Fatal(err)
+			}
+			if len(metadata) != 2 || metadata["version"] != tc.wantVersion || metadata["source_commit"] != tc.wantCommit {
+				t.Fatalf("wrong connector identity: %v", metadata)
+			}
+			if _, exists := files["RELEASE.json"]; exists {
+				t.Fatal("metadata must be adjacent to connector sources, not private profile")
+			}
+		})
+	}
+	for _, tc := range []struct{ version, commit string }{
+		{"v1.2.3", "unknown"}, {"dev", strings.Repeat("a", 40)},
+		{"", strings.Repeat("a", 40)}, {"v1.2.3", "short"},
+		{"v1.2.3", strings.Repeat("A", 40)}, {"v1.2.3\n", strings.Repeat("a", 40)},
+		{"v1.2.3-" + strings.Repeat("x", 64), strings.Repeat("a", 40)},
+	} {
+		s := base
+		s.ConnectorVersion, s.ConnectorSourceCommit = tc.version, tc.commit
+		if data, err := BuildPackage(s); err == nil || data != nil {
+			t.Fatal("accepted an invalid or partial build identity")
+		}
 	}
 }
 

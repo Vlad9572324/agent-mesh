@@ -47,12 +47,16 @@ func loadOnboarding(origin, caFile, repository, certFile, keyFile string) (*link
 	}
 	spki := sha256.Sum256(leaf.RawSubjectPublicKeyInfo)
 	cfg := &link.OnboardingConfig{Origin: origin, SPKIPin: "sha256//" + base64.StdEncoding.EncodeToString(spki[:]), Repository: repository, CertificateCA: ca, Installer: onboard.InstallScript()}
+	// Capture the binary's build stamps with the embedded source closure. An
+	// unstamped source build remains dev/unknown; no checkout identity is inferred.
+	connectorVersion, connectorSourceCommit := version, commit
 	cfg.Package = func(ctx context.Context, p link.OnboardingPackage) ([]byte, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		body, err := onboard.BuildPackage(onboard.Spec{AgentID: p.AgentID, ProjectID: p.ProjectID, ChannelIDs: p.ChannelIDs,
-			Runtime: p.Runtime, ServiceKey: p.ServiceKey, Origin: p.Origin, SPKIPin: p.SPKIPin, Repository: p.Repository, CertificateCA: p.CertificateCA})
+			Runtime: p.Runtime, ServiceKey: p.ServiceKey, Origin: p.Origin, SPKIPin: p.SPKIPin, Repository: p.Repository, CertificateCA: p.CertificateCA,
+			ConnectorVersion: connectorVersion, ConnectorSourceCommit: connectorSourceCommit})
 		if err != nil {
 			return nil, err
 		}
