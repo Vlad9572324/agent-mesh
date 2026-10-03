@@ -2,7 +2,65 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-receipts.1 prerelease published
+## Current status: v0.1.0-reliability.1 prerelease published
+
+Frozen source: `2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`; packaging version: **3**.
+The version-tag workflow completed validation and publication successfully.
+All four release assets were downloaded anonymously and match the approved local
+and hosted dry-run artifacts byte for byte. The approved `SHA256SUMS` digest is
+`1800cce753eba3ff3fa29a496e492e807b94bee383c66bd6cb7fde0e908828df`.
+Existing releases remain unchanged.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [37119205037](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119205037) — passed |
+| Publication-free release dry run | [37119245631](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119245631) — passed; all four assets match the approved local build |
+| Version-tag publication run | [37119530862](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862) — validation and publication passed |
+| Published GitHub prerelease | [v0.1.0-reliability.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.1), release ID `402480265` |
+| Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.1` |
+| Exact image digest | `sha256:a5b7bc2578514013710594f9586dee427b8f80241eb569026ba4fa79761cb964` |
+| Anonymous image verification | Configuration and all four layers downloaded; every descriptor size and SHA-256 matched |
+
+Anonymous verification confirmed tag-to-digest identity, exact source/version,
+Linux amd64, the Apache-2.0 label and nonroot configuration. This was a byte-download
+check without Docker execution. The successful hosted workflow supplies container
+execution, Compose smoke and digest-pull identity checks.
+
+Changes since receipts.1:
+
+- Owners can configure acknowledgement and direct-reply deadlines for new
+  addressed messages. The policy starts disabled, with five-minute and
+  thirty-minute defaults. Enabling establishes a server-time cutoff; editing an
+  enabled policy preserves it. Version checks and transactional audit protect
+  updates. The open GUI refreshes overdue alerts even when a model is offline.
+- Native viewed/accepted reports and legacy delivered/accepted timestamps remain
+  independent. A direct answer must come from the exact recipient, reference the
+  original same-channel message and explicitly address its author. Recipient
+  revocation does not silently clear unresolved owner-visible alerts.
+- Native inbox offers use durable last-offered order across restarts and
+  concurrent hooks/MCP connections. Explicit local pagination fixes an arrival
+  boundary while rechecking current access and seen/accepted state. Fetch backlog
+  and local-offer backlog are reported separately.
+- UTF-8 previews respect the context budget. Large metadata can produce an
+  explicit compact reference for `link_message`; it does not block the queue.
+  Bounded report flushing preserves exact outbox IDs after a lost response and
+  exposes pending/blocked results without inventing a successful send.
+
+Local validation passed **122 Go tests with `-race`, real isolated PostgreSQL
+and no skips**, **158 adapter tests**, **263 script tests**, **25 UI runtime
+cases**, **7 isolated browser cases** and **15 end-to-end cases** across real
+stdio MCP, strict HTTPS and owner deadlines. Release archive smoke checks passed.
+The end-to-end checks started **zero provider models** and cleaned up their owned
+resources. Hosted ordinary Go tests can skip database integration without a test
+DSN; hosted Compose scenarios and local Go race coverage are separate evidence.
+
+This remains a Linux amd64 trusted-LAN pilot. Owner deadlines do not send email,
+start models or establish task completion; a closed browser does not display
+alerts. Publication does not deploy an operator's service. Later documentation
+corrections must not change the frozen tag, binaries, archives or image.
+
+## Earlier release: v0.1.0-receipts.1
 
 Source: `6ea712e7c3bcfeafc3a4e20429766833dbf52caa`; packaging version: **3**.
 The version-tag workflow completed validation and publication successfully.

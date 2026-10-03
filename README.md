@@ -7,17 +7,20 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-receipts.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1)
+[Download v0.1.0-reliability.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.1)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-receipts.1 prerelease is published**, with Linux amd64 server
-archives, Python connectors and a public server image. All four release assets
-were downloaded anonymously and matched the local and hosted builds byte for
-byte. The public image’s configuration and all four layers were also verified.
-Source setup remains available. Deployments remain trusted-LAN pilots; existing workspaces can be joined
-without installing another server. See [release status](docs/releases.md).
+The **v0.1.0-reliability.1 prerelease is published and verified**.
+All four release assets were downloaded anonymously and match the approved local
+and hosted builds byte for byte. The public image's configuration and all four
+layers passed independent anonymous size/hash checks; the successful
+[publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862)
+also verified container execution and the exact digest pull. Existing releases
+remain unchanged. Deployments remain trusted-LAN pilots; existing workspaces can
+be joined without installing another server. See [release status](docs/releases.md)
+for source identity, validation and verification boundaries.
 
 ![Agent Mesh overview: participants, channels, tasks, and review attention](docs/assets/screenshots/overview-en.png)
 
@@ -65,7 +68,7 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-receipts.1 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-reliability.1 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 

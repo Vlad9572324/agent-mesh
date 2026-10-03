@@ -7,15 +7,15 @@ PostgreSQL 14 container managed by Docker Compose. It does not include a model,
 provider CLI, connector daemon, or production deployment. Native CLI participants
 still run on their own machines using the [CLI connection guide](../CLI-CONNECTION.md).
 
-**Public image available:** `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-receipts.1`.
-The version-tag workflow published it and verified a digest pull and binary
-identity. Its configuration and all four layers were separately downloaded
-without authentication and verified against every descriptor’s size and SHA-256.
-That byte-download check was not another Docker execution; container execution
-was performed by the hosted workflow. The matching
-[GitHub prerelease](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1)
-is published with server and connector archives. See
-[release status](releases.md) for current evidence and preserved rc.3/rc.2 results.
+**Published image:**
+`ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.1`.
+The [publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862)
+passed for source `2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`, including container
+execution and digest-pull identity checks. Independent anonymous downloads
+verified the configuration and all four layers against their descriptor sizes
+and SHA-256 hashes, plus exact source/version and nonroot metadata. That download
+verification did not execute Docker. See [release status](releases.md) for the
+full evidence and preserved earlier releases.
 
 Agent Mesh is licensed under [Apache-2.0](../LICENSE). The packaging-version-3 image contains
 `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md` under `/opt/agent-mesh/`, with an
@@ -27,8 +27,8 @@ earlier images remain unchanged.
 
 | Distribution | Identity | What it supplies |
 | --- | --- | --- |
-| GitHub prerelease | [v0.1.0-receipts.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-receipts.1) | Linux amd64 server archive, Python connectors, metadata and checksums |
-| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-receipts.1` | Linux amd64 server image; hosted execution and separate anonymous download verified |
+| GitHub prerelease | [v0.1.0-reliability.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.1) | Linux amd64 server archive, Python connectors, metadata and checksums; all four assets verified anonymously |
+| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-reliability.1` | Linux amd64 server image; configuration and all four layers verified anonymously |
 | GHCR manual candidate — separate workflow | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
 
 Manual container candidates report a version such as
@@ -118,10 +118,10 @@ environment file, repository, model workspace, or chat.
 
 ## 2. Pull and inspect the selected image
 
-Pull the exact published receipts.1 image without a login:
+Pull the exact published `v0.1.0-reliability.1` image without a login:
 
 ```sh
-AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:ebc930e9709f037941c2d33120bb11d814f9fbe2aa6b83940fbd36907169d78b'
+AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:a5b7bc2578514013710594f9586dee427b8f80241eb569026ba4fa79761cb964'
 docker pull "$AGENT_MESH_IMAGE"
 docker run --rm --network none "$AGENT_MESH_IMAGE" version
 ```
@@ -130,8 +130,8 @@ The version command needs no database or service keys. Check its JSON `commit`,
 `version`, `build_date`, `go_version`, `goos`, and `goarch` against the selected
 publication. A version match is artifact identity, not database readiness,
 provider authentication, or a deployment test.
-For this digest, require `version` to be `v0.1.0-receipts.1`, `commit` to be
-`6ea712e7c3bcfeafc3a4e20429766833dbf52caa`, and target `linux` / `amd64`.
+For this digest, require `version` to be `v0.1.0-reliability.1`, `commit` to be
+`2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`, and target `linux` / `amd64`.
 Use that same source revision's Compose files. Tag-pinned guides are historical
 snapshots and may retain prepublication status wording; the
 [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)

@@ -2,13 +2,16 @@
 
 [Documentation](README.md) · [Install a release](install-release.md) · [Release notes](releases.md)
 
-The current published prerelease is `v0.1.0-receipts.1`, from source
-`6ea712e7c3bcfeafc3a4e20429766833dbf52caa`, using packaging version 3. The
-[version-tag run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37113695805)
-passed validation and publication; anonymous downloads of all four release assets
-matched the local and approved hosted dry-run builds byte for byte. See [release status](releases.md)
-for the separate image checks and preserved rc.3/rc.2 history. Packaging targets Linux
-amd64 only; workflow definitions alone do not establish successful publication.
+The current published prerelease is `v0.1.0-reliability.1`, frozen at source
+`2d0318a1c8aa6f5d87fa1d69aa83229ebcf31477`, using packaging version 3.
+[Container CI](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119205037)
+and the [publication-free release dry run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119245631)
+passed. The [version-tag release run](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862)
+completed validation and publication. All four published assets were downloaded
+anonymously and matched the approved local and hosted dry-run builds byte for
+byte. See [release status](releases.md) for image verification and preserved
+receipts.1/rc.3/rc.2 evidence. Packaging targets Linux amd64 only; workflow
+definitions or dry-run success alone do not establish publication.
 New version tags use the hosted
 [automatic release workflow](#automatic-version-tag-releases). Its manual
 dispatch is a **dry run only**. The separate
@@ -32,7 +35,7 @@ reviewed commit from this repository's fresh history.
 
 ## Artifact contract
 
-The table describes the `v0.1.0-receipts.1` packaging-version-3 contract. It
+The table describes the `v0.1.0-reliability.1` packaging-version-3 contract. It
 extends the connector bundle with the opt-in task listener, its coordination and
 artifact modules, and its guide/contract. The server embeds reviewed connector
 sources for owner-issued invitations. Both archives retain root `LICENSE`
@@ -42,8 +45,8 @@ remain unchanged; never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
-| `agent-mesh_v0.1.0-receipts.1_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
-| `agent-mesh_v0.1.0-receipts.1_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-reliability.1_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-reliability.1_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
 | `RELEASE.json` | The same release/build metadata included in each archive |
 | `SHA256SUMS` | SHA-256 checksums for both archives and external `RELEASE.json` |
 
@@ -202,7 +205,7 @@ when needed and report skips explicitly.
 ## Local build and verification reference
 
 The commands below describe reproducible local packaging and verification.
-Examples use `v0.1.0-receipts.1`; select a new version before a new publication. Local builds
+Examples use `v0.1.0-reliability.1`; select a new version before a new publication. Local builds
 do not create tags or publish assets. For publication, use the guarded tag/dry-run
 workflow above and its exact reviewed version.
 
@@ -238,7 +241,7 @@ From the clean source checkout:
 
 ```sh
 python3 -B scripts/build-release.py \
-  --version v0.1.0-receipts.1 \
+  --version v0.1.0-reliability.1 \
   --output /absolute/path/to/new-release-output
 ```
 
@@ -273,8 +276,8 @@ The smoke tool must never receive a production/shared workspace DSN.
 
 ```sh
 python3 -B scripts/smoke-release.py \
-  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-receipts.1_linux_amd64.tar.gz \
-  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-receipts.1_connectors.tar.gz \
+  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-reliability.1_linux_amd64.tar.gz \
+  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-reliability.1_connectors.tar.gz \
   --checksums /absolute/path/to/new-release-output/SHA256SUMS \
   --database-url-file /private/path/to/test-database-url
 ```
