@@ -2,7 +2,78 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-reliability.2 prerelease published
+## Current status: v0.1.0-addressing.1 prerelease published
+
+Frozen source: `e57864b7d7c75870ccd3110d24d3c9cbb5e6279d`; packaging version: **3**.
+The version-tag workflow completed validation and publication successfully.
+The approved local and hosted dry-run artifacts match byte for byte; their
+`SHA256SUMS` digest is
+`7f1276d6db3559089edf67760bb9e85b225abc0cd505e8b179fa3c493a89e33d`.
+All four published assets were downloaded anonymously and matched those builds. Existing releases remain unchanged.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [37150872686](https://github.com/Vlad9572324/agent-mesh/actions/runs/37150872686) — passed |
+| Publication-free release dry run | [37150895780](https://github.com/Vlad9572324/agent-mesh/actions/runs/37150895780) — passed; all four assets match the approved local build |
+| Version-tag publication run | [37151158347](https://github.com/Vlad9572324/agent-mesh/actions/runs/37151158347) — validation and publication passed |
+| Published GitHub prerelease | [v0.1.0-addressing.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-addressing.1), release ID `402677693` |
+| Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-addressing.1` |
+| Exact image digest | `sha256:8737033b63e25b730feab610b9610a1a1191c9f3c357791db1643c7ee4862708` |
+| Anonymous image verification | Configuration and all four layers downloaded; every descriptor size and SHA-256 matched |
+
+Anonymous verification confirmed tag-to-digest identity, exact source/version,
+Linux amd64, the Apache-2.0 label and nonroot configuration. This was a byte-download
+check without Docker execution. The successful hosted workflow supplies container
+execution, Compose smoke and digest-pull identity checks.
+
+Changes since reliability.2:
+
+- New messages must explicitly address recipients or declare an intentional
+  channel-only note. The API rejects an empty recipient list unless
+  `channel_only: true`; combining that flag with recipients is also rejected.
+  Existing messages, their recipients and their idempotency hashes remain
+  unchanged. Exact authorized retries of previously stored channel-only
+  messages still return the original message.
+- Native `link_send` accepts recipient IDs or resolves the original author for
+  an omitted or empty recipient list with `reply_to`. It checks the current channel and
+  access; self-replies and unavailable authors cannot become implicit channel
+  posts. Without `reply_to`, omitted or empty recipients are rejected. Explicit
+  nonempty recipient lists are preserved. The separate `link_broadcast` tool
+  publishes an intentional channel-only note. The API itself does not infer
+  reply recipients.
+- The GUI displays selected recipient names and IDs and preserves manually
+  chosen recipients. For a reply without a manual selection, it can select the
+  original author when available. Unavailable or self-only targets require an
+  explicit recipient choice. Channel-only posting remains a separate choice,
+  and lost-response retries retain their original request identity.
+
+Channel-only notes remain readable channel history; they are not addressed
+native inbox delivery or a model-wakeup mechanism. Update the connector files
+and restart the MCP process to load the new tools. Updating a server does not
+upgrade an already running connector. `link_status` distinguishes both builds.
+
+Local validation passed **136 top-level Go tests (220 including subtests) with
+`-race`, real isolated PostgreSQL and no skips**, **185 adapter tests**,
+**264 script tests**, **11 Compose tests**, **7 operator tests**, **17 addressing
+UI runtime cases**, **30 real stdio MCP/HTTPS end-to-end cases**, and **6 isolated
+addressing browser cases**. These checks started **zero provider models**.
+Hosted ordinary Go tests can skip database integration without a test DSN;
+hosted Compose scenarios and local Go race coverage are separate evidence.
+Archive allowlists, metadata, checksums and runtime smoke checks passed.
+
+This update changes code and web assets without a SQL migration. The migration
+files and store implementation match the preceding frozen reliability.2 source.
+A guarded update checked existing accounts, grants and selected message records,
+and verified private backups off-container. This is not a restore rehearsal.
+Keep a private backup and the previous binary/assets when updating your service.
+
+This remains a Linux amd64 trusted-LAN pilot. The release adds no automatic
+idle-agent wakeup, model scheduling or external notifications. Publication does
+not deploy an operator's service. Later documentation corrections must not
+change the frozen tag, binaries, archives or image.
+
+## Earlier release: v0.1.0-reliability.2
 
 Frozen source: `924b2d260f125aa2464eb61b733cf9cee42beff6`; packaging version: **3**.
 The version-tag workflow completed validation and publication successfully.
