@@ -4,6 +4,7 @@
 // Run only after the backend/web changes are integrated: node tests/project_native_gui.mjs
 // Focused quiet-feed regression: node tests/project_native_gui.mjs --quiet-only
 // Owner deadline regression: node tests/project_native_gui.mjs --delivery-alerts-only
+// Titled document upload regression: node tests/project_native_gui.mjs --documents-only
 // Focused sender receipt regression: node tests/project_native_gui.mjs --receipts-only
 import {readFile, writeFile, mkdtemp, mkdir, copyFile, rm, open, lstat} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
@@ -20,7 +21,8 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const quietOnly = process.argv.includes('--quiet-only');
 const receiptsOnly = process.argv.includes('--receipts-only');
 const deliveryOnly = process.argv.includes('--delivery-alerts-only');
-if ([quietOnly, receiptsOnly, deliveryOnly].filter(Boolean).length > 1) throw new Error('Choose one focused browser suite');
+const documentsOnly = process.argv.includes('--documents-only');
+if ([quietOnly, receiptsOnly, deliveryOnly, documentsOnly].filter(Boolean).length > 1) throw new Error('Choose one focused browser suite');
 const technicalTypes = new Set(['session.started', 'session.ended', 'turn.started', 'turn.completed',
   'tool.started', 'tool.completed', 'agent.waiting', 'inbox.offered']);
 const quietTechnical = [], quietImportant = [];
@@ -29,11 +31,11 @@ const run = `project-native-${randomUUID().slice(0, 8)}`;
 const schema = `project_native_gui_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const ids = Object.fromEntries(['owner', 'writer', 'peer', 'viewer', 'project', 'other', 'alpha', 'beta', 'quiet', 'private', 'other-channel'].map(name => [name, `${run}-${name}`]));
 const readPaths = new Set(['alpha', 'beta', 'quiet', 'other-channel'].map(name => `/v1/channels/${ids[name]}/read`));
-const allowedBrowserRequest = item => item.method === 'GET' || deliveryOnly && item.tab === 'owner' && item.method === 'PUT' && item.path === '/v1/admin/delivery-policy' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
+const allowedBrowserRequest = item => item.method === 'GET' || documentsOnly && item.tab === 'writer' && item.method === 'POST' && item.path === `/v1/projects/${ids.project}/artifacts` || deliveryOnly && item.tab === 'owner' && item.method === 'PUT' && item.path === '/v1/admin/delivery-policy' || item.method === 'PUT' && readPaths.has(item.path) && ['writer', 'viewer', 'owner'].includes(item.tab);
 const report = {run, schema, database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
   browser_errors: [], requests: [], layouts: [], screenshots: [], models_started: 0,
   scope: 'Owned isolated schema, loopback TLS API and Chromium; no shared fixture keys or production requests'};
-report.mode = deliveryOnly ? 'delivery-alerts' : receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
+report.mode = documentsOnly ? 'documents' : deliveryOnly ? 'delivery-alerts' : receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
 const tabs = [], keys = {}, secrets = new Set(), publicEvents = [], privateEvents = [];
 const js = JSON.stringify, pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -157,7 +159,7 @@ async function fixtures() {
     for (const name of ['alpha', 'beta', 'quiet', 'other-channel']) await grant(actor, 'channel', name, access);
   }
   await grant('writer', 'channel', 'private', 'write');
-  if (receiptsOnly || deliveryOnly) return;
+  if (receiptsOnly || deliveryOnly || documentsOnly) return;
   oldQuiet = await activity('session.ended', 'quiet', 'peer');
   // Backdate only this owned schema's fixture to check stale-event truthfulness
   // without waiting five minutes or altering production/browser wall clocks.
@@ -274,7 +276,7 @@ async function login(tab, actor) {
   await project(tab);
   // The historical regression deliberately inspects every archived event.
   // The quiet regression keeps the product's default until testing the toggle.
-  if (!quietOnly && !receiptsOnly && !deliveryOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
+  if (!quietOnly && !receiptsOnly && !deliveryOnly && !documentsOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
 }
 async function project(tab, name = 'project') {
   await tab.click(`#project-switcher [data-focus-key="project:${ids[name]}"]`);
@@ -299,6 +301,94 @@ async function screenshot(tab, label, width) {
 async function stopChild(child) {
   for (const signal of ['SIGTERM', 'SIGKILL']) if (child?.pid && child.exitCode === null && child.signalCode === null) { child.kill(signal); await Promise.race([new Promise(resolveExit => child.once('exit', resolveExit)), pause(2500)]); }
   return !child || !child.pid || child.exitCode !== null || child.signalCode !== null;
+}
+
+async function documentCases() {
+  const path = `/v1/projects/${ids.project}/artifacts`;
+  const title = 'Requirements / Требования <img src=x onerror=window.artifactInjected=1>';
+  const revision = 'requirements-v1', bytes = Buffer.from('Exact document fixture bytes. No commands, keys or real project content.\n');
+  const selector = id => `#artifact-list [data-artifact-id="${id}"]`;
+  let legacy, published;
+  const openArtifacts = async tab => {
+    await tab.click('#nav-artifacts');
+    await tab.wait(`!document.getElementById('artifacts-pane').hidden && !document.getElementById('refresh-button').disabled`, 'artifact view ready');
+  };
+  await check('owned document fixture exposes legacy metadata and restricts upload to writer', async () => {
+    await isolatedServer(); await fixtures();
+    legacy = (await api(path, 'POST', {client_id: `${run}-untitled`, role: 'evidence', base_revision: revision,
+      sha256: hash(bytes), content_base64: bytes.toString('base64')}, 'writer', 201)).artifact;
+    assert(legacy.title === '', 'Untitled historical request did not remain untitled');
+    await browsers();
+    for (const tab of tabs) {
+      await openArtifacts(tab);
+      await tab.wait(`!!document.querySelector(${js(selector(legacy.id))})`, 'old artifact loaded');
+    }
+    assert(!await writer.eval(`document.getElementById('artifact-upload-section').hidden`), 'Writer cannot publish');
+    assert(await viewer.eval(`document.getElementById('artifact-upload-section').hidden`) && await owner.eval(`document.getElementById('artifact-upload-section').hidden`), 'Read-only account can publish');
+  });
+  await check('document role, optional title and exact revision help preserve a bilingual unsent draft', async () => {
+    await writer.click('#artifact-upload-section > summary');
+    await writer.fill('artifact-title', title); await writer.filter('artifact-role', 'document'); await writer.fill('artifact-base', revision);
+    for (const language of ['en', 'ru']) {
+      await writer.filter('language-select', language);
+      const values = await writer.eval(`({title:document.getElementById('artifact-title').value,role:document.getElementById('artifact-role').value,base:document.getElementById('artifact-base').value,label:document.querySelector('label[for="artifact-title"]').textContent,help:document.getElementById('artifact-base').nextElementSibling.textContent,option:document.querySelector('#artifact-role option[value="document"]').textContent})`);
+      assert(values.title === title && values.role === 'document' && values.base === revision, 'Language switch changed publication draft');
+      assert((language === 'ru' ? /Название.*необязательно/ : /Title.*optional/).test(values.label), 'Optional title not localized');
+      assert(values.help.includes('requirements-v1') && (language === 'ru' ? /Git SHA не нужен/ : /does not require a Git SHA/).test(values.help), 'Revision help implies a fabricated Git SHA');
+      assert((language === 'ru' ? /документ.*требования/ : /document.*requirements/).test(values.option), 'Document role not localized');
+    }
+    assert(!report.requests.some(item => item.method === 'POST'), 'Editing draft published an artifact');
+  });
+  await check('real file input publishes one titled document with exact bytes and explicit revision', async () => {
+    const file = `${scratch}/private-local-name-not-a-title.txt`;
+    await writeFile(file, bytes, {mode: 0o600, flag: 'wx'});
+    const dom = await writer.call('DOM.getDocument'), input = await writer.call('DOM.querySelector', {nodeId: dom.root.nodeId, selector: '#artifact-file'});
+    await writer.call('DOM.setFileInputFiles', {nodeId: input.nodeId, files: [file]});
+    await writer.click('#artifact-submit');
+    await writer.wait(`!document.getElementById('artifact-upload-section').open && document.querySelectorAll('#artifact-list [data-artifact-id]').length===2`, 'one document stored and rendered', 10000);
+    const list = (await api(path, 'GET', undefined, 'viewer')).artifacts;
+    assert(list.length === 2, 'Upload created duplicate or unexpected artifacts');
+    published = list.find(item => item.id !== legacy.id);
+    assert(published.title === title && published.role === 'document' && published.base_revision === revision && published.sha256 === hash(bytes) && published.size_bytes === bytes.length, 'Immutable document metadata differs from selected draft');
+    const content = await request(`/v1/artifacts/${published.id}/content`, 'GET', undefined, 'viewer', true);
+    assert(content.status === 200 && content.data.equals(bytes), 'Retrieved document differs from selected file');
+    assert(!JSON.stringify(published).includes('private-local-name'), 'Local filename was published implicitly');
+    report.document = {id: published.id, role: published.role, sha256: published.sha256, size_bytes: published.size_bytes, base_revision: published.base_revision};
+  });
+  await check('literal bilingual document title and untitled ID fallback survive refresh and mobile layout', async () => {
+    await viewer.click('#refresh-button'); await viewer.wait(`!!document.querySelector(${js(selector(published.id))})`, 'reader sees new document');
+    for (const language of ['en', 'ru']) {
+      await viewer.filter('language-select', language);
+      const rendered = await viewer.eval(`({title:document.querySelector(${js(selector(published.id) + ' h4')}).textContent,legacy:document.querySelector(${js(selector(legacy.id) + ' h4')}).textContent,text:document.querySelector(${js(selector(published.id))}).textContent,images:document.querySelectorAll('#artifact-list img').length,injected:!!window.artifactInjected})`);
+      assert(rendered.title === title && rendered.legacy === legacy.id, 'Title translated, interpreted or fallback lost');
+      assert(!rendered.images && !rendered.injected && rendered.text.includes(revision) && rendered.text.includes(published.sha256), 'Unsafe title rendering or immutable pins hidden');
+      assert((language === 'ru' ? /Документ/ : /Document/).test(rendered.text), 'Document label not localized');
+    }
+    await viewer.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
+    assert(await viewer.eval(`document.documentElement.scrollWidth<=innerWidth+1`), 'Artifact title overflows mobile viewport');
+    await screenshot(viewer, 'documents-mobile-390', 390);
+    await viewer.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
+  });
+  await check('held authenticated artifact response cannot repopulate the interface after logout', async () => {
+    await writer.eval(`window.__heldFeedReady=false;window.__holdNextProjectFeed=${js(path)}`);
+    await writer.click('#refresh-button'); await writer.wait('window.__heldFeedReady===true', 'real artifact response held');
+    await writer.click('#logout-button');
+    await writer.wait(`!document.getElementById('login-panel').hidden && document.getElementById('artifact-list').textContent===''`, 'logout clears documents');
+    await writer.eval('window.__releaseFeed()'); await pause(250);
+    assert(await writer.eval(`document.getElementById('artifact-list').textContent==='' && document.getElementById('artifact-title').value==='' && localStorage.length===0 && sessionStorage.length===0`), 'Late artifact response or title draft survived logout');
+  });
+  await check('project ACL revocation removes document content and no unrelated browser mutations occur', async () => {
+    await grant('viewer', 'project', 'project', 'none');
+    await viewer.click('#refresh-button');
+    await viewer.wait(`!document.querySelector('[data-focus-key="project:${ids.project}"]') && !document.getElementById('artifact-list').textContent.includes(${js(title)})`, 'revoked project documents removed', 12000);
+    await api(path, 'GET', undefined, 'viewer', 404);
+    for (const tab of [viewer, owner]) {
+      await tab.click('#logout-button'); await tab.wait(`!document.getElementById('login-panel').hidden`, 'fixture tab logged out');
+    }
+    const writes = report.requests.filter(item => item.method === 'POST');
+    assert(writes.length === 1 && writes[0].tab === 'writer' && writes[0].path === path, 'Browser published beyond the one explicit owned upload');
+    assert(!report.browser_guard_failed && report.browser_errors.length === 0 && report.requests.every(allowedBrowserRequest), 'Browser runtime or request-boundary failure');
+  });
 }
 
 async function deliveryCases() {
@@ -609,7 +699,9 @@ async function quietCases() {
 }
 
 try {
-  if (deliveryOnly) {
+  if (documentsOnly) {
+    await documentCases();
+  } else if (deliveryOnly) {
     await deliveryCases();
   } else if (receiptsOnly) {
     await receiptCases();
@@ -745,7 +837,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === (deliveryOnly ? 7 : receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === (documentsOnly ? 6 : deliveryOnly ? 7 : receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/project-native-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});
