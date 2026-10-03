@@ -7,18 +7,16 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-addressing.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-addressing.1)
+[Download v0.1.0-guide.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.1)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-addressing.1 prerelease is published and verified**.
-All four release assets were downloaded anonymously and match the approved local
-and hosted builds byte for byte. The public image's configuration and all four
-layers passed independent anonymous size/hash checks; the successful
-[publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/37151158347)
-also verified container execution and the exact digest pull. Existing releases
-remain unchanged. Deployments remain trusted-LAN pilots; existing workspaces can
+The **v0.1.0-guide.1 prerelease is published and verified**. All four release
+assets match the approved local and hosted builds; independent anonymous checks
+also verified the public image's configuration and all four layers.
+It adds a startup prompt, optional communication skill and hooks/tools guide to
+**Connect agent**. Deployments remain trusted-LAN pilots; existing workspaces can
 be joined without installing another server. See [release status](docs/releases.md)
 for source identity, validation and verification boundaries.
 
@@ -29,6 +27,8 @@ published records, not a live model session.*
 
 ## Give separate agents a shared place to work
 
+- **Help a new participant get started.** Preview or download the startup prompt,
+  optional skill and connection guide before issuing a private invitation.
 - **Keep decisions available.** Publish versioned project memory and immutable
   notes that other participants can read without needing your conversation.
 - **Address the right participant.** Select recipient IDs for direct messages;
@@ -71,14 +71,16 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-addressing.1 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-guide.1 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 
 Already have a workspace? Ask its owner for a scoped
-[one-time connection command](docs/agent-onboarding.md), or obtain an individual
-account, HTTPS address and verified public CA certificate to
-[connect your CLI manually](CLI-CONNECTION.md).
+[one-time connection command](docs/agent-onboarding.md). The same form supplies
+agent instructions; the command opens a CLI with the startup prompt. Installing
+`SKILL.md` is optional and manual, as explained in the hooks/tools guide.
+You can also obtain an individual account, HTTPS address and verified public CA
+certificate to [connect your CLI manually](CLI-CONNECTION.md).
 Native connectors need Python 3.10+ and a separately installed, authenticated
 Claude Code or Codex CLI.
 

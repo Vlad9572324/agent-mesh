@@ -2,7 +2,73 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-addressing.1 prerelease published
+## Current status: v0.1.0-guide.1 prerelease published
+
+Frozen source: `3bb79dd9dca94b1fe0ff4d32225c12f17e2f03c1`; packaging version: **3**.
+The approved local and hosted dry-run artifacts match byte for byte. Their
+`SHA256SUMS` digest is
+`644cb639f3c9ffd6b96b1dd3ab2d4540876f4d8cf5d0820e9f10823c799b3bf7`.
+The version-tag workflow completed validation and publication successfully.
+All four published assets were downloaded anonymously and matched those builds.
+Existing releases remain unchanged.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [37154466574](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154466574) — passed |
+| Publication-free release dry run | [37154488332](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154488332) — passed; all four assets match the approved local build |
+| Version-tag publication run | [37154697658](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154697658) — validation and publication passed |
+| Published GitHub prerelease | [v0.1.0-guide.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.1), release ID `402696941` |
+| Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.1` |
+| Exact image digest | `sha256:560d7225167e9ea0327fbe12f2186021e58d6e00273a5755c38690fb828ad7e9` |
+| Anonymous image verification | Configuration and all four layers downloaded; every descriptor size and SHA-256 matched |
+
+Anonymous verification confirmed tag-to-digest identity, exact source/version,
+Linux amd64, the Apache-2.0 label and nonroot configuration. This was a byte-download
+check without Docker execution. The successful hosted workflow supplies container
+execution, Compose smoke and digest-pull identity checks.
+
+Changes since addressing.1:
+
+- **Connect agent** now offers an **Agent instructions** section before issuing
+  an invitation: a startup prompt, optional `SKILL.md` and concise
+  `HOOKS-AND-TOOLS.md`. Each can be copied or downloaded. The result dialog keeps
+  the private command separate and shows the invitation's actual identity,
+  project, channels and requested CLI; automatic CLI selection happens locally.
+- The server supplies the same canonical English document bytes and SHA-256
+  checksums to the GUI and private connection package. Interface labels support
+  English and Russian. The documents contain no credentials or substituted
+  invitation scope. The GUI validates them before offering copy/download and
+  clears secret results on close or logout. Older servers without guidance
+  remain usable for their connection command.
+- The startup prompt uses `link_peers` to discover actual peer IDs and shared
+  channels before an addressed introduction. This read-only tool uses current
+  access and bounded pagination; it does not send messages or start models.
+- The launcher passes the startup prompt to the CLI. `SKILL.md` installation
+  remains optional and manual, with locations and checks in the hooks/tools
+  guide. MCP and hooks are configured for each launcher invocation, not by
+  saving the skill. Ordinary hooks do not wake an idle model.
+
+Existing participants need updated connector files and an MCP restart for the
+new tool. Replacing a prompt or updating the server does not upgrade a running
+connector. Keep existing private configuration, keys and inbox/outbox state.
+See [agent onboarding](agent-onboarding.md) for setup and recovery.
+
+Local validation passed **139 top-level Go tests (223 including subtests) with
+`-race`, real isolated PostgreSQL and no skips**, **194 adapter tests**,
+**265 script tests**, **11 Compose tests**, and **96 UI runtime cases**, including
+13 guidance cases. Model-free integration checks passed **8 onboarding browser
+cases**, **6 installer cases** and **30 real stdio MCP/HTTPS cases**. Archive smoke
+checked all **29 file members** across the two archives. Hosted ordinary Go tests
+can skip database integration without a test DSN; hosted Compose checks and the
+local Go race suite are separate evidence.
+
+The guarded deployed update passed acceptance without a SQL migration, key
+rotation or connector state reset. This remains a Linux amd64 trusted-LAN pilot;
+publication does not deploy another operator's service. Later documentation and
+CI updates do not change the frozen tag, binaries, archives or image.
+
+## Earlier release: v0.1.0-addressing.1
 
 Frozen source: `e57864b7d7c75870ccd3110d24d3c9cbb5e6279d`; packaging version: **3**.
 The version-tag workflow completed validation and publication successfully.
