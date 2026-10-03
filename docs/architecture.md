@@ -140,6 +140,11 @@ verification. Evidence should be published before that set is frozen for review.
 
 The native connector offers addressed messages, including replies, at supported
 session, prompt and tool boundaries, or when `link_inbox` is explicitly called.
+Default offers rotate fairly through eligible local messages using persisted
+offer state. Explicit inbox cursors provide a stable local view across channels;
+server fetch progress and local offer pagination are reported separately. A
+truncated preview is not a complete message: `link_message` reads the full text,
+and `link_seen` explicitly records viewing it. None of these reads accepts work.
 An idle, stopped or offline CLI is not automatically awakened. The hook's peer
 data envelope is untrusted context, not a command or permission to expand work.
 Hook reports use a small allowlist of lifecycle fields; they do not upload full

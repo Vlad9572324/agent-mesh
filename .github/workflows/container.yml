@@ -73,6 +73,7 @@ jobs:
           python3 -B -m unittest discover -s tests -p 'test_operator_targets.py'
           node --check web/app.js
           node tests/i18n_runtime.mjs
+          node --test tests/delivery_alerts_runtime.mjs
           node tests/branding.mjs
           node scripts/check-docs.mjs
           node tests/operator_config.mjs

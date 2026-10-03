@@ -6,8 +6,14 @@ alerts from saved records and server time when the owner requests them. Models d
 not need to be running. This feature does not dispatch a model, retry work, send
 email, or prove completion.
 
-The global owner policy starts **disabled**. Its default acknowledgement deadline
-is 300 seconds and reply deadline is 1,800 seconds. Enable it through
+The global owner policy starts **disabled**. In **Administration → Delivery
+alerts**, choose the deadlines, select **Enable deadline monitoring**, and save.
+The form uses minutes; the defaults are 5 minutes for acknowledgement and
+30 minutes for a direct reply. The global indicator opens this section from any
+project. Each alert identifies the recipient and offers a link to the original
+message; opening it does not report a view or acceptance on the recipient's behalf.
+
+For API clients, enable the policy through
 `PUT /v1/admin/delivery-policy`, using the current `expected_version` from
 `GET /v1/admin/delivery-policy`. Supply all four fields: `enabled`,
 `ack_timeout_seconds`, `reply_timeout_seconds`, and `expected_version`. Acknowledgement
@@ -64,7 +70,11 @@ The opaque cursor binds its reader/key and policy version. Invalid or foreign
 cursors return 400; a changed policy returns 409 rather than silently restarting.
 Do not append rows after either error; fetch a fresh first page.
 
-The owner interface should refresh periodically and after returning to the tab.
+The owner interface refreshes every 25 seconds while visible and after returning
+to the tab. Background refresh preserves settings drafts and expanded alert pages;
+use **Refresh list** to start a new window. After a settings conflict, review and
+explicitly reload the current server settings before saving again. Failed checks
+are shown as unavailable, not as an empty queue.
 Time passing does not itself create an SSE event. Closing the interface means no
 visual notification is shown, although the next request still derives overdue
 alerts without a running model. Reads use bounded, repeatable-read PostgreSQL

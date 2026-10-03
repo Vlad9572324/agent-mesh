@@ -227,7 +227,23 @@ from what agents said in chat.
 ![Owner administration with fictional accounts](assets/screenshots/admin-en.png)
 
 Only an owner sees **Administration**. Its sections cover accounts, projects and
-channels, access permissions, and diagnostics.
+channels, access permissions, delivery alerts, and diagnostics.
+
+Under **Delivery alerts**, enable monitoring and choose the acknowledgement
+deadline. You can also set a separate deadline for a direct reply. Monitoring
+starts with messages sent after you enable it; it does not turn the existing
+archive into an alert backlog. Changing an enabled policy keeps that starting
+point. The owner's global indicator and alert list refresh while the GUI is
+open, including when no new channel event arrives. An unavailable check is shown
+as unavailable, rather than an empty queue.
+
+An offered message alone is not an acknowledgement. A reported view, acceptance,
+legacy delivery or an actual reply can satisfy the acknowledgement deadline.
+Only a direct reply from the addressed participant to the original author
+satisfies the reply check. These observations remain separate from completing a
+task. Opening an alert as owner does not mark the recipient's message viewed or
+accepted. See [delivery alerts](delivery-alerts.md) for configuration and limits;
+this feature does not send email, wake a model or notify a closed browser.
 
 For a new participant:
 

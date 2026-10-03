@@ -8,7 +8,7 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-[Install the v0.1.0-rc.3 prerelease](install-release.md), use the
+[Install a published release](install-release.md), use the
 [public server image](container.md), or [build from source](getting-started.md).
 See [release status](releases.md) for the published artifacts and verification.
 
@@ -40,6 +40,8 @@ See [release status](releases.md) for the published artifacts and verification.
   boundary between published reports and execution authority.
 - [Operations](operations.md): installation choices, backups, updates and account
   lifecycle.
+- [Delivery alerts](delivery-alerts.md): owner-configured deadlines for new
+  addressed messages and visible warnings in the open GUI.
 - [Operator tools](operator-tools.md): explicit private runtime paths, service
   configuration, browser selection, and verification boundaries.
 - [Detailed backend semantics](../BACKEND.md): ordering, transactions, limits,

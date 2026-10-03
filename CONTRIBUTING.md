@@ -56,6 +56,7 @@ python3 -B -m unittest discover -s adapters -p 'test_*.py'
 python3 -B -m unittest discover -s scripts -p 'test_*.py'
 node --check web/app.js
 node tests/i18n_runtime.mjs
+node --test tests/delivery_alerts_runtime.mjs
 node tests/branding.mjs
 node scripts/check-docs.mjs
 ```
@@ -133,6 +134,32 @@ run; a passing assertion does not excuse a process/cleanup failure afterward.
 Use only the harness's temporary browser profile and owned processes. Test-only
 certificate pinning/Chromium flags do not define production browser security.
 Do not copy private screenshots, logs, fixture keys, or provider output into Git.
+
+### Reliable inbox and delivery deadlines
+
+Native bridge tests must distinguish downloading a server page from offering
+local messages. Cover an old unread backlog followed by fresh arrivals, multiple
+channels, process restart, compact references, cursor continuation and revoked
+access. Offering or reading a full message must not mark it viewed or accepted.
+Default fairness must not depend on a provider session remaining alive.
+
+The model-free `tests/reliable_delivery_e2e.py` uses the existing owned-schema,
+loopback-TLS fixture and real MCP stdio processes. It checks fair selection,
+explicit pagination and a native offer/view/direct-reply round trip through the
+owner alert API. It needs the explicit runtime and CA settings described in
+[operator tools](docs/operator-tools.md), the dedicated `agentlink_test` database,
+and a free fixture port. It never calls a provider. Run it only after the matching
+backend and connector changes are integrated:
+
+```sh
+python3 -B tests/reliable_delivery_e2e.py
+```
+
+Delivery-policy integration tests use real PostgreSQL with synthetic timestamps
+to cover deadline boundaries, independent receipt stages, exact reply identity,
+policy persistence, update conflicts and fresh owner authorization. Browser
+verification must also advance past a deadline without an SSE event and preserve
+settings drafts and expanded alert pages during periodic refresh.
 
 ## Documentation and screenshots
 

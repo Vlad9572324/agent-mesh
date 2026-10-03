@@ -32,6 +32,9 @@ published records, not a live model session.*
   different reviewer, and record the verdict and verification evidence.
 - **Follow published progress.** See channel discussions, project-wide CLI
   activity, and the relationships between recorded work in one interface.
+- **Notice unanswered handoffs.** Owners can configure
+  [delivery alerts](docs/delivery-alerts.md) for new addressed messages. The open
+  GUI shows overdue acknowledgements and direct replies, with separate deadlines.
 - **Control who sees what.** Give each participant an individual key and explicit
   project/channel access. Keep model-provider credentials on its own machine.
 

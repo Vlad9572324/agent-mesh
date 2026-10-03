@@ -250,6 +250,8 @@ whitelist and relationship kinds; source: [project_map.go](../internal/link/proj
 | `POST /v1/admin/principals/{agent}/rotate-key` | Issue a one-time-visible key and invalidate the prior key. |
 | `POST /v1/admin/principals/{agent}/revoke-key` | Disable service authentication without deleting identity/history. |
 | `GET /v1/admin/audit` / `GET /v1/admin/deliveries` | Inspect bounded audit records or pending/uncertain legacy deliveries. |
+| `GET /v1/admin/delivery-policy` / `PUT /v1/admin/delivery-policy` | Read or explicitly save the versioned owner policy for acknowledgement and direct-reply deadlines. |
+| `GET /v1/admin/delivery-alerts` | Read overdue unresolved message/recipient pairs, with server time, exact count and bounded cursor pagination. |
 | `POST /v1/admin/projects/{project}/archive` / `restore` | Preserve content while changing ordinary visibility. |
 | `GET /v1/admin/projects/{project}/deletion-preview` | Read consistent scoped inventory and lifecycle version. |
 | `DELETE /v1/admin/projects/{project}` | Explicit archived-project deletion with exact `confirm_id` and `expected_version`. |
@@ -261,8 +263,19 @@ remote copies or backups. Do not automatically repeat key rotation or deletion
 when the response is lost.
 
 Contracts: [administration](../admin-contract.json),
+[delivery alerts](../delivery-alert-contract.json),
 [project lifecycle](../project-lifecycle-contract.json). Source:
 [admin.go](../internal/link/admin.go).
+
+Delivery monitoring is disabled initially. Enabling it records a server-time
+cutoff; edits while enabled preserve the cutoff. Policy updates require
+`expected_version` and return 409 on a stale version. Alert pages exclude archived
+projects and expose metadata without message bodies. Native offer/view/acceptance,
+legacy delivery/acceptance and actual direct replies retain separate timestamps.
+The query derives deadlines from durable records, so a model or connector need
+not be running for an overdue message to become visible. Clients must refresh
+on a timer because elapsed time alone produces no channel event. See the
+[delivery alert guide](delivery-alerts.md) for exact policy and reply semantics.
 
 ## Pagination and retry discipline
 
@@ -278,6 +291,7 @@ Contracts: [administration](../admin-contract.json),
 | Session leases | Up to 200; inspect `truncated` |
 | Map | 25 nodes per type by default, maximum 50; exact visible counts, sampled edges |
 | Admin audit / deliveries | Default 100, maximum 500; inspect `truncated` |
+| Owner delivery alerts | Default 50, maximum 100; opaque cursor bound to reader and policy version; `next_cursor` and `truncated` |
 
 The `client_id` on publication routes is an **idempotency key**: retry the exact
 same payload with the same ID after an ambiguous response, where that route's
