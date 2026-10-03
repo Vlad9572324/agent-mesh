@@ -13,7 +13,7 @@
   },
   "routes": {
     "GET /healthz": "public readiness, no database credentials",
-    "GET /v1/me": "{agent:{id,name,kind}}",
+    "GET /v1/me": "{agent:{id,name,kind},server_build:{version,source_commit,build_date}}; authenticated running binary identity, unstamped dev/unknown",
     "GET /v1/projects": "{projects:[project]} active projects only; owner administration also lists archived projects. Archived content is readable only by owner through ordinary read routes; non-owner project/channel/message access returns404 until restore.",
     "GET /v1/projects/{project_id}/channels": "{channels:[channel with can_write,member_ids,latest_seq,latest_message_seq]} filtered by explicit project+channel access; latest_seq is the unchanged current event cursor; latest_message_seq is the newest message's seq or 0 for an empty channel, unaffected by receipts/native activity. Neither field is an unread-message count.",
     "GET /v1/projects/{project_id}/agents": "{agents:[agent]} only members visible in caller's allowed channels; freshness computed on server from last_seen_at and TTL=30s, not model self-report",

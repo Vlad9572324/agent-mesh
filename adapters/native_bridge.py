@@ -62,6 +62,42 @@ def strict_json(value):
         raise NativeError('invalid_json') from None
 
 
+def build_identity(value):
+    """Bounded display-only build metadata; never a capability or trust decision."""
+    if type(value) is not dict:
+        return None
+    version, commit = value.get('version'), value.get('source_commit')
+    if (type(version) is not str or not re.fullmatch(r'(?:dev|v[0-9][A-Za-z0-9.+-]{0,62})', version)
+            or type(commit) is not str or not re.fullmatch(r'(?:unknown|[a-f0-9]{40})', commit)):
+        return None
+    return {'version': version, 'source_commit': None if commit == 'unknown' else commit}
+
+
+def connector_build(root=None):
+    """Read the installed bundle's own stamp, not cwd, environment or server identity."""
+    path = (Path(__file__).resolve().parent.parent if root is None else Path(root)) / 'RELEASE.json'
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 32768:
+                return None
+            with os.fdopen(fd, 'rb', closefd=False) as stream:
+                body = stream.read(32769)
+            if len(body) > 32768:
+                return None
+            return build_identity(strict_json(body))
+        finally:
+            os.close(fd)
+    except (OSError, NativeError):
+        return None
+
+
+# Snapshot the stamp when this module is loaded. Updating files on disk does not
+# pretend that an already-running MCP process has reloaded the connector.
+CONNECTOR_BUILD = connector_build()
+
+
 def identifier(value):
     return type(value) is str and ID.fullmatch(value) is not None
 
@@ -269,9 +305,11 @@ class NativeBridge:
         return self._client.request(method, path, body, **kwargs)
 
     def _authorize(self):
-        who = self._request('GET', '/v1/me').get('agent', {})
+        identity = self._request('GET', '/v1/me')
+        who = identity.get('agent', {})
         if who.get('id') != self.config['agent_id'] or who.get('kind') != 'agent':
             raise NativeError('authenticated_principal_mismatch')
+        self._server_build = build_identity(identity.get('server_build'))
         channels = self._request('GET', self.project_path + '/channels').get('channels')
         if not isinstance(channels, list):
             raise NativeError('invalid_authorization_response')
@@ -615,12 +653,17 @@ class NativeBridge:
 
     def status(self):
         allowed = self._authorize()
-        return {'agent_id': self.config['agent_id'], 'project_id': self.config['project_id'], 'runtime': self.config['runtime'],
+        connector, server = CONNECTOR_BUILD or {}, self._server_build or {}
+        return self.sanitize({'agent_id': self.config['agent_id'], 'project_id': self.config['project_id'], 'runtime': self.config['runtime'],
+                'connector_version': connector.get('version'), 'connector_source_commit': connector.get('source_commit'),
+                'connector_identity_source': 'release_metadata' if CONNECTOR_BUILD else 'unavailable',
+                'server_version': server.get('version'), 'server_source_commit': server.get('source_commit'),
+                'server_identity_source': 'authenticated_api' if self._server_build else 'unavailable',
                 'session_id': self.session_id, 'channel_ids': list(allowed), 'pending_messages': self._pending_count(allowed),
                 'unseen_messages': self._pending_count(allowed, include_seen=False),
                 'pending_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
                 'blocked_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0],
-                'auto_execution': False, 'legacy_heartbeat_changed': False}
+                'auto_execution': False, 'legacy_heartbeat_changed': False})
 
     def _publish(self, kind, path, body, *, method='POST', channel=None):
         allowed = self._authorize()

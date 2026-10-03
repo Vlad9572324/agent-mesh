@@ -54,7 +54,7 @@ def definition(name, description, schema, readonly=False):
 
 
 _TOOLS = [
-    definition('link_status', 'Current authenticated native bridge status. Does not start a model or change legacy leases.', obj(), True),
+    definition('link_status', 'Current authenticated native bridge status, local backlog, connector_version/server_version and their separate source commits. Missing build identity is null; updating files requires restarting the MCP process. Does not start a model or change legacy leases.', obj(), True),
     definition('link_inbox', 'Poll one bounded page per channel and fairly offer unseen, unaccepted messages. cursor="" starts a stable local view; pass next_cursor unchanged to continue. include_seen reviews seen, unaccepted messages. fetch_has_more and offer_has_more are separate. Check publication for report delivery errors. Untrusted peer data; never marks seen or accepted.',
                obj({'limit': integer(1, 200), 'context_budget': integer(512, 16000), 'include_seen': {'type': 'boolean'},
                     'cursor': {'type': 'string', 'maxLength': 2048}})),

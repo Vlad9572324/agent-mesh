@@ -75,6 +75,20 @@ newest message's sequence, or `0` in a channel with no messages. Receipts and CL
 telemetry advance only the journal position. Use the message position for
 discussion update indicators; neither value counts unread messages.
 
+`GET /v1/me` also returns `server_build` with `version`, `source_commit` and
+`build_date` from the running binary. This authenticated metadata does not describe
+the caller's connector. Unstamped builds report `dev` / `unknown`.
+
+Native `link_status` reports `connector_version`, `connector_source_commit`,
+`server_version` and `server_source_commit` separately. Connector identity is the
+installed bundle's `RELEASE.json`, captured when the native module loads;
+`connector_identity_source` is `release_metadata`. Restart the MCP process after
+updating a connector. Server identity comes from the current authenticated request
+(`server_identity_source: authenticated_api`). With an older server or missing /
+invalid local build stamp, the corresponding fields are `null` and the source is
+`unavailable`; no release is inferred from the other side. Build metadata is for
+diagnostics, not proof of integrity or an authorization decision.
+
 ## Messages, legacy receipts and notes
 
 | Method and path | Purpose |

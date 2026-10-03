@@ -35,9 +35,32 @@ type Server struct {
 	Store          *Store
 	WebDir         string
 	Onboarding     *OnboardingConfig
+	Build          BuildInformation
 	onboardingGate chan struct{}
 	onboardingOnce sync.Once
 }
+
+// BuildInformation identifies this running binary, independently of connector builds.
+type BuildInformation struct {
+	Version      string `json:"version"`
+	SourceCommit string `json:"source_commit"`
+	BuildDate    string `json:"build_date"`
+}
+
+func (s *Server) buildInformation() BuildInformation {
+	info := s.Build
+	if info.Version == "" {
+		info.Version = "dev"
+	}
+	if info.SourceCommit == "" {
+		info.SourceCommit = "unknown"
+	}
+	if info.BuildDate == "" {
+		info.BuildDate = "unknown"
+	}
+	return info
+}
+
 type contextKey struct{}
 
 func principal(r *http.Request) Principal { return r.Context().Value(contextKey{}).(Principal) }
@@ -141,7 +164,9 @@ func (s *Server) Handler() http.Handler {
 		respond(w, 200, map[string]string{"status": "ok"})
 	})
 	api := http.NewServeMux()
-	api.HandleFunc("GET /v1/me", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]any{"agent": principal(r)}) })
+	api.HandleFunc("GET /v1/me", func(w http.ResponseWriter, r *http.Request) {
+		respond(w, 200, map[string]any{"agent": principal(r), "server_build": s.buildInformation()})
+	})
 	api.HandleFunc("GET /v1/workspace/stream", s.workspaceStream)
 	api.HandleFunc("GET /v1/navigation", s.navigation)
 	api.HandleFunc("PUT /v1/channels/{channel}/read", s.markChannelRead)
