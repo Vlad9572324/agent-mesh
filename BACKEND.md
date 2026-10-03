@@ -67,6 +67,34 @@ Admin authorization rechecks the current owner key within the transaction, holdi
 
 Successful owner administration and local CLI owner-bootstrap/key operations commit their audit record with the state change. Audit actors distinguish the authenticated owner ID from `local-cli`. Metadata is a typed allowlist of IDs, role, scope and access; names, runtime strings, content, secrets, hashes and raw errors are excluded. Audit failure rolls back the mutation. File publication necessarily precedes the final credential transaction commit; on that exceptional commit failure, the newly published key may be unusable and the CLI reports failure.
 
+## Owner delivery deadline alerts
+
+[Delivery deadline alerts](docs/delivery-alerts.md) are derived on authenticated
+owner GET requests, independently of model availability. The additive singleton
+policy starts disabled with acknowledgement/reply deadlines of 300/1,800 seconds.
+`GET /v1/admin/delivery-policy` returns it; strict `PUT` uses `expected_version`,
+the existing management/key locks and atomic `delivery_policy.update` audit.
+Enabling establishes a server-time cutoff; editing while enabled preserves it.
+Re-enabling starts a new cutoff. No historical alert rows, scheduler or messages
+are created.
+
+`GET /v1/admin/delivery-alerts` returns active-project overdue explicit-recipient
+pairs. Native seen/accepted, legacy delivered/accepted, or an immutable same-channel
+reply by that recipient explicitly addressed back to the author satisfies
+acknowledgement. Offered alone does not. A qualifying reply clears both deadlines;
+otherwise unacknowledged takes priority, then unanswered if its deadline is enabled.
+Native and legacy timestamps remain independent. Revoked or deauthorized recipients
+remain visible as unresolved; archive hides derived alerts and permanent deletion
+requires no extra cleanup table. No bodies, report text, sessions or keys are returned.
+
+Each read rechecks actual owner role/key in a five-second repeatable-read snapshot.
+Oldest-first keyset pages bind reader/key, policy version and the first-page deadline
+window (`as_of`). `generated_at` identifies the current evidence observation.
+Reports and visibility are rechecked on every page; current results can shrink.
+A policy change rejects the cursor with 409. The GUI must poll for elapsed deadlines;
+SSE does not emit a new event merely because a deadline passed. See the
+[wire contract](delivery-alert-contract.json) for precise fields and limits.
+
 ## Project archive, restore and permanent deletion
 
 `project-lifecycle-contract.json` specifies the exact lifecycle API. The additive migration adds nullable `archived_at` and a nonnegative `lifecycle_version` (initially 0) without modifying existing content, memberships, identities or keys. Admin overview includes these fields for both active and archived projects. `GET /v1/projects` lists only active projects for all identities, including the owner.

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "scope": "Owner-only server-time delivery deadlines derived from durable messages, attributed acknowledgements and direct replies. No background worker, model dispatch, redispatch, email or completion claim.",
+  "routes": {
+    "GET /v1/admin/delivery-policy": {
+      "query": "No query parameters.",
+      "response": {"policy": {"enabled": false, "ack_timeout_seconds": 300, "reply_timeout_seconds": 1800, "enabled_at": null, "updated_at": "RFC3339 server timestamp", "version": 0}}
+    },
+    "PUT /v1/admin/delivery-policy": {
+      "body": {"enabled": "required boolean", "ack_timeout_seconds": "required integer 60..86400", "reply_timeout_seconds": "required integer: 0 disables reply deadline, otherwise ack_timeout_seconds..604800", "expected_version": "required nonnegative integer"},
+      "response": "200 {policy}, same fields as GET; successful updates increment version, including identical values. Strict unique exact fields; unknown, missing or null fields are rejected.",
+      "concurrency": "409 on stale expected_version. The fresh owner key is checked under the existing management lock. Policy update and content-free delivery_policy.update admin audit commit together; audit failure rolls back.",
+      "cutoff": "false-to-true enable sets enabled_at from server time. Editing an enabled policy preserves its cutoff. Disabling retains its prior cutoff for inspection; re-enabling starts a new cutoff. Only messages created at or after enabled_at are eligible. Initial policy is disabled, version 0."
+    },
+    "GET /v1/admin/delivery-alerts": {
+      "query": "Only limit (default 50, 1..100) and opaque cursor. Single nonempty value per parameter. Raw query <=4096 bytes; cursor <=2048 bytes.",
+      "response": {
+        "alerts": [{"message_id": "id", "message_seq": 1, "project_id": "id", "channel_id": "id", "author_id": "id", "recipient_id": "id", "created_at": "RFC3339", "due_at": "RFC3339", "reason": "unacknowledged|unanswered", "offered_at": null, "seen_at": null, "accepted_at": null, "delivered_at": null, "legacy_accepted_at": null, "answered_at": null}],
+        "total": "Exact count of current unresolved eligible pairs in the as_of deadline window, before cursor filtering.",
+        "truncated": "boolean; more matching rows remain after this page",
+        "next_cursor": "opaque string if truncated, otherwise null",
+        "generated_at": "Current response database transaction timestamp; evidence/visibility observation time",
+        "as_of": "First-page server deadline/message upper bound; preserved by cursor pages",
+        "policy": "Current policy in the same repeatable-read snapshot"
+      },
+      "order": "created_at ASC, message_id ASC, recipient_id ASC. Alert identity is (message_id, recipient_id); reason can change.",
+      "pagination": "Cursor is authenticated using the requesting key, bound to reader, policy version, deadline as_of and last ordering tuple. Invalid/foreign cursor is 400; changed policy is 409, never a silent first-page restart. First page as_of equals generated_at. Later pages freeze deadline eligibility, not report history: new acknowledgements, replies, archive or deletion can remove/change alerts and total. Refresh without cursor opens the current deadline window. Cursor survives server restart while the key and policy remain unchanged.",
+      "disabled": "alerts=[], total=0, truncated=false, next_cursor=null; policy and server timestamps still returned."
+    }
+  },
+  "evidence": {
+    "recipients": "Only explicit original message recipient_ids. Broadcast original messages have no recipient alerts. Recipient key revocation or ACL removal does not erase unresolved owner-visible alerts.",
+    "native": "offered_at, seen_at, accepted_at independently aggregate each recipient's first same-channel inbox.offered/inbox.seen/inbox.accepted reports. Acceptance never invents seen or offered; these remain attributed client reports, not server-verified model execution.",
+    "legacy": "delivered_at and legacy_accepted_at are the actual independent legacy receipt timestamps. Never copied into native fields. Offered alone, uncertain alone, GUI read positions and presence are not acknowledgement.",
+    "acknowledgement": "Any native seen/accepted, legacy delivered/accepted, or qualifying direct answer satisfies acknowledgement. Until then the overdue reason is unacknowledged, even if the reply deadline has also passed.",
+    "answer": "An immutable message with reply_to equal to the original message ID, in the same channel, authored by that exact recipient and explicitly addressed back to the original author. Other actors, channels, destinations and broadcast replies do not count. A qualifying reply clears both deadline alerts without fabricating any native or legacy timestamp.",
+    "deadlines": "Both deadlines are measured from original message created_at, inclusive at due_at <= as_of. Once acknowledged, an overdue configured reply deadline gives unanswered. Actual answer clears both. answered_at remains null on unresolved returned rows.",
+    "visibility": "Only active projects. Archive hides derived alerts; restore may expose still-unresolved eligible messages. Permanent deletion removes the underlying facts without separate alert rows or policy changes."
+  },
+  "authorization": "Authenticated owner only; missing/revoked key 401, agent/viewer 403. Every read checks actual owner role and current key inside a repeatable-read transaction with a five-second context deadline. No owner impersonation or receipt writes.",
+  "privacy": "Response contains only allowlisted IDs, sequence, reasons and timestamps. No message body, report text, session, runtime, credential or key hash. No persisted alert history or notification acknowledgement state.",
+  "observation": "Alerts are derived on GET even when models are offline. Deadline passage does not append a journal/SSE event; a GUI must refresh on a bounded timer and foreground return. A closed browser is not an external notification service."
+}
