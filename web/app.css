@@ -178,6 +178,9 @@ h1 { font-size: 30px; font-weight: 650; letter-spacing: -.85px; line-height: 1.2
 .receipt-state[data-confirmed=true] { color: var(--green); }
 .receipt-state[data-uncertain=true] { color: var(--warning); }
 .receipt-state[data-confirmed=false] { color: var(--muted); }
+.receipt-source { margin-top: 7px; font-weight: 600; }
+.native-receipt { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.receipt-boundary { margin-top: 5px; font-size: 11px; line-height: 1.6; color: var(--muted); }
 .reply-action { color: var(--accent); font-size: 12px; }
 .composer { padding: 20px 24px; background: #f8fafb; }
 .composer > label, .note-form > label, .login-panel label, .admin-form label { font-size: 13px; }

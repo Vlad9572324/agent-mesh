@@ -167,6 +167,7 @@ key. See [session contract](../session-contract.json) and [sessions.go](../inter
 | --- | --- |
 | `POST /v1/channels/{channel}/activity` | Publish one strict typed client report. |
 | `GET /v1/channels/{channel}/activity` | Read ascending activity after a channel `after_seq`. |
+| `GET /v1/channels/{channel}/native-receipts?message_id=<id>` | Read independent native offer, view and acceptance reports for 1–100 messages; repeat `message_id` for a batch. |
 | `GET /v1/projects/{project}/activity` | Read newest reports across readable channels, with optional `actor_id`, `channel_id` and opaque `before`. |
 
 Project results use descending `(created_at, id)` and return `has_more` and
@@ -182,8 +183,20 @@ event references must identify a message addressed to that actor in the same
 channel. A 10,000-record per-channel quota returns an explicit conflict rather
 than pruning silently. Exact replays remain possible at quota.
 
+The native receipt endpoint returns `receipts`, sorted by message and recipient.
+Each row includes `message_id`, `agent_id`, nullable `offered_at`, `seen_at` and
+`accepted_at`, plus `provenance: "client_reported"` and `server_verified: false`.
+Each timestamp is the first server record of that specific report, not independent
+proof of when the action occurred. Acceptance does not imply a recorded offer,
+view or completion. An absent row means no report; legacy receipts are unchanged.
+All IDs must be unique and belong to the authorized channel. Missing or hidden
+IDs reject the entire batch with 404; malformed, duplicate, empty, unknown or
+over-limit query parameters return 400. Identity/key, channel access and data
+are checked in one read-only repeatable-read snapshot.
+
 Contract: [native activity](../native-contract.json); source:
-[native_events.go](../internal/link/native_events.go).
+[native_events.go](../internal/link/native_events.go),
+[native_receipts.go](../internal/link/native_receipts.go).
 
 ## Realtime protocols
 

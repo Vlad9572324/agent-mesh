@@ -3,6 +3,7 @@
 // seed credentials, agentlink_e2e dependency, production URL or model invocation.
 // Run only after the backend/web changes are integrated: node tests/project_native_gui.mjs
 // Focused quiet-feed regression: node tests/project_native_gui.mjs --quiet-only
+// Focused sender receipt regression: node tests/project_native_gui.mjs --receipts-only
 import {readFile, writeFile, mkdtemp, mkdir, copyFile, rm, open, lstat} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
@@ -16,6 +17,8 @@ import {runtimeDir, certificateFile, browserExecutable} from '../scripts/operato
 process.umask(0o077);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const quietOnly = process.argv.includes('--quiet-only');
+const receiptsOnly = process.argv.includes('--receipts-only');
+if (quietOnly && receiptsOnly) throw new Error('Choose one focused browser suite');
 const technicalTypes = new Set(['session.started', 'session.ended', 'turn.started', 'turn.completed',
   'tool.started', 'tool.completed', 'agent.waiting', 'inbox.offered']);
 const quietTechnical = [], quietImportant = [];
@@ -28,6 +31,7 @@ const allowedBrowserRequest = item => item.method === 'GET' || item.method === '
 const report = {run, schema, database: 'agentlink_test', started_at: new Date().toISOString(), cases: [], assets: {},
   browser_errors: [], requests: [], layouts: [], screenshots: [], models_started: 0,
   scope: 'Owned isolated schema, loopback TLS API and Chromium; no shared fixture keys or production requests'};
+report.mode = receiptsOnly ? 'native-receipts' : quietOnly ? 'quiet' : 'project-feed';
 const tabs = [], keys = {}, secrets = new Set(), publicEvents = [], privateEvents = [];
 const js = JSON.stringify, pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -151,6 +155,7 @@ async function fixtures() {
     for (const name of ['alpha', 'beta', 'quiet', 'other-channel']) await grant(actor, 'channel', name, access);
   }
   await grant('writer', 'channel', 'private', 'write');
+  if (receiptsOnly) return;
   oldQuiet = await activity('session.ended', 'quiet', 'peer');
   // Backdate only this owned schema's fixture to check stale-event truthfulness
   // without waiting five minutes or altering production/browser wall clocks.
@@ -176,7 +181,12 @@ class CDP {
         const {request, requestId} = message.params, url = new URL(request.url);
         const deny = url.origin !== new URL(base).origin || !allowedBrowserRequest({method: request.method, path: url.pathname, tab: name});
         if (deny) report.browser_guard_failed = true;
-        void this.call(deny ? 'Fetch.failRequest' : 'Fetch.continueRequest', deny ? {requestId, errorReason: 'BlockedByClient'} : {requestId}).catch(() => {});
+        if (!deny && receiptsOnly && this.failNextNativeReceipt && url.pathname.endsWith('/native-receipts')) {
+          this.failNextNativeReceipt = false;
+          // One explicit browser-boundary fault, restricted to the owned origin.
+          // The next refresh again receives the real authenticated aggregate.
+          void this.call('Fetch.fulfillRequest', {requestId, responseCode: 503, body: ''}).catch(() => {});
+        } else void this.call(deny ? 'Fetch.failRequest' : 'Fetch.continueRequest', deny ? {requestId, errorReason: 'BlockedByClient'} : {requestId}).catch(() => {});
       }
       if (message.method === 'Network.requestWillBeSent') {
         const req = message.params.request, url = new URL(req.url);
@@ -241,6 +251,11 @@ async function browsers() {
     const tab = new CDP(targets.find(item => item.id === target.targetId).webSocketDebuggerUrl, actor); tabs.push(tab);
     for (const method of ['Page.enable', 'Runtime.enable', 'Network.enable']) await tab.call(method);
     await tab.call('Page.addScriptToEvaluateOnNewDocument', {source: testingTransport});
+    if (receiptsOnly) {
+      // Isolate the actual SSE refresh path: suppress only the eight-second
+      // fallback poll, while preserving all fetch/timeout/refresh behavior.
+      await tab.call('Page.addScriptToEvaluateOnNewDocument', {source: `(()=>{const timeout=window.setTimeout.bind(window);window.__suppressedPolls=0;window.setTimeout=(fn,delay,...args)=>{if(delay===8000){window.__suppressedPolls++;return timeout(()=>{},delay);}return timeout(fn,delay,...args);};})()`});
+    }
     await tab.call('Fetch.enable', {patterns: [{urlPattern: '*', requestStage: 'Request'}]});
     await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
     await tab.call('Page.navigate', {url: new URL('?lang=ru', base).href}); await tab.wait(`document.readyState==='complete' && !!document.getElementById('nav-project-native')`, 'project feed page', 15000);
@@ -254,7 +269,7 @@ async function login(tab, actor) {
   await project(tab);
   // The historical regression deliberately inspects every archived event.
   // The quiet regression keeps the product's default until testing the toggle.
-  if (!quietOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
+  if (!quietOnly && !receiptsOnly && !await tab.eval(`document.getElementById('project-native-technical').checked`)) await tab.click('#project-native-technical');
 }
 async function project(tab, name = 'project') {
   await tab.click(`#project-switcher [data-focus-key="project:${ids[name]}"]`);
@@ -279,6 +294,85 @@ async function screenshot(tab, label, width) {
 async function stopChild(child) {
   for (const signal of ['SIGTERM', 'SIGKILL']) if (child?.pid && child.exitCode === null && child.signalCode === null) { child.kill(signal); await Promise.race([new Promise(resolveExit => child.once('exit', resolveExit)), pause(2500)]); }
   return !child || !child.pid || child.exitCode !== null || child.signalCode !== null;
+}
+
+async function receiptCases() {
+  let reference, acceptedOnly, legacyBefore;
+  const article = item => `document.querySelector('#message-list article[data-message-id="${item.id}"]')`;
+  const summary = item => `${article(item)}?.querySelector('.receipt-summary')?.textContent || ''`;
+  const state = item => `${article(item)}?.querySelector('[data-native-receipt]')?.dataset.nativeReceipt`;
+  await check('sender initially sees stored message with no native or legacy acceptance', async () => {
+    await isolatedServer(); await fixtures();
+    reference = await message('alpha', 'Sender receipt: offered then viewed through real SSE', 'writer');
+    acceptedOnly = await message('alpha', 'Acceptance report must not invent offered, viewed or completion', 'writer');
+    legacyBefore = JSON.stringify(reference.receipts);
+    assert((reference.receipts || []).every(row => !row.delivered_at && !row.accepted_at && !row.uncertain_at), 'Fixture legacy state was already confirmed');
+    await browsers();
+    await writer.click(`#channel-list [data-focus-key="channel:${ids.alpha}"]`);
+    await writer.wait(`${state(reference)}==='none' && !document.getElementById('refresh-button').disabled`, 'sender message loaded');
+    assert(/доставка не подтверждена/.test(await writer.eval(summary(reference))), 'Missing reports falsely confirmed delivery');
+    assert(await writer.eval(`window.__suppressedPolls>0 && document.getElementById('connection-state').dataset.state==='connected'`), 'Real SSE connection not established or fallback poll not disabled');
+  });
+  await check('offered report changes sender summary through SSE without claiming viewed', async () => {
+    await activity('inbox.offered', 'alpha', 'peer', reference.id);
+    await writer.wait(`${state(reference)}==='offered'`, 'SSE offered receipt');
+    const text = await writer.eval(summary(reference));
+    assert(/предложено CLI.*по отчёту коннектора/.test(text) && !/просмотрено|принято/.test(text), 'Offered became viewed or accepted');
+    assert(await writer.eval(`${article(reference)}.querySelector('[data-native-stage="seen"]').dataset.confirmed==='false'`), 'Offered synthesized viewed stage');
+  });
+  await check('viewed report replaces unconfirmed primary status while preserving legacy data and localization', async () => {
+    await activity('inbox.seen', 'alpha', 'peer', reference.id);
+    await writer.wait(`${state(reference)}==='seen'`, 'SSE viewed receipt');
+    assert(/просмотрено.*по отчёту коннектора/.test(await writer.eval(summary(reference))), 'Sender did not see native viewed report');
+    assert(!/не подтверждена/.test(await writer.eval(summary(reference))), 'Primary summary still says delivery unconfirmed');
+    const current = (await api(`/v1/messages/${reference.id}`, 'GET', undefined, 'writer')).message;
+    assert(JSON.stringify(current.receipts) === legacyBefore, 'Native report rewrote legacy receipt data');
+    await writer.click(`#message-list article[data-message-id="${reference.id}"] .receipt-summary`);
+    assert(await writer.eval(`${article(reference)}.textContent.includes('первую запись каждого отчёта сервером') && ${article(reference)}.textContent.includes('Подтверждения адаптера')`), 'Report time semantics or separate legacy section absent');
+    await writer.filter('language-select', 'en');
+    assert(/viewed · connector report/.test(await writer.eval(summary(reference))), 'Receipt summary did not translate');
+    await screenshot(writer, 'native-receipts-sender-desktop', 1440);
+  });
+  await check('accepted-only report is not completion and leaves earlier stages unreported', async () => {
+    await activity('inbox.accepted', 'alpha', 'peer', acceptedOnly.id);
+    await writer.wait(`${state(acceptedOnly)}==='accepted'`, 'SSE accepted receipt');
+    assert(/accepted, not necessarily completed · connector report/.test(await writer.eval(summary(acceptedOnly))), 'Accepted summary lost completion boundary');
+    const stages = await writer.eval(`Array.from(${article(acceptedOnly)}.querySelectorAll('[data-native-stage]')).map(e=>[e.dataset.nativeStage,e.dataset.confirmed])`);
+    assert(JSON.stringify(stages) === JSON.stringify([['offered', 'false'], ['seen', 'false'], ['accepted', 'true']]), 'Accepted synthesized offered or viewed');
+    assert(writer.requests.some(item => item.path === `/v1/channels/${ids.alpha}/native-receipts` && new URLSearchParams(item.query).getAll('message_id').length === 2), 'Chat did not use aggregate loaded-message request');
+  });
+  await check('aggregate failure is visible in primary status and recovery reloads actual reports', async () => {
+    writer.failNextNativeReceipt = true; await writer.click('#refresh-button');
+    await writer.wait(`${state(reference)}==='unavailable' && !document.getElementById('refresh-button').disabled`, 'native aggregate unavailable');
+    const text = await writer.eval(summary(reference));
+    assert(/connector status unavailable/.test(text) && !/delivery unconfirmed|viewed/.test(text), 'Failure was hidden behind empty or old receipt status');
+    await writer.filter('language-select', 'ru');
+    assert(/статус коннектора недоступен/.test(await writer.eval(summary(reference))), 'Primary unavailable status was not translated');
+    await writer.click('#refresh-button');
+    await writer.wait(`${state(reference)}==='seen' && ${state(acceptedOnly)}==='accepted'`, 'actual aggregate recovered');
+    assert((await writer.eval(`${article(reference)}.textContent`)).includes('Подтверждения адаптера'), 'Russian details retained legacy jargon');
+    await writer.filter('language-select', 'en');
+  });
+  await check('late real aggregate cannot refill another channel; mobile and logout remain private', async () => {
+    await writer.eval(`window.__heldFeedReady=false;window.__holdNextProjectFeed=${js(`/v1/channels/${ids.alpha}/native-receipts`)}`);
+    await writer.click('#refresh-button'); await writer.wait('window.__heldFeedReady===true', 'real native aggregate response held');
+    await writer.click(`#channel-list [data-focus-key="channel:${ids.beta}"]`);
+    await writer.wait(`!document.getElementById('refresh-button').disabled && !${article(reference)}`, 'next channel ready');
+    await writer.eval('window.__releaseFeed()'); await pause(200);
+    assert(!await writer.eval(`!!${article(reference)}`), 'Late aggregate restored previous channel content');
+    await writer.click(`#channel-list [data-focus-key="channel:${ids.alpha}"]`);
+    await writer.wait(`${state(reference)}==='seen' && ${state(acceptedOnly)}==='accepted'`, 'receipt cache rebuilt in original channel');
+    await writer.click(`#message-list article[data-message-id="${reference.id}"] .receipt-summary`);
+    await writer.call('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
+    assert(await writer.eval('document.documentElement.scrollWidth<=innerWidth+1'), 'Receipt details overflow mobile viewport');
+    await screenshot(writer, 'native-receipts-sender-mobile-390', 390);
+    for (const tab of tabs) {
+      await tab.call('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false});
+      await tab.click('#logout-button');
+      await tab.wait(`!document.getElementById('login-panel').hidden && document.getElementById('message-list').textContent==='' && localStorage.length===0 && sessionStorage.length===0`, 'logout clears messages and reports');
+    }
+    assert(!report.browser_guard_failed && report.browser_errors.length === 0 && report.requests.every(allowedBrowserRequest), 'Browser runtime or request-boundary failure');
+  });
 }
 
 async function quietCases() {
@@ -414,7 +508,9 @@ async function quietCases() {
 }
 
 try {
-  if (quietOnly) {
+  if (receiptsOnly) {
+    await receiptCases();
+  } else if (quietOnly) {
     await quietCases();
   } else {
   await check('owned schema TLS fixtures and browser load latest project events without choosing a channel', async () => {
@@ -546,7 +642,7 @@ try {
   if (profile && report.owned_browser_stopped) await rm(profile, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   if (scratch && report.owned_server_stopped && report.owned_schema_removed) await rm(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
   report.finished_at = new Date().toISOString();
-  report.success = report.cases.length === (quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
+  report.success = report.cases.length === (receiptsOnly ? 6 : quietOnly ? 7 : 10) && report.cases.every(item => item.passed) && report.owned_browser_stopped && report.owned_server_stopped && report.owned_schema_removed && report.source_test_DSN_unchanged;
   const output = directory ? `${directory}/evidence.json` : `${runtime}/evidence/project-native-gui-setup-failed.json`;
   let serialized = JSON.stringify(report, null, 2) + '\n'; for (const key of secrets) serialized = serialized.replaceAll(key, '[REDACTED]');
   await writeFile(output, serialized, {mode: 0o600, flag: 'wx'});

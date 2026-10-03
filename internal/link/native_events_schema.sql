@@ -34,3 +34,6 @@ DO $$ DECLARE constraint_row record; BEGIN
    replace(constraint_row.definition, '''inbox.offered''::text', '''inbox.offered''::text, ''inbox.seen''::text'));
  END LOOP;
 END $$;
+-- Batched message receipt reads must not scan unrelated lifecycle telemetry.
+CREATE INDEX IF NOT EXISTS native_activity_message_receipts
+ ON native_activity(channel_id,message_id) WHERE message_id IS NOT NULL;

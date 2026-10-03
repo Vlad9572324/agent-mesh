@@ -150,6 +150,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /v1/projects/{project}/agents", s.agents)
 	api.HandleFunc("GET /v1/projects/{project}/map", s.projectMap)
 	api.HandleFunc("GET /v1/channels/{channel}/messages", s.messages)
+	api.HandleFunc("GET /v1/channels/{channel}/native-receipts", s.nativeReceipts)
 	api.HandleFunc("POST /v1/channels/{channel}/messages", s.postMessage)
 	api.HandleFunc("GET /v1/messages/{message}", s.message)
 	api.HandleFunc("POST /v1/messages/{message}/receipts", s.receipt)

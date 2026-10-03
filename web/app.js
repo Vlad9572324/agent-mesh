@@ -229,6 +229,20 @@
     "accepted, not necessarily completed": "принято, не означает выполнено",
     "delivered": "доставлено",
     "stored, delivery unconfirmed": "сохранено, доставка не подтверждена",
+    "viewed · connector report": "просмотрено · по отчёту коннектора",
+    "accepted, not necessarily completed · connector report": "принято, не обязательно выполнено · по отчёту коннектора",
+    "offered to the CLI · connector report": "предложено CLI · по отчёту коннектора",
+    "Legacy: {0}": "Подтверждение адаптера: {0}",
+    "Legacy confirmations": "Подтверждения адаптера",
+    "Connector reports": "Отчёты коннектора",
+    "No connector report": "Нет отчёта коннектора",
+    "Connector reports have not been loaded yet.": "Отчёты коннектора ещё не загружены.",
+    "connector status unavailable": "статус коннектора недоступен",
+    "Connector reports are unavailable; native status is unknown.": "Статус коннектора недоступен: отчёты не удалось получить.",
+    "Offered to the CLI": "Предложено CLI",
+    "Viewed": "Просмотрено",
+    "Reported acceptance": "Сообщено о приёме",
+    "According to the connector; not independently verified by the server. Times show the first server record of each report. Offered, viewed and accepted are separate reports; none proves completion.": "По отчёту коннектора; сервер независимо не проверял действие. Время показывает первую запись каждого отчёта сервером. Предложение, просмотр и приём — отдельные отчёты; ни один не доказывает выполнение.",
     "Stored in the channel · no adapter invocation": "Сохранено в канале · без вызова адаптера",
     "ID {0} · seq {1} · stored {2}": "ID {0} · seq {1} · сохранено {2}",
     "Stored": "Сохранено",
@@ -739,6 +753,7 @@
   const state = {
     key: "", me: null, projects: [], channels: [], agents: [], notes: [], notesTruncated: false,
     project: null, channel: null, view: "chat", messages: new Map(), events: new Map(),
+    nativeReceipts: new Map(), nativeReceiptIDs: new Set(), nativeReceiptsChannel: "", nativeReceiptsStatus: "pending", nativeReceiptsSeq: 0,
     nativeActivity: new Map(), nativeSeq: 0, nativeReady: false, nativeMore: false, nativeWindowAfter: 0,
     cursors: new Map(), messageSeq: 0, context: 0, authVersion: 0,
     requests: new Set(), stream: null, reconnectTimer: null, refreshTimer: null,
@@ -921,6 +936,7 @@
 
   function stopNetwork(endSession = false) {
     state.context += 1;
+    clearNativeReceipts();
     for (const controller of state.requests) controller.abort();
     state.requests.clear();
     clearTimeout(state.refreshTimer); state.refreshTimer = null;
@@ -1286,6 +1302,111 @@
     if (!recipients.length) appendOwned($("recipient-list"), () => (node("p", "field-help", () => (tr("No other available agents in this channel.")))));
   }
 
+  function clearNativeReceipts() {
+    state.nativeReceiptsSeq += 1;
+    state.nativeReceipts = new Map(); state.nativeReceiptIDs = new Set();
+    state.nativeReceiptsChannel = ""; state.nativeReceiptsStatus = "pending";
+  }
+
+  function nativeReceiptTime(value) {
+    if (value === null) return true;
+    if (typeof value !== "string") return false;
+    const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(value);
+    if (!match || !Number.isFinite(Date.parse(value))) return false;
+    const month = Number(match[2]), day = Number(match[3]);
+    return month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(Number(match[1]), month, 0)).getUTCDate();
+  }
+
+  function validateNativeReceipts(data, messages, channelId) {
+    if (!data || !Array.isArray(data.receipts)) throw new Error("Invalid native receipt snapshot");
+    const scope = new Map(messages.map(message => [message.id, message]));
+    const result = new Map();
+    for (const row of data.receipts) {
+      const message = row && scope.get(row.message_id);
+      if (!message || message.channel_id !== channelId || typeof row.agent_id !== "string" ||
+          !list(message.recipient_ids).includes(row.agent_id) || row.provenance !== "client_reported" || row.server_verified !== false ||
+          ![row.offered_at, row.seen_at, row.accepted_at].every(nativeReceiptTime) ||
+          ![row.offered_at, row.seen_at, row.accepted_at].some(Boolean)) throw new Error("Out-of-scope or invalid native receipt");
+      if (!result.has(message.id)) result.set(message.id, new Map());
+      const recipients = result.get(message.id);
+      if (recipients.has(row.agent_id)) throw new Error("Duplicate native receipt");
+      recipients.set(row.agent_id, {offered_at: row.offered_at, seen_at: row.seen_at, accepted_at: row.accepted_at});
+    }
+    return result;
+  }
+
+  async function loadNativeReceipts(context, channelId) {
+    const authVersion = state.authVersion, request = ++state.nativeReceiptsSeq;
+    const valid = () => current(context) && authVersion === state.authVersion && state.channel?.id === channelId && request === state.nativeReceiptsSeq;
+    if (!valid()) return;
+    const messages = [...state.messages.values()].filter(message => message.channel_id === channelId);
+    const receipts = new Map();
+    try {
+      for (let index = 0; index < messages.length; index += 100) {
+        const batch = messages.slice(index, index + 100);
+        const query = batch.map(message => `message_id=${pathId(message.id)}`).join("&");
+        const data = await api(`/v1/channels/${pathId(channelId)}/native-receipts?${query}`);
+        if (!valid()) return;
+        for (const [id, rows] of validateNativeReceipts(data, batch, channelId)) receipts.set(id, rows);
+      }
+      if (!valid()) return;
+      // Messages are immutable, but access/context and the loaded window can change
+      // while a batch is in flight. Never attach old reports to a replaced scope.
+      for (const message of messages) {
+        const loaded = state.messages.get(message.id);
+        if (!loaded || loaded.channel_id !== channelId || list(message.recipient_ids).some(id => !list(loaded.recipient_ids).includes(id))) return;
+      }
+      state.nativeReceipts = receipts; state.nativeReceiptIDs = new Set(messages.map(message => message.id));
+      state.nativeReceiptsChannel = channelId; state.nativeReceiptsStatus = "ready";
+    } catch (error) {
+      if (!valid()) return;
+      state.nativeReceipts = new Map(); state.nativeReceiptIDs = new Set();
+      state.nativeReceiptsChannel = channelId; state.nativeReceiptsStatus = "unavailable";
+      // Preserve the existing access-loss clearing path; a denied aggregate is
+      // never interpreted as an empty set of reports.
+      if ([401, 403, 404].includes(error.status)) throw error;
+    }
+  }
+
+  function nativeReceiptFor(message, agentId) {
+    if (state.nativeReceiptsChannel !== message.channel_id || state.channel?.id !== message.channel_id ||
+        !list(message.recipient_ids).includes(agentId)) return null;
+    return state.nativeReceipts.get(message.id)?.get(agentId) || null;
+  }
+
+  function messageReceiptSummary(message, agentId) {
+    const receipt = list(message.receipts).find(item => item.agent_id === agentId) || {};
+    const native = nativeReceiptFor(message, agentId);
+    const legacy = receipt.uncertain_at ? tr("⚠ uncertain") : receipt.accepted_at ? tr("accepted, not necessarily completed") : receipt.delivered_at ? tr("delivered") : null;
+    const report = native?.accepted_at ? tr("accepted, not necessarily completed · connector report") : native?.seen_at ? tr("viewed · connector report") : native?.offered_at ? tr("offered to the CLI · connector report") : null;
+    if (report && legacy) return joinText([report, tr("Legacy: {0}", legacy)], " · ");
+    if (!report && state.nativeReceiptsChannel === message.channel_id && state.channel?.id === message.channel_id && state.nativeReceiptsStatus === "unavailable") {
+      const unavailable = tr("connector status unavailable");
+      return legacy ? joinText([legacy, unavailable], " · ") : unavailable;
+    }
+    return report || legacy || tr("stored, delivery unconfirmed");
+  }
+
+  function renderNativeReceipt(message, agentId) {
+    const section = node("div", "native-receipt");
+    const native = nativeReceiptFor(message, agentId);
+    const status = state.nativeReceiptsChannel === message.channel_id ? state.nativeReceiptsStatus : "pending";
+    const loaded = status === "ready" && state.nativeReceiptIDs.has(message.id);
+    section.dataset.nativeReceipt = native?.accepted_at ? "accepted" : native?.seen_at ? "seen" : native?.offered_at ? "offered" : loaded ? "none" : status === "unavailable" ? "unavailable" : "pending";
+    appendOwned(section, () => node("p", "receipt-source", () => tr("Connector reports")));
+    if (loaded) {
+      const statuses = node("div", "receipt-states");
+      for (const [stage, name, time] of [["offered", tr("Offered to the CLI"), native?.offered_at], ["seen", tr("Viewed"), native?.seen_at], ["accepted", tr("Reported acceptance"), native?.accepted_at]]) {
+        const item = node("span", "receipt-state", () => formatText(["", ": ", ""], name, time ? dateText(time) : tr("No connector report")));
+        item.dataset.confirmed = String(Boolean(time)); item.dataset.nativeStage = stage;
+        appendOwned(statuses, () => item);
+      }
+      appendOwned(section, () => statuses);
+    } else appendOwned(section, () => node("p", "", () => status === "unavailable" ? tr("Connector reports are unavailable; native status is unknown.") : tr("Connector reports have not been loaded yet.")));
+    appendOwned(section, () => node("p", "receipt-boundary", () => tr("According to the connector; not independently verified by the server. Times show the first server record of each report. Offered, viewed and accepted are separate reports; none proves completion.")));
+    return section;
+  }
+
   function renderMessages() {
     const messages = [...state.messages.values()].sort((a, b) => number(a.seq) - number(b.seq));
     const query = $("search-input").value.trim().toLocaleLowerCase(localeName());
@@ -1306,8 +1427,7 @@
       const recipients = list(message.recipient_ids);
       const summary = node("summary", "receipt-summary"); summary.dataset.focusKey = `receipt:${message.id}`;
       const receiptLabels = recipients.map((id) => {
-        const receipt = list(message.receipts).find((item) => item.agent_id === id) || {};
-        return formatText(["",": ",""], () => (displayName(id)), () => (receipt.uncertain_at ? tr("⚠ uncertain") : receipt.accepted_at ? tr("accepted, not necessarily completed") : receipt.delivered_at ? tr("delivered") : tr("stored, delivery unconfirmed")));
+        return formatText(["",": ",""], () => (displayName(id)), () => messageReceiptSummary(message, id));
       });
       setText(summary, () => (receiptLabels.length ? joinText(receiptLabels, " · ") : tr("Stored in the channel · no adapter invocation")));
       summary.dataset.uncertain = String(list(message.receipts).some((receipt) => receipt.uncertain_at));
@@ -1318,6 +1438,7 @@
           const receipt = list(message.receipts).find((item) => item.agent_id === id) || {};
           const row = node("div", "receipt-row");
           appendOwned(row, () => (node("span", "receipt-name", () => formatText(["", " · ", ""], displayName(id), id))));
+          appendOwned(row, () => renderNativeReceipt(message, id), () => node("p", "receipt-source", () => tr("Legacy confirmations")));
           const statuses = node("div", "receipt-states");
           for (const [name, time, uncertain] of [
             [tr("Stored"), message.created_at, false], [tr("Delivered"), receipt.delivered_at, false],
@@ -1937,6 +2058,7 @@
   }
 
   function clearChannelContent() {
+    clearNativeReceipts();
     clearNativeActivity();
     if (state.channel) { state.cursors.delete(state.channel.id); state.channelUpdates.delete(state.channel.id); }
     state.channel = null; state.messages.clear(); state.events.clear(); state.messageSeq = 0;
@@ -2029,6 +2151,8 @@
       for (const snapshot of snapshots) if (snapshot.message?.channel_id === channelId) state.messages.set(snapshot.message.id, snapshot.message);
     }
     if (!current(context)) return false;
+    await loadNativeReceipts(context, channelId);
+    if (!current(context) || state.channel?.id !== channelId) return false;
     for (const event of events) state.events.set(number(event.seq), event);
     while (state.events.size > 200) state.events.delete(Math.min(...state.events.keys()));
     // Advance only after REST replay and authorized snapshots succeed, never from SSE alone.
@@ -2896,6 +3020,7 @@
     for (const id of channelIds) state.cursors.delete(id);
     state.projects = state.projects.filter((project) => project.id !== projectId);
     if (!selected) return;
+    clearNativeReceipts();
     state.project = null; state.channel = null; state.channels = []; state.agents = []; state.notes = []; state.notesTruncated = false;
     clearOverview();
     clearProjectNative();

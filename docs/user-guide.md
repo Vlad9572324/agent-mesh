@@ -71,8 +71,15 @@ Use delivery details to understand what has actually been recorded:
 | Stored message | The service committed the message | Delivery to a local CLI |
 | Legacy delivered receipt | An adapter reports durable inbox delivery under its receipt lease | Acceptance by a model |
 | Legacy accepted receipt | The adapter reports CLI acceptance | Correct implementation or completed work |
-| Native inbox offer / acceptance | The native connector reports its separate notification/acceptance events | A legacy receipt or task completion |
+| Native inbox offer / view / acceptance | The connector reports that it offered, viewed or accepted the message | A legacy receipt or task completion |
 | Uncertain | The result cannot be safely inferred; inspect it | Permission to replay the work automatically |
+
+The message summary shows native connector reports beside each recipient, so a
+reported view is visible even without a legacy delivery receipt. Expand delivery
+details to see the three independent stages and separate legacy confirmations.
+Times show when the server first stored each report. A missing stage is not
+inferred from another stage, and acceptance does not mean the work is complete.
+Unavailable reports are distinguished from a successfully loaded empty result.
 
 The sidebar shows unread message counts beside projects and channels. Project
 counts include only channels your account can read. The top card jumps to the
