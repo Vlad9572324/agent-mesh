@@ -1,6 +1,7 @@
 package link
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"sort"
@@ -110,4 +111,86 @@ func (s *Server) nativeReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 200, map[string]any{"receipts": receipts})
+}
+
+// MessageDeliveryStatus is a convenience view of independent source facts.
+// Native reports never backfill legacy timestamps or prove task completion.
+type MessageDeliveryStatus struct {
+	AgentID string               `json:"agent_id"`
+	Status  string               `json:"status"`
+	Native  NativeDeliveryStatus `json:"native"`
+	Legacy  LegacyDeliveryStatus `json:"legacy"`
+	Reply   *DeliveryReply       `json:"reply"`
+}
+type NativeDeliveryStatus struct {
+	OfferedAt      *time.Time `json:"offered_at"`
+	SeenAt         *time.Time `json:"seen_at"`
+	AcceptedAt     *time.Time `json:"accepted_at"`
+	Provenance     string     `json:"provenance"`
+	ServerVerified bool       `json:"server_verified"`
+}
+type LegacyDeliveryStatus struct {
+	DeliveredAt *time.Time `json:"delivered_at"`
+	AcceptedAt  *time.Time `json:"accepted_at"`
+	UncertainAt *time.Time `json:"uncertain_at"`
+}
+type DeliveryReply struct {
+	MessageID string    `json:"message_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+const messageDeliveryQuery = `SELECT recipient.agent_id,n.offered_at,n.seen_at,n.accepted_at,reply.id,reply.created_at
+ FROM unnest($4::text[]) AS recipient(agent_id)
+ LEFT JOIN LATERAL (
+ SELECT min(created_at) FILTER (WHERE event_type='inbox.offered') AS offered_at,
+ min(created_at) FILTER (WHERE event_type='inbox.seen') AS seen_at,
+ min(created_at) FILTER (WHERE event_type='inbox.accepted') AS accepted_at
+ FROM native_activity WHERE message_id=$1 AND channel_id=$2 AND actor_id=recipient.agent_id
+ AND event_type IN ('inbox.offered','inbox.seen','inbox.accepted')
+ ) n ON true
+ LEFT JOIN LATERAL (
+ SELECT id,created_at FROM messages WHERE reply_to=$1 AND channel_id=$2
+ AND author_id=recipient.agent_id AND recipient_ids ? $3 ORDER BY created_at,id LIMIT 1
+ ) reply ON true ORDER BY recipient.agent_id`
+
+func loadMessageDelivery(ctx context.Context, q querier, m *Message) error {
+	statuses := []MessageDeliveryStatus{}
+	m.DeliveryStatus = &statuses
+	rows, err := q.Query(ctx, messageDeliveryQuery, m.ID, m.ChannelID, m.AuthorID, m.RecipientIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	legacy := map[string]Receipt{}
+	for _, r := range m.Receipts {
+		legacy[r.AgentID] = r
+	}
+	for rows.Next() {
+		item := MessageDeliveryStatus{Status: "stored", Native: NativeDeliveryStatus{Provenance: "client_reported"}}
+		var replyID *string
+		var repliedAt *time.Time
+		if err := rows.Scan(&item.AgentID, &item.Native.OfferedAt, &item.Native.SeenAt, &item.Native.AcceptedAt, &replyID, &repliedAt); err != nil {
+			return err
+		}
+		r := legacy[item.AgentID]
+		item.Legacy = LegacyDeliveryStatus{DeliveredAt: r.DeliveredAt, AcceptedAt: r.AcceptedAt, UncertainAt: r.UncertainAt}
+		if item.Native.OfferedAt != nil {
+			item.Status = "offered"
+		}
+		if r.DeliveredAt != nil {
+			item.Status = "delivered"
+		}
+		if item.Native.SeenAt != nil {
+			item.Status = "viewed"
+		}
+		if item.Native.AcceptedAt != nil || r.AcceptedAt != nil {
+			item.Status = "accepted"
+		}
+		if replyID != nil && repliedAt != nil {
+			item.Reply = &DeliveryReply{MessageID: *replyID, CreatedAt: *repliedAt}
+			item.Status = "replied"
+		}
+		statuses = append(statuses, item)
+	}
+	return rows.Err()
 }

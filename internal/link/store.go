@@ -333,16 +333,17 @@ type Receipt struct {
 	SessionID   string     `json:"session_id"`
 }
 type Message struct {
-	ID           string    `json:"id"`
-	ChannelID    string    `json:"channel_id"`
-	Seq          int64     `json:"seq"`
-	AuthorID     string    `json:"author_id"`
-	ClientID     string    `json:"client_id"`
-	Body         string    `json:"body"`
-	RecipientIDs []string  `json:"recipient_ids"`
-	ReplyTo      *string   `json:"reply_to"`
-	CreatedAt    time.Time `json:"created_at"`
-	Receipts     []Receipt `json:"receipts"`
+	ID             string                   `json:"id"`
+	ChannelID      string                   `json:"channel_id"`
+	Seq            int64                    `json:"seq"`
+	AuthorID       string                   `json:"author_id"`
+	ClientID       string                   `json:"client_id"`
+	Body           string                   `json:"body"`
+	RecipientIDs   []string                 `json:"recipient_ids"`
+	ReplyTo        *string                  `json:"reply_to"`
+	CreatedAt      time.Time                `json:"created_at"`
+	Receipts       []Receipt                `json:"receipts"`
+	DeliveryStatus *[]MessageDeliveryStatus `json:"delivery_status,omitempty"`
 }
 type Event struct {
 	Seq       int64     `json:"seq"`

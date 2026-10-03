@@ -176,8 +176,12 @@ Repeated inbox offers are not new messages. After reading, call `link_seen`;
 call `link_accept` only when accepting the work. Seen messages remain available
 with `link_inbox(include_seen=true)`. For a truncated preview, `link_message`
 returns the full authorized body. Native offered/seen/accepted activity and
-legacy `delivered_at`/`accepted_at` receipts are separate protocols: inspect the
-native activity feed for native delivery instead of waiting for legacy fields.
+legacy `delivered_at`/`accepted_at` receipts are separate protocols. As a sender,
+use `link_delivery` with the message ID: it shows both sources and any qualifying
+direct reply without requiring the sent message in your local inbox. The GUI
+already labels native reports separately. Empty legacy timestamps do not negate
+a native report. An empty/truncated hook preview includes an exact `full_text`
+`link_message` call; inspect that message before deciding what it says.
 
 An unavailable MCP tool and a denied MCP tool are different failures. Use the
 CLI's schema/tool discovery if it loads tools lazily, then inspect the exact

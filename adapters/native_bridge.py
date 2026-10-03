@@ -5,6 +5,7 @@ inside a SQLite transaction. Repeated publication is safe through server client
 IDs; an inbox offer is NOT acceptance and never touches legacy heartbeat/receipts.
 """
 from contextlib import contextmanager
+from datetime import datetime
 import base64
 import hashlib
 import json
@@ -454,13 +455,15 @@ class NativeBridge:
         except (ValueError, TypeError, UnicodeError, RecursionError):
             raise NativeError('invalid_inbox_cursor') from None
 
-    def offer_inbox(self, context_budget=6000, minimum_interval=0, include_seen=False, cursor=None):
+    def offer_inbox(self, context_budget=6000, minimum_interval=0, include_seen=False, cursor=None, full_text=False):
         if type(context_budget) is not int or not 512 <= context_budget <= 16000:
             raise NativeError('invalid_context_budget')
         if type(minimum_interval) is not int or not 0 <= minimum_interval <= 3600:
             raise NativeError('invalid_offer_interval')
         if type(include_seen) is not bool:
             raise NativeError('invalid_include_seen')
+        if type(full_text) is not bool:
+            raise NativeError('invalid_full_text_guidance')
         if cursor is not None and (type(cursor) is not str or len(cursor) > 2048):
             raise NativeError('invalid_inbox_cursor')
         allowed = self._authorize()
@@ -499,6 +502,8 @@ class NativeBridge:
                 body = item.pop('body')
                 item['body_preview'] = body.encode()[:2000].decode('utf-8', errors='ignore')
                 item['truncated'] = item['body_preview'] != body
+                if full_text:
+                    item['full_text'] = {'tool': 'link_message', 'arguments': {'message_id': row['id']}}
                 more = index + 1 < len(rows) if explicit else pending > index + 1
                 candidate = {**result, 'messages': result['messages'] + [item],
                              'has_more': more, 'offer_has_more': more,
@@ -517,6 +522,8 @@ class NativeBridge:
                     # or recipient metadata. The full record remains online via
                     # link_message. This ID really is included in the offer.
                     item = {'id': row['id'], 'body_preview': '', 'truncated': True, 'reference_only': True}
+                    if full_text:
+                        item['full_text'] = {'tool': 'link_message', 'arguments': {'message_id': row['id']}}
                     candidate['messages'] = result['messages'] + [item]
                     candidate['truncated'] = True
                 if len(canonical(candidate).encode()) > context_budget:
@@ -563,6 +570,63 @@ class NativeBridge:
         row, value = self._current_inbox_message(message_id)
         return {'message': value, 'seen': row['seen_at'] is not None, 'accepted': row['accepted_at'] is not None,
                 'untrusted_peer_data': True}
+
+    def delivery(self, message_id):
+        """Read source-separated delivery facts for a sent/addressed message."""
+        self._identifier(message_id)
+        allowed = self._authorize()
+        message = self._request('GET', '/v1/messages/' + message_id).get('message')
+        if (type(message) is not dict or message.get('id') != message_id
+                or not identifier(message.get('author_id'))):
+            raise NativeError('invalid_delivery_message')
+        channel = self._channel(message.get('channel_id'), allowed)
+        recipients = message.get('recipient_ids')
+        if (type(recipients) is not list or len(recipients) > 32
+                or not all(identifier(v) for v in recipients) or len(set(recipients)) != len(recipients)
+                or self.config['agent_id'] != message['author_id'] and self.config['agent_id'] not in recipients):
+            raise NativeError('delivery_message_not_sent_or_addressed')
+        rows = message.get('delivery_status')
+        if type(rows) is not list or len(rows) != len(recipients):
+            raise NativeError('delivery_status_unavailable')
+        def timestamp(value):
+            if value is None:
+                return True
+            if (type(value) is not str or not re.fullmatch(
+                    r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})', value)):
+                return False
+            try:
+                # Python 3.10 accepts microseconds; Go emits RFC3339Nano.
+                normalized = re.sub(r'\.(\d+)', lambda m: '.' + m.group(1).ljust(6, '0')[:6], value)
+                datetime.fromisoformat(normalized.replace('Z', '+00:00'))
+                return True
+            except ValueError:
+                return False
+        validated, found = [], set()
+        for row in rows:
+            if (type(row) is not dict or set(row) != {'agent_id', 'status', 'native', 'legacy', 'reply'}
+                    or row.get('agent_id') not in recipients or row['agent_id'] in found):
+                raise NativeError('invalid_delivery_status')
+            native, legacy, reply = row['native'], row['legacy'], row['reply']
+            if (type(native) is not dict or set(native) != {'offered_at', 'seen_at', 'accepted_at', 'provenance', 'server_verified'}
+                    or native['provenance'] != 'client_reported' or native['server_verified'] is not False
+                    or not all(timestamp(native[k]) for k in ('offered_at', 'seen_at', 'accepted_at'))
+                    or type(legacy) is not dict or set(legacy) != {'delivered_at', 'accepted_at', 'uncertain_at'}
+                    or not all(timestamp(v) for v in legacy.values())
+                    or reply is not None and (type(reply) is not dict or set(reply) != {'message_id', 'created_at'}
+                        or not identifier(reply['message_id']) or reply['message_id'] == message_id
+                        or reply['created_at'] is None or not timestamp(reply['created_at']))):
+                raise NativeError('invalid_delivery_status')
+            expected = ('replied' if reply else 'accepted' if native['accepted_at'] or legacy['accepted_at'] else
+                        'viewed' if native['seen_at'] else 'delivered' if legacy['delivered_at'] else
+                        'offered' if native['offered_at'] else 'stored')
+            if row['status'] != expected:
+                raise NativeError('invalid_delivery_status')
+            found.add(row['agent_id'])
+            validated.append(row)
+        return self.sanitize({'message_id': message_id, 'channel_id': channel, 'author_id': message['author_id'],
+            'recipient_ids': recipients, 'delivery_status': validated, 'untrusted_peer_data': True,
+            'boundary': 'Native reports, adapter confirmations and direct replies are independent. '
+                        'Adapter delivery is not viewing. Acceptance and a reply do not prove task completion.'})
 
     def seen_message(self, message_id):
         row, _ = self._current_inbox_message(message_id, write=True)

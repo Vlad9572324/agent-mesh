@@ -54,8 +54,9 @@ class FakeBridge:
             raise OSError(SECRET)
         return {"fetched": 1, "pending": 1, "has_more": False}
 
-    def offer_inbox(self, context_budget, minimum_interval=0):
+    def offer_inbox(self, context_budget, minimum_interval=0, full_text=False):
         self.shared.setdefault("budgets", []).append(context_budget)
+        self.shared.setdefault("guidance", []).append(full_text)
         self.shared.setdefault("minimum_intervals", []).append(minimum_interval)
         if self.shared.get("offline") or self.shared.get("fail_offer"):
             raise OSError(SECRET)
@@ -295,7 +296,7 @@ class RealBridgeHookTests(unittest.TestCase):
         finally:
             bridge.close()
 
-    def test_real_offer_more_than_twenty_short_messages_keeps_envelope(self):
+    def test_real_short_messages_keep_every_offered_id_and_guidance_in_budget(self):
         self.add_messages(25)
         bridge = self.factory(str(self.config_path), SESSION)
         try:
@@ -306,13 +307,45 @@ class RealBridgeHookTests(unittest.TestCase):
         result = self.hook()
         context = result["hookSpecificOutput"]["additionalContext"]
         data = json.loads(context.split("\n", 1)[1])
-        self.assertGreater(len(data["messages"]), 20)
+        self.assertGreater(len(data["messages"]), 0)
+        self.assertTrue(data["has_more"])
+        self.assertTrue(all(m["full_text"] == {"tool": "link_message", "arguments": {"message_id": m["id"]}} for m in data["messages"]))
         self.assertLessEqual(len(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode()), hooks.CONTEXT_BUDGET)
         bridge = self.factory(str(self.config_path), SESSION)
         try:
             self.assertEqual(bridge.db.execute("SELECT count(*) FROM inbox WHERE accepted_at IS NOT NULL").fetchone()[0], 0)
             offered = bridge.db.execute("SELECT count(*) FROM outbox WHERE payload LIKE '%inbox.offered%'").fetchone()[0]
             self.assertEqual(offered, len(data["messages"]))
+        finally:
+            bridge.close()
+        reached = {m['id'] for m in data['messages']}
+        for index in range(3):
+            if len(reached) == 25:
+                break
+            more = self.hook('next-safe-point-' + str(index))
+            page = json.loads(more['hookSpecificOutput']['additionalContext'].split('\n', 1)[1])
+            ids = {m['id'] for m in page['messages']}
+            self.assertFalse(reached & ids, 'cooldown must not repeat already offered IDs')
+            reached.update(ids)
+        self.assertEqual(reached, {'m' + str(i) for i in range(1, 26)})
+
+    def test_multibyte_truncated_preview_keeps_exact_full_text_call_and_budget(self):
+        self.add_messages(3, "ёж🐈" * 700)
+        result = self.hook()
+        context = result['hookSpecificOutput']['additionalContext']
+        data = json.loads(context.split('\n', 1)[1])
+        self.assertLessEqual(len(json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode()), hooks.CONTEXT_BUDGET)
+        self.assertLessEqual(len(json.dumps(result).encode()), hooks.MAX_OUTPUT_BYTES)
+        self.assertIn('NOT an empty message', context)
+        for item in data['messages']:
+            self.assertTrue(item['truncated'])
+            self.assertEqual(item['full_text'], {'tool': 'link_message', 'arguments': {'message_id': item['id']}})
+            self.assertNotIn('\ufffd', item['body_preview'])
+        bridge = self.factory(str(self.config_path), SESSION)
+        try:
+            reports = {json.loads(r[0])['message_id'] for r in bridge.db.execute("SELECT payload FROM outbox WHERE payload LIKE '%inbox.offered%'")}
+            self.assertEqual(reports, {item['id'] for item in data['messages']})
+            self.assertEqual(bridge.db.execute('SELECT count(*) FROM inbox WHERE seen_at IS NOT NULL OR accepted_at IS NOT NULL').fetchone()[0], 0)
         finally:
             bridge.close()
 
@@ -322,7 +355,8 @@ class RealBridgeHookTests(unittest.TestCase):
         result = self.hook()
         data = json.loads(result['hookSpecificOutput']['additionalContext'].split('\n', 1)[1])
         self.assertEqual([m['id'] for m in data['messages']], ['m1', 'm2'])
-        self.assertEqual(data['messages'][0], {'id': 'm1', 'body_preview': '', 'truncated': True, 'reference_only': True})
+        self.assertEqual(data['messages'][0], {'id': 'm1', 'body_preview': '', 'truncated': True, 'reference_only': True,
+            'full_text': {'tool': 'link_message', 'arguments': {'message_id': 'm1'}}})
         self.assertLessEqual(len(json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode()), hooks.CONTEXT_BUDGET)
         reports = {v['message_id'] for v in self.api.activity.values() if v['event_type'] == 'inbox.offered'}
         self.assertEqual(reports, {'m1', 'm2'})
@@ -418,6 +452,9 @@ class NativeHookFailureTests(unittest.TestCase):
             broken = offer()
             broken["messages"][0][field] = bad
             cases.append(broken)
+        forged = offer()
+        forged['messages'][0]['full_text'] = {'tool': 'link_accept', 'arguments': {'message_id': 'foreign'}}
+        cases.append(forged)
         cases.extend([offer("x" * hooks.CONTEXT_BUDGET),
                       {**offer(), "delivery": "accepted"}, {**offer(), "has_more": "yes"}])
         reference = {'id': 'message-1', 'body_preview': '', 'truncated': True, 'reference_only': True}

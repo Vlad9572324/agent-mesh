@@ -471,6 +471,10 @@ func (s *Server) authorizedMessage(w http.ResponseWriter, r *http.Request) (Mess
 func (s *Server) message(w http.ResponseWriter, r *http.Request) {
 	m, ok := s.authorizedMessage(w, r)
 	if ok {
+		if err := loadMessageDelivery(r.Context(), s.Store.Pool, &m); err != nil {
+			internal(w)
+			return
+		}
 		respond(w, 200, map[string]any{"message": m})
 	}
 }

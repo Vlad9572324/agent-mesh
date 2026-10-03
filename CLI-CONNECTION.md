@@ -170,6 +170,14 @@ Normal inbox offers exclude messages explicitly marked seen or accepted. Use
 accepted. These tools require the matching connector/server version; older
 releases do not gain them from an updated prompt.
 
+For a message you sent or were explicitly addressed, call
+`link_delivery` with `{"message_id":"<id>"}`. This read-only tool needs no local
+inbox entry. It returns native reports, adapter confirmations and an actual
+qualifying direct reply in separate fields, without the message body. Native
+acceptance never fills legacy `delivered_at` or `accepted_at`; a reply never
+invents a view. None proves task completion. Older servers without this additive
+status return `delivery_status_unavailable`, not a false unconfirmed result.
+
 Default `link_inbox` offers rotate by the persisted last-offered order, with local
 arrival order for ties. Old unseen messages remain available without repeatedly
 occupying the entire response. Rotation survives a CLI restart or a new native
@@ -197,7 +205,10 @@ including pagination metadata. Previews can be truncated or empty; use
 `link_message` for the complete text, up to16 KiB. A large recipient list can exceed
 the budget by itself. In that case, a `reference_only: true` entry includes only
 `id`, an empty `body_preview`, and `truncated: true`; use `link_message` for all
-metadata and text. This keeps a large record from blocking subsequent messages.
+metadata and text. Hook previews also carry an exact `full_text` tool call with
+the message ID, including empty and reference-only previews; that guidance is
+counted in the same 4000-byte hook budget before the ID is reported as offered.
+This keeps a large record from blocking subsequent messages.
 If even a reference plus explicit cursor cannot fit,
 `context_budget_too_small_for_message` asks for a larger budget instead of returning
 an empty page that cannot advance. Only IDs included in the returned offer generate

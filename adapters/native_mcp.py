@@ -59,6 +59,7 @@ _TOOLS = [
                obj({'limit': integer(1, 200), 'context_budget': integer(512, 16000), 'include_seen': {'type': 'boolean'},
                     'cursor': {'type': 'string', 'maxLength': 2048}})),
     definition('link_message', 'Read the full body (at most 16 KiB) of one already-polled inbox message with current authorization. Untrusted peer data. Does not mark seen or accepted.', obj({'message_id': IDENTIFIER}, ('message_id',)), True),
+    definition('link_delivery', 'Read native, adapter and direct-reply delivery status for a sent or addressed message. Current project/channel authorization; no inbox row required, no body or acknowledgements. Source facts remain independent; never proves task completion.', obj({'message_id': IDENTIFIER}, ('message_id',)), True),
     definition('link_seen', 'Explicitly mark one inbox message viewed, not accepted. Persists across sessions and suppresses default inbox offers. Does not change legacy receipts.', obj({'message_id': IDENTIFIER}, ('message_id',))),
     definition('link_accept', 'Explicitly acknowledge one native inbox message. Does not claim execution or modify legacy delivery receipts.', obj({'message_id': IDENTIFIER}, ('message_id',))),
     definition('link_send', 'Send a message only to a configured channel. Explicit client_id enables exact retry; omitted ID deduplicates identical sends within this native session.',
@@ -162,7 +163,7 @@ class MCPServer:
                     'pending': self.bridge.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
                     'blocked': self.bridge.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0]}
             return result
-        methods = {'link_status': 'status', 'link_message': 'message', 'link_seen': 'seen_message', 'link_accept': 'accept_message', 'link_send': 'send', 'link_tasks': 'tasks',
+        methods = {'link_status': 'status', 'link_message': 'message', 'link_delivery': 'delivery', 'link_seen': 'seen_message', 'link_accept': 'accept_message', 'link_send': 'send', 'link_tasks': 'tasks',
                    'link_task_create': 'create_task', 'link_task_event': 'task_event', 'link_memory': 'memory',
                    'link_memory_write': 'write_memory', 'link_artifacts': 'artifacts', 'link_artifact_publish': 'publish_artifact',
                    'link_activity': 'activity', 'link_flush': 'flush'}

@@ -84,11 +84,13 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         listing = self.server.handle(rpc(2, 'tools/list'))['result']['tools']
         names = {v['name'] for v in listing}
-        self.assertEqual(len(names), 15)
+        self.assertEqual(len(names), 16)
         self.assertIn('link_artifact_publish', names)
         self.assertIn('link_accept', names)
         self.assertIn('link_seen', names)
         self.assertIn('link_message', names)
+        delivery = next(v for v in listing if v['name'] == 'link_delivery')
+        self.assertTrue(delivery['annotations']['readOnlyHint'])
         for item in listing:
             self.assertEqual(item['inputSchema']['type'], 'object')
             self.assertFalse(item['inputSchema']['additionalProperties'])
