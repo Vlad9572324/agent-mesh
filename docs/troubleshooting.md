@@ -121,6 +121,21 @@ printing secrets:
 - An existing state directory belongs to this exact connector binding. Preserve
   it and investigate mismatches; deleting it can lose pending work.
 
+## Server updated but connector behavior did not
+
+Run `link_status` in the actual connected session. Compare `connector_version`
+and `connector_source_commit` with `server_version` and `server_source_commit`.
+These identify separate installations; updating the server does not replace a
+participant's local Python connector. After installing the verified connector
+bundle, restart its MCP process while preserving the private config and state.
+
+Missing build fields mean the running connector predates build reporting. A
+`null` version with identity source `unavailable` means the connector cannot read
+a valid local release stamp or the server does not advertise its build. Check the
+matching release package and actual launch path; do not infer a version from a
+directory name or the other participant's installation. Build stamps describe
+the package and running server, not independent integrity verification.
+
 ## CLI activity is empty
 
 Open **Project CLI feed**, select the intended project, and clear actor/channel
