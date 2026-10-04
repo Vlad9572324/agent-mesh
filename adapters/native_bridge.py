@@ -539,7 +539,12 @@ class NativeBridge:
             # empty/truncated preview whose full text requires link_message.
             for item in result['messages']:
                 message_id = item['id']
-                self._observe('inbox.offered', message_id=message_id, event_id=message_id)
+                # Servers and receipts only use the FIRST inbox.offered per message.
+                # Re-offers (60s cooldown, and every new CLI session re-shows its
+                # unseen backlog) must not append one activity row each: a peer that
+                # starts many sessions produced 21k rows for 89 messages.
+                if not self.db.execute('SELECT 1 FROM offers WHERE message_id=? LIMIT 1', (message_id,)).fetchone():
+                    self._observe('inbox.offered', message_id=message_id, event_id=message_id)
                 self.db.execute('INSERT INTO offers VALUES(?,?,?) ON CONFLICT(session_id,message_id) DO UPDATE SET offered_at=excluded.offered_at',
                                 (self.session_id, message_id, now))
                 self.db.execute('UPDATE inbox SET offer_order=? WHERE id=?', (ordinal, message_id))

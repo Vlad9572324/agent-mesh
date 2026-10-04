@@ -319,6 +319,28 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(parse_qs(urlsplit(page_paths[0]).query)["limit"], ["100"])
         self.assertEqual(bridge.poll_inbox(limit=200)["fetched"], 1)
 
+    def test_reoffers_across_repeats_and_new_sessions_record_one_offered_event_per_message(self):
+        self.api.messages = [self.message("m1"), self.message("m2", seq=2)]
+        first = self.bridge("session-one")
+        first.poll_inbox()
+        for _ in range(3):  # explicit re-offers, e.g. repeated link_inbox / hook cooldown expiry
+            self.assertEqual(len(first.offer_inbox()["messages"]), 2)
+        first.flush(limit=50)
+        # A fresh CLI session starts with an empty cooldown and re-shows its unseen backlog.
+        for name in ("session-two", "session-three"):
+            later = self.bridge(name)
+            self.assertEqual(len(later.offer_inbox()["messages"]), 2)
+            later.flush(limit=50)
+        offered = [v["message_id"] for v in self.api.activity.values() if v["event_type"] == "inbox.offered"]
+        self.assertEqual(sorted(offered), ["m1", "m2"])
+        # A message that arrives later is still reported on its own first offer.
+        self.api.messages.append(self.message("m3", seq=3))
+        later.poll_inbox()
+        later.offer_inbox()
+        later.flush(limit=50)
+        offered = [v["message_id"] for v in self.api.activity.values() if v["event_type"] == "inbox.offered"]
+        self.assertEqual(sorted(offered), ["m1", "m2", "m3"])
+
     def test_addressed_reply_inbox_and_explicit_accept_idempotency(self):
         self.api.messages = [self.message(reply_to="parent"), self.message("hidden", seq=2, recipient="other")]
         bridge = self.bridge()

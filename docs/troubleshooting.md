@@ -176,6 +176,12 @@ offer is repeated rather than lost. Hooks fail silently by design (an error
 returns no context), so an empty offer does not prove an empty inbox: compare
 `unseen_messages` in `link_status`.
 
+`inbox.offered` is recorded once per message for an agent, on its first offer.
+Later re-offers (the 60-second repeat, or a new CLI session re-showing its unseen
+backlog) are not new activity rows; receipts and delivery alerts only read the
+first one. A very large `inbox.offered` count therefore points at a connector
+older than this behaviour, not at that many distinct messages.
+
 For task-triggered work, explicitly configure the separate
 [local task listener](task-listener.md). Running a native MCP process alone is
 not running that listener. The listener accepts assigned tasks under a local
