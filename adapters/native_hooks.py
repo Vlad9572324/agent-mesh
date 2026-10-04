@@ -25,6 +25,8 @@ CONTEXT_BUDGET = 4000
 OFFER_MINIMUM_INTERVAL = 60
 MAX_OUTPUT_BYTES = 32 * 1024
 HOOK_TIMEOUT_SECONDS = 8
+# Codex kills SessionEnd after 3s (scripts/native_launch.py); finish inside that.
+SESSION_END_DEADLINE_SECONDS = 2
 EVENTS = {
     "SessionStart": "session.started",
     "UserPromptSubmit": "turn.started",
@@ -36,7 +38,11 @@ EVENTS = {
     "Notification": "agent.waiting",
 }
 CODEX_EVENTS = frozenset(EVENTS) - {"PostToolUseFailure", "Notification"}
-SAFE_POINTS = frozenset({"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"})
+# PostToolUseFailure (Claude) fires mid-turn, so an agent stuck in a failing-tool
+# loop still sees peer messages. Stop/Notification stay observe-only: Stop could
+# only continue a turn by blocking (auto-wake) and Notification fires when idle.
+SAFE_POINTS = frozenset({"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+                         "PostToolUseFailure"})
 OWN_TOOL_PREFIXES = ("mcp__agent_link__", "mcp__agent-link__",
                      "mcp__agent_link_native__", "mcp__agent_link_native.")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -222,6 +228,8 @@ def handle_hook(value, runtime, session_id, config_path, bridge_factory):
                                                            minimum_interval=OFFER_MINIMUM_INTERVAL, full_text=True))
             except Exception:
                 return {}
+        if value["hook_event_name"] == "SessionEnd" and signal.getsignal(signal.SIGALRM) is _deadline:
+            signal.setitimer(signal.ITIMER_REAL, SESSION_END_DEADLINE_SECONDS)
         try:
             bridge.flush(limit=4)
         except Exception:

@@ -215,6 +215,32 @@ class NativeHookTests(unittest.TestCase):
         self.assertEqual(shared["minimum_intervals"], [60])
         self.assertEqual(shared["flush_limits"], [4])
 
+    def test_failed_tool_in_claude_still_offers_peer_messages_under_its_own_event_name(self):
+        result, shared = self.invoke(payload("PostToolUseFailure", tool_name="Bash"), "claude")
+        specific = result["hookSpecificOutput"]
+        self.assertEqual(specific["hookEventName"], "PostToolUseFailure")
+        self.assertIn("UNTRUSTED PEER DATA", specific["additionalContext"])
+        self.assertEqual(shared["poll_limits"], [20])
+        # Idle/waiting and end-of-turn events must still never inject context.
+        for event in ("Notification", "Stop", "SessionEnd"):
+            quiet, _ = self.invoke(payload(event), "claude")
+            self.assertEqual(quiet, {})
+
+    def test_session_end_flush_is_cut_before_codex_three_second_kill(self):
+        class SlowFlush(FakeBridge):
+            def flush(self, limit):
+                time.sleep(2)
+                return {"sent": 0, "pending": 0}
+        shared = {}
+        started = time.monotonic()
+        with patch.object(hooks, "SESSION_END_DEADLINE_SECONDS", 0.2):
+            result, _ = self.invoke(payload("SessionEnd"), "codex", shared=shared,
+                                    factory=lambda path, session: SlowFlush(path, session, shared, "codex"))
+        self.assertEqual(result, {})
+        self.assertLess(time.monotonic() - started, 1.5)
+        self.assertEqual(shared["closed"], 1)
+        self.assertEqual(len(shared["observations"]), 1)  # durable before the network phase
+
     def test_stop_cannot_offer_or_cause_another_turn(self):
         result, shared = self.invoke(payload("Stop", stop_hook_active=True))
         self.assertEqual(result, {})

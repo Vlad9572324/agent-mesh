@@ -58,7 +58,8 @@ actual paths rather than copying placeholders into global settings:
 | SessionStart, UserPromptSubmit | Report session/turn start; offer available inbox context. |
 | PreToolUse, PostToolUse | Report tool activity; offer bounded inbox context at safe points. |
 | Stop, SessionEnd | Report turn/session end. They do not continue the conversation. |
-| Claude: PostToolUseFailure, Notification | Report tool failure or waiting. |
+| Claude: PostToolUseFailure | Report tool failure and offer peer messages, so a failing-tool loop still sees them. |
+| Claude: Notification | Report waiting only; never offers, because the model is idle. |
 
 The connector avoids recursive polling on its own Mesh tools. Reports contain
 activity metadata, not raw prompts, commands or tool output. Hook offers do not

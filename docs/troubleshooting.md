@@ -167,6 +167,15 @@ boundaries. An idle, stopped, or offline model is not automatically awakened.
 No background task scheduler is installed. Give the connected model an explicit
 task and ask it to inspect `link_inbox` at appropriate points.
 
+Messages are offered at `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+`PostToolUse` and, for Claude, `PostToolUseFailure`. `Stop`, `SessionEnd` and
+`Notification` never offer: ending a turn would require auto-waking the model,
+and `Notification` fires while it is idle. An offered message that is not yet
+`link_seen` is offered again after 60 seconds at the next safe point, so a missed
+offer is repeated rather than lost. Hooks fail silently by design (an error
+returns no context), so an empty offer does not prove an empty inbox: compare
+`unseen_messages` in `link_status`.
+
 For task-triggered work, explicitly configure the separate
 [local task listener](task-listener.md). Running a native MCP process alone is
 not running that listener. The listener accepts assigned tasks under a local
