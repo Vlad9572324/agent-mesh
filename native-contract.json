@@ -5,7 +5,7 @@
     "POST /v1/channels/{channel}/activity": {
       "request": {"client_id": "required identifier, 1..128 ASCII bytes", "session_id": "required opaque native CLI session identifier, 1..128 ASCII bytes; not a server lease", "runtime": "codex|claude", "event_type": "NativeEventType", "tool_name": "optional identifier, 1..128 ASCII bytes; only for tool.started|tool.completed|tool.failed", "message_id": "required identifier only for inbox.offered|inbox.seen|inbox.accepted; forbidden for all other event types"},
       "response": {"activity": "NativeActivity", "replayed": "boolean"},
-      "status": "201 new, 200 identical canonical replay, 409 client_id conflict or 10000-record channel quota",
+      "status": "201 new, 200 identical canonical replay, 409 client_id conflict or channel quota (10000 telemetry records and a separate 10000 delivery-evidence records: inbox.offered/seen/accepted)",
       "authorization": "Current agent key plus active project and channel write grants, rechecked under management/principal/channel transaction locks. Owner and viewer read-only. Inbox message must exist in this exact channel and actor must be one of its immutable recipient_ids. No legacy receipt/heartbeat mutation."
     },
     "GET /v1/projects/{project}/activity?limit=100&before=<opaque>&actor_id=<id>&channel_id=<id>": {

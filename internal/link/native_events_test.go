@@ -295,3 +295,56 @@ func TestNativeActivityArchiveRestoreAndHardDelete(t *testing.T) {
 	}
 	f.expect("GET", fmt.Sprintf("/v1/channels/%s/activity", lifecycleChannel), "owner", nil, 404)
 }
+
+func TestNativeDeliveryEvidenceHasItsOwnReserveWhenTelemetryQuotaIsFull(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	messageID := f.expect("POST", "/v1/channels/general/messages", "claude-pilot", map[string]any{"client_id": "evidence-reserve", "body": "peer message", "recipient_ids": []string{"codex-pilot"}}, 201)["message"].(map[string]any)["id"].(string)
+	fill := func(kind string, from, to int, withMessage bool) {
+		t.Helper()
+		message := "NULL"
+		if withMessage {
+			message = "'" + messageID + "'"
+		}
+		query := fmt.Sprintf(`INSERT INTO native_activity(id,channel_id,seq,actor_id,client_id,session_id,runtime,event_type,message_id,request_hash)
+ SELECT '%[1]s-'||n,'general',n,'codex-pilot','%[1]s-'||n,'session','codex','%[1]s',%[4]s,decode('00','hex') FROM generate_series(%[2]d,%[3]d) n;
+ UPDATE channels SET cursor=%[3]d WHERE id='general'`, kind, from, to, message)
+		if _, err := f.s.Pool.Exec(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A telemetry flood fills its whole quota: further telemetry is refused...
+	fill("agent.waiting", 1, 10000, false)
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", nativeInput("telemetry-over", "turn.started"), 409)
+	// ...but delivery evidence is still recorded, so receipts and alerts keep working.
+	for _, kind := range []string{"inbox.offered", "inbox.seen", "inbox.accepted"} {
+		in := nativeInput("evidence-"+kind, kind)
+		in.MessageID = &messageID
+		f.expect("POST", "/v1/channels/general/activity", "codex-pilot", in, 201)
+	}
+	receipts := f.expect("GET", "/v1/channels/general/native-receipts?message_id="+messageID, "viewer-pilot", nil, 200)["receipts"].([]any)
+	if len(receipts) != 1 {
+		t.Fatalf("expected one recipient receipt, got %d", len(receipts))
+	}
+	for _, field := range []string{"offered_at", "seen_at", "accepted_at"} {
+		if receipts[0].(map[string]any)[field] == nil {
+			t.Fatalf("receipt %s missing although its evidence was accepted", field)
+		}
+	}
+	// Evidence has its own bound: once it is full, new evidence is refused too, replays still work.
+	fill("inbox.offered", 10004, 20000, true) // 3 real + 9997 = the evidence quota
+	over := nativeInput("evidence-over", "inbox.seen")
+	over.MessageID = &messageID
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", over, 409)
+	replay := nativeInput("evidence-inbox.seen", "inbox.seen")
+	replay.MessageID = &messageID
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", replay, 200)
+	f.expect("POST", "/v1/channels/general/activity", "codex-pilot", nativeInput("telemetry-still-over", "session.ended"), 409)
+	var telemetry, evidence int
+	if err := f.s.Pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE message_id IS NULL), count(*) FILTER (WHERE message_id IS NOT NULL) FROM native_activity WHERE channel_id='general'`).Scan(&telemetry, &evidence); err != nil {
+		t.Fatal(err)
+	}
+	if telemetry != nativeActivityQuota || evidence != nativeEvidenceQuota {
+		t.Fatalf("each class must stop exactly at its own quota, got telemetry=%d evidence=%d", telemetry, evidence)
+	}
+}

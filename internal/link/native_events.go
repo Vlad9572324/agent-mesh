@@ -19,7 +19,11 @@ import (
 //go:embed native_events_schema.sql
 var nativeActivitySchema string
 
+// Lifecycle/tool telemetry and delivery evidence are bounded separately. Evidence
+// (inbox.offered/seen/accepted, i.e. rows with a message_id) feeds receipts and
+// deadline alerts, so a telemetry flood must never be able to refuse it.
 const nativeActivityQuota = 10000
+const nativeEvidenceQuota = 10000
 const nativeActivityColumns = `id,channel_id,seq,actor_id,client_id,session_id,runtime,event_type,tool_name,message_id,created_at`
 
 // NativeActivity is an authenticated client's observation, never proof that the
@@ -294,12 +298,16 @@ func (s *Server) postNativeActivity(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	evidence, limit := in.MessageID != nil, nativeActivityQuota
+	if evidence {
+		limit = nativeEvidenceQuota
+	}
 	var count int
-	if tx.QueryRow(ctx, `SELECT count(*) FROM native_activity WHERE channel_id=$1`, channel).Scan(&count) != nil {
+	if tx.QueryRow(ctx, `SELECT count(*) FROM native_activity WHERE channel_id=$1 AND (message_id IS NOT NULL)=$2`, channel, evidence).Scan(&count) != nil {
 		internal(w)
 		return
 	}
-	if count >= nativeActivityQuota {
+	if count >= limit {
 		fail(w, 409, "channel native activity quota exceeded")
 		return
 	}
