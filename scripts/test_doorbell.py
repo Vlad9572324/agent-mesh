@@ -302,6 +302,47 @@ class SendTests(unittest.TestCase):
         self.assertEqual(keys, [])
 
 
+class GhostSuggestionTests(unittest.TestCase):
+    """Claude Code greys out a suggested next prompt after an empty prompt; it is not typed input."""
+    ESC = "\x1b"
+
+    def screen(self, prompt_tail):
+        e = self.ESC
+        return (f"output\n{e}[39m\u2500\u2500\u2500\u2500{e}[39m\n"
+                f"{e}[39m\u276f\u00a0{prompt_tail}{e}[39m{e}[49m\n"
+                f"{e}[39m\u2500\u2500\u2500\u2500\n"
+                f"  {e}[2m\u23f5\u23f5 auto mode on (shift+tab to cycle){e}[0m")
+
+    def test_visible_text_drops_dim_spans_and_ansi(self):
+        e = self.ESC
+        self.assertEqual(doorbell.visible_text("a%s[2mghost%s[0mb" % (e, e)), "ab")
+        self.assertEqual(doorbell.visible_text("a%s[2mghost%s[22mb" % (e, e)), "ab")
+        self.assertEqual(doorbell.visible_text("a%s[1;2mghost%s[0m%s[97mb%s[39m" % (e, e, e, e)), "ab")
+        self.assertEqual(doorbell.visible_text("%s[39mplain%s[0m" % (e, e)), "plain")
+        self.assertEqual(doorbell.visible_text("no codes"), "no codes")
+
+    def test_a_dim_suggestion_after_an_empty_prompt_is_ready_not_typing(self):
+        e = self.ESC
+        suggestion = "%s[2mremind him about the invite%s[0m" % (e, e)
+        self.assertEqual(doorbell.classify_pane(self.screen(suggestion)), "ready")
+
+    def test_real_captured_claude_screen_with_a_russian_suggestion_is_ready(self):
+        e = self.ESC
+        suggestion = "%s[2m\u043d\u0430\u043f\u043e\u043c\u043d\u0438 \u0435\u043c\u0443 \u043f\u0440\u043e invite \u043f\u043e\u0434 guide.4%s[0m" % (e, e)
+        self.assertEqual(doorbell.classify_pane(self.screen(suggestion)), "ready")
+
+    def test_normal_intensity_text_after_the_prompt_is_still_a_human_draft(self):
+        self.assertEqual(doorbell.classify_pane(self.screen("half written by a human")), "typing")
+        e = self.ESC
+        mixed = "typed by human %s[2mand a ghost%s[0m" % (e, e)
+        self.assertEqual(doorbell.classify_pane(self.screen(mixed)), "typing")
+
+    def test_dialogs_and_busy_screens_are_not_hidden_by_colour_codes(self):
+        e = self.ESC
+        self.assertEqual(doorbell.classify_pane("%s[1mDo you want to proceed?%s[0m\n\u276f\u00a0\n(y/n)" % (e, e)), "dialog")
+        self.assertEqual(doorbell.classify_pane("%s[38;5;208m\u2733 Working\u2026 (6s \u00b7 \u2193 263 tokens)%s[0m\n\u276f\u00a0" % (e, e)), "busy")
+
+
 class ArgumentTests(unittest.TestCase):
     def test_non_finite_and_non_positive_delays_are_rejected(self):
         for flag, value in (("--max-delay", "0"), ("--max-delay", "-5"), ("--base-delay", "nan"),

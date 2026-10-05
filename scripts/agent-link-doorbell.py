@@ -48,8 +48,33 @@ TAIL_LINES = 14
 SEND_FAILURES_BEFORE_GIVEUP = 3
 
 
+SGR = re.compile(r"\x1b\[([0-9;]*)m")
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
+
+
+def visible_text(raw):
+    """Plain screen text from `tmux capture-pane -e`, with DIM text removed.
+
+    Claude Code shows a grey suggestion after an empty prompt; it is not typed input
+    and Enter does not send it. Treating it as a human draft would block every ring."""
+    out, dim, position = [], False, 0
+    for match in SGR.finditer(raw):
+        if not dim:
+            out.append(raw[position:match.start()])
+        position = match.end()
+        for code in (match.group(1) or "0").split(";"):
+            if code == "2":
+                dim = True
+            elif code in ("0", "22", ""):
+                dim = False
+    if not dim:
+        out.append(raw[position:])
+    return ANSI.sub("", "".join(out))
+
+
 def classify_pane(text):
     """Return 'ready', 'busy', 'dialog' or 'typing' for the visible session screen."""
+    text = visible_text(text)
     # tmux pads the pane with blank rows below the UI; count lines from the last content.
     lines = text.rstrip().splitlines()[-TAIL_LINES:]
     tail = "\n".join(lines)
@@ -157,7 +182,7 @@ def resolve_pane(target):
 
 
 def tmux_pane_text(pane):
-    return subprocess.run(["tmux", "capture-pane", "-p", "-t", pane],
+    return subprocess.run(["tmux", "capture-pane", "-p", "-e", "-t", pane],
                           capture_output=True, text=True, timeout=10, check=True).stdout
 
 
@@ -177,7 +202,7 @@ def tmux_send(pane, text, *, sleep=time.sleep, capture=None, run=subprocess.run)
     run(["tmux", "send-keys", "-t", pane, "-l", text], check=True, timeout=10)
     for attempt in range(3):
         sleep(0.5 if attempt == 0 else 1.5)
-        screen = capture()
+        screen = visible_text(capture())
         if DIALOG.search("\n".join(screen.rstrip().splitlines()[-TAIL_LINES:])):
             raise RuntimeError("a dialog opened; Enter withheld")
         if attempt == 0 and SEND_MARKER not in screen:
@@ -186,7 +211,7 @@ def tmux_send(pane, text, *, sleep=time.sleep, capture=None, run=subprocess.run)
             return  # The input box no longer holds the reminder: it was submitted.
         run(["tmux", "send-keys", "-t", pane, "Enter"], check=True, timeout=10)
     sleep(1.5)
-    if SEND_MARKER in "\n".join(capture().rstrip().splitlines()[-TAIL_LINES:]):
+    if SEND_MARKER in "\n".join(visible_text(capture()).rstrip().splitlines()[-TAIL_LINES:]):
         raise RuntimeError("reminder still unsent in the input box")
 
 
