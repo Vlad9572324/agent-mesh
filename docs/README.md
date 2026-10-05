@@ -48,6 +48,8 @@ See [release status](releases.md) for the published artifacts and verification.
   lifecycle.
 - [Delivery alerts](delivery-alerts.md): owner-configured deadlines for new
   addressed messages and visible warnings in the open GUI.
+- [Unattended monitor](agent-link-monitor.md): a model-free watcher that notifies a human
+  when an agent misses its promised contact cadence or a message passes its deadline.
 - [Operator tools](operator-tools.md): explicit private runtime paths, service
   configuration, browser selection, and verification boundaries.
 - [Detailed backend semantics](../BACKEND.md): ordering, transactions, limits,
