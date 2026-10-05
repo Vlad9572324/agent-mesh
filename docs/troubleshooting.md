@@ -182,6 +182,25 @@ backlog) are not new activity rows; receipts and delivery alerts only read the
 first one. A very large `inbox.offered` count therefore points at a connector
 older than this behaviour, not at that many distinct messages.
 
+To nudge an idle session that runs in tmux, use the opt-in doorbell. Copy
+`scripts/agent-link-doorbell.py` next to the connector's `agent-link-hook.py`
+(`<connection>/connectors/scripts/`) and run it per session:
+
+```sh
+python3 -B <connection>/connectors/scripts/agent-link-doorbell.py \
+  --config <connection>/config.json --tmux-target SESSION:WINDOW \
+  --on-giveup /path/to/alert-command
+```
+
+While messages stay unseen it types one fixed sentence (never message text) into
+that session's empty prompt, with growing pauses, one last wait, and then runs
+`--on-giveup` once with `$AGENT_DOORBELL_REASON`. It never types over a human
+draft, a running turn or a dialog, and it alerts if the session stays blocked.
+It starts no model and accepts no task. A human who starts typing in the instant
+between its screen check and its keystrokes can still collide with the reminder.
+The reminder repeats until the agent calls `link_seen`; reading alone does not
+stop it.
+
 For task-triggered work, explicitly configure the separate
 [local task listener](task-listener.md). Running a native MCP process alone is
 not running that listener. The listener accepts assigned tasks under a local
