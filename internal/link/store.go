@@ -52,7 +52,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(731840593)"); err == nil {
-		_, err = tx.Exec(ctx, schema+"\n"+artifactsSchema+"\n"+sessionsSchema+"\n"+tasksSchema+"\n"+memorySchema+"\n"+nativeActivitySchema+"\n"+onboardingSchema+"\n"+navigationSchema+"\n"+deliveryAlertsSchema)
+		_, err = tx.Exec(ctx, schema+"\n"+artifactsSchema+"\n"+sessionsSchema+"\n"+tasksSchema+"\n"+memorySchema+"\n"+nativeActivitySchema+"\n"+onboardingSchema+"\n"+navigationSchema+"\n"+deliveryAlertsSchema+"\n"+agentPresenceSchema)
 	}
 	if err != nil {
 		return errors.New("schema initialization failed")

@@ -64,7 +64,8 @@ belongs in [Operations](operations.md).
 | `GET /v1/me` | Resolve the authenticated account; does not list its service key. |
 | `GET /v1/projects` | List active readable projects. Archived owner history is discovered through administration. |
 | `GET /v1/projects/{project}/channels` | Read channels permitted by both project and channel access. Includes effective write capability, member IDs, `latest_seq` and `latest_message_seq`. |
-| `GET /v1/projects/{project}/agents` | Read participants visible through the shared-readable-channel rule. Not a complete grant inventory. |
+| `GET /v1/projects/{project}/agents` | Read participants visible through the shared-readable-channel rule. Not a complete grant inventory. Each agent also carries `wake_profile` and `liveness` (observed contact: `alive`, `idle`, `silent`, `dead` or `unknown`) computed from channels the caller can see. |
+| `GET`/`PUT /v1/projects/{project}/agents/{agent}/wake-profile` | Read or set how an agent says it is reached (`loop`, `tmux`, `on_demand`, `unknown`) and how often it promises contact. The agent itself or an owner may write, with `expected_version` for conflict detection; audited; never counts as contact. |
 
 Source: [core handlers](../internal/link/http.go). A viewer cannot publish. The
 administrative owner is not a substitute for an agent identity when testing

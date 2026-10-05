@@ -173,6 +173,8 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /v1/projects", s.projects)
 	api.HandleFunc("GET /v1/projects/{project}/channels", s.channels)
 	api.HandleFunc("GET /v1/projects/{project}/agents", s.agents)
+	api.HandleFunc("GET /v1/projects/{project}/agents/{agent}/wake-profile", s.getWakeProfile)
+	api.HandleFunc("PUT /v1/projects/{project}/agents/{agent}/wake-profile", s.putWakeProfile)
 	api.HandleFunc("GET /v1/projects/{project}/map", s.projectMap)
 	api.HandleFunc("GET /v1/channels/{channel}/messages", s.messages)
 	api.HandleFunc("GET /v1/channels/{channel}/native-receipts", s.nativeReceipts)
@@ -349,8 +351,31 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 	if !s.projectAllowed(w, r, false) {
 		return
 	}
-	rows, err := s.Store.Pool.Query(r.Context(), `SELECT p.id,p.name,p.kind,p.runtime,p.session_id,p.last_seen_at,p.activity,
- ARRAY(SELECT c.id FROM channels c JOIN channel_members theirs ON theirs.channel_id=c.id AND theirs.agent_id=p.id WHERE c.project_id=$1 AND ($3::boolean OR EXISTS(SELECT 1 FROM channel_members mine WHERE mine.channel_id=c.id AND mine.agent_id=$2)) ORDER BY c.id),clock_timestamp()
+	// One snapshot covers key validity, ACLs, profiles, contacts and the clock sample, so a
+	// revocation cannot leave a stale authorization attached to newer activity timestamps.
+	ctx := r.Context()
+	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		internal(w)
+		return
+	}
+	defer tx.Rollback(ctx)
+	var live bool
+	var asOf time.Time // one clock sample, taken with the snapshot, for every agent's liveness
+	if tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM principals WHERE id=$1 AND key_hash=$2),clock_timestamp()`, principal(r).ID, digest(bearer(r))).Scan(&live, &asOf) != nil {
+		internal(w)
+		return
+	}
+	if !live {
+		fail(w, 401, "invalid or revoked key")
+		return
+	}
+	if !projectAccess(ctx, tx, r.PathValue("project"), principal(r).ID, false) {
+		fail(w, 404, "not found")
+		return
+	}
+	rows, err := tx.Query(ctx, `SELECT p.id,p.name,p.kind,p.runtime,p.session_id,p.last_seen_at,p.activity,
+ ARRAY(SELECT c.id FROM channels c JOIN channel_members theirs ON theirs.channel_id=c.id AND theirs.agent_id=p.id WHERE c.project_id=$1 AND ($3::boolean OR EXISTS(SELECT 1 FROM channel_members mine WHERE mine.channel_id=c.id AND mine.agent_id=$2)) ORDER BY c.id),clock_timestamp(),(SELECT count(*) FROM channels c JOIN channel_members theirs ON theirs.channel_id=c.id AND theirs.agent_id=p.id WHERE c.project_id=$1)
  FROM principals p JOIN project_members pm ON pm.agent_id=p.id AND pm.project_id=$1
  WHERE $3::boolean OR EXISTS(SELECT 1 FROM channels c JOIN channel_members mine ON mine.channel_id=c.id AND mine.agent_id=$2 JOIN channel_members theirs ON theirs.channel_id=c.id AND theirs.agent_id=p.id WHERE c.project_id=$1) ORDER BY p.id`, r.PathValue("project"), principal(r).ID, principal(r).Kind == "owner")
 	if err != nil {
@@ -360,23 +385,48 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	type visibleAgent struct {
 		Agent
-		ChannelIDs []string `json:"channel_ids"`
+		ChannelIDs  []string     `json:"channel_ids"`
+		WakeProfile *WakeProfile `json:"wake_profile"`
+		Liveness    *Liveness    `json:"liveness"`
+		totalChans  int
+		asOf        time.Time
 	}
 	result := []visibleAgent{}
 	for rows.Next() {
 		var a visibleAgent
-		var now time.Time
-		if rows.Scan(&a.ID, &a.Name, &a.Kind, &a.Runtime, &a.SessionID, &a.LastSeenAt, &a.Activity, &a.ChannelIDs, &now) != nil {
+		if rows.Scan(&a.ID, &a.Name, &a.Kind, &a.Runtime, &a.SessionID, &a.LastSeenAt, &a.Activity, &a.ChannelIDs, &a.asOf, &a.totalChans) != nil {
 			internal(w)
 			return
 		}
-		a.Freshness = fresh(a.LastSeenAt, now)
+		a.Freshness = fresh(a.LastSeenAt, a.asOf)
 		result = append(result, a)
 	}
 	if rows.Err() != nil {
 		internal(w)
 		return
 	}
+	rows.Close()
+	// Additive only: freshness/last_seen_at/activity keep their lease semantics. Liveness
+	// is observed contact for agents; owners have no contact promise to evaluate.
+	profiles, err := loadWakeProfiles(ctx, tx, r.PathValue("project"))
+	if err != nil {
+		internal(w)
+		return
+	}
+	for i := range result {
+		if result[i].Kind != "agent" {
+			continue
+		}
+		result[i].WakeProfile = profiles[result[i].ID]
+		liveness, err := observeLiveness(ctx, tx, result[i].ID, result[i].ChannelIDs, result[i].totalChans, result[i].WakeProfile, asOf)
+		if err != nil {
+			internal(w)
+			return
+		}
+		result[i].Liveness = &liveness
+	}
+	// Release the connection before writing to a possibly slow client.
+	_ = tx.Rollback(ctx)
 	respond(w, 200, map[string]any{"agents": result})
 }
 func pagination(w http.ResponseWriter, r *http.Request, param string) (int64, int, bool) {
