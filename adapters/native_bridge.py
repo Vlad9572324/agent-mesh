@@ -101,6 +101,77 @@ def connector_build(root=None):
 CONNECTOR_BUILD = connector_build()
 
 
+WAKE_MODES = frozenset({'loop', 'tmux', 'on_demand', 'unknown'})
+LIVENESS_STATES = frozenset({'unknown', 'alive', 'idle', 'silent', 'dead'})
+LIVENESS_SOURCES = frozenset({'native_activity', 'message', 'legacy_heartbeat', 'none'})
+LIVENESS_SCOPES = frozenset({'complete', 'partial'})
+LIVENESS_REASONS = frozenset({'', 'no_contact', 'clock_anomaly', 'partial_visibility', 'reporting_blocked'})
+RFC3339 = re.compile(r'([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]{1,9})?(?:Z|[+-]([0-9]{2}):([0-9]{2}))\Z')
+WAKE_KEYS = frozenset({'mode', 'expected_response_seconds', 'expected_contact_seconds', 'version', 'updated_at', 'set_by'})
+LIVENESS_KEYS = frozenset({'state', 'last_contact_at', 'as_of', 'source', 'scope', 'reason'})
+
+
+def _bounded_int(value, low, high):
+    return type(value) is int and low <= value <= high
+
+
+def _enum(value, allowed):
+    # type() first: an unhashable JSON value (list/dict) must be rejected, not raise inside set membership.
+    return type(value) is str and value in allowed
+
+
+def _timestamp(value):
+    """ASCII RFC 3339 with real calendar/clock/offset ranges; returned unchanged, never normalized."""
+    if type(value) is not str or len(value) > 40:
+        return False
+    match = RFC3339.match(value)
+    if match is None:
+        return False
+    year, month, day, hour, minute, second = (int(match.group(i)) for i in range(1, 7))
+    try:
+        datetime(year, month, day, hour, minute, min(second, 59))
+    except ValueError:
+        return False
+    if second > 60 or (match.group(7) is not None and (int(match.group(7)) > 23 or int(match.group(8)) > 59)):
+        return False
+    return True
+
+
+def peer_wake_profile(value):
+    """Forward a wake profile only if every defined key is present and consistent; extra (newer) keys are dropped, anything else omits it (never repair)."""
+    if type(value) is not dict or not WAKE_KEYS <= set(value):
+        return None
+    mode, response, contact = value['mode'], value['expected_response_seconds'], value['expected_contact_seconds']
+    if (not _enum(mode, WAKE_MODES) or not _enum(value['set_by'], ('self', 'owner'))
+            or not _bounded_int(value['version'], 1, 2**62) or not _timestamp(value['updated_at'])):
+        return None
+    if mode == 'unknown':
+        consistent = response is None and contact is None
+    elif mode == 'loop':
+        consistent = _bounded_int(response, 30, 86400) and _bounded_int(contact, 15, 86400)
+    elif mode == 'tmux':
+        consistent = _bounded_int(response, 30, 86400) and (contact is None or _bounded_int(contact, 15, 86400))
+    else:  # on_demand promises no cadence
+        consistent = _bounded_int(response, 30, 86400) and contact is None
+    if not consistent:
+        return None
+    return {'mode': mode, 'expected_response_seconds': response, 'expected_contact_seconds': contact,
+            'version': value['version'], 'updated_at': value['updated_at'], 'set_by': value['set_by']}
+
+
+def peer_liveness(value):
+    """The server's observed contact (it may be partial and never means a model is running)."""
+    if type(value) is not dict or not LIVENESS_KEYS <= set(value):
+        return None
+    if (not _enum(value['state'], LIVENESS_STATES) or not _enum(value['source'], LIVENESS_SOURCES)
+            or not _enum(value['scope'], LIVENESS_SCOPES) or not _enum(value['reason'], LIVENESS_REASONS)
+            or not _timestamp(value['as_of'])
+            or (value['last_contact_at'] is not None and not _timestamp(value['last_contact_at']))):
+        return None
+    return {'state': value['state'], 'last_contact_at': value['last_contact_at'], 'as_of': value['as_of'],
+            'source': value['source'], 'scope': value['scope'], 'reason': value['reason']}
+
+
 def identifier(value):
     return type(value) is str and ID.fullmatch(value) is not None
 
@@ -777,7 +848,13 @@ class NativeBridge:
                 continue
             self._identifier(row['id'])
             if after_id is None or row['id'] > after_id:
-                peers.append({'id': row['id'], 'name': self.sanitize(name), 'channel_ids': shared})
+                entry = {'id': row['id'], 'name': self.sanitize(name), 'channel_ids': shared}
+                # Additive server fields: an older server simply has none, so the shape is unchanged.
+                for key, check in (('wake_profile', peer_wake_profile), ('liveness', peer_liveness)):
+                    valid = check(row.get(key))
+                    if valid is not None:
+                        entry[key] = valid
+                peers.append(entry)
         peers.sort(key=lambda peer: peer['id'])
         result = {'agent_id': self.config['agent_id'], 'project_id': self.config['project_id'],
                   'channels': [{'id': channel, 'can_write': allowed[channel]} for channel in sorted(allowed)],

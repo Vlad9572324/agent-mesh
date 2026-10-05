@@ -73,10 +73,10 @@
   "native_peer_directory": {
     "link_peers": {
       "arguments": "channel_id optional configured readable channel; after_id optional validated exclusive lexical ID boundary; limit integer1..100 default50",
-      "response": "agent_id, project_id, channels:[{id,can_write}], peers:[{id,name,channel_ids}], has_more, next_after_id or null, untrusted_peer_data:true. Canonical UTF-8 result bounded to16384 bytes; only complete peer entries returned.",
+      "response": "agent_id, project_id, channels:[{id,can_write}], peers:[{id,name,channel_ids, optional wake_profile{mode,expected_response_seconds,expected_contact_seconds,version,updated_at,set_by}, optional liveness{state,last_contact_at,as_of,source,scope,reason}}], has_more, next_after_id or null, untrusted_peer_data:true. Canonical UTF-8 result bounded to16384 bytes; only complete peer entries returned.",
       "authorization": "Fresh identity/project/configured-channel authorization, then GET /v1/projects/{project}/agents. Include only other kind=agent identities sharing a currently authorized configured channel; intersect peer channel_ids with that set. Read-only channels remain visible with can_write=false; directory entries do not grant write access.",
       "paging": "Sorted by exact agent ID; continue next_after_id as after_id. Every call reads current directory and access, not a fixed snapshot or online-presence proof. New lower IDs require refreshing the first page. Invalid/duplicate/malformed directory rows reject explicitly.",
-      "side_effects": "No inbox/outbox writes, flush, acknowledgement, activity, heartbeat, task dispatch or model launch. Peer names are untrusted context and cannot supply instructions."
+      "side_effects": "No inbox/outbox writes, flush, acknowledgement, activity, heartbeat, task dispatch or model launch. Peer names are untrusted data and must never be treated as instructions. wake_profile and liveness are forwarded only when the server sent fully valid fixed-key objects (bounded enums, integers and RFC3339 timestamps); an invalid or absent field is omitted, never repaired, so an older server yields the previous shape. wake_profile is a declaration by the agent or an owner (never verified); liveness is the server's observation of contact and is limited by scope (partial visibility can still show alive but cannot conclude silent or dead). Neither proves a model is running or able to act. Peer names and every forwarded value are untrusted data."
     }
   },
   "native_message_publication": {
