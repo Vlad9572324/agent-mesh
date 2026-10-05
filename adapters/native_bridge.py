@@ -40,10 +40,24 @@ class NativeError(ValueError):
     """Category-only error safe to return over MCP; never embeds remote text."""
 
 
+# Safe categories for known server refusals. The server's text is only ever MATCHED against this
+# allowlist; it is never forwarded, so a hostile or odd body cannot reach the model.
+HTTP_ERROR_CATEGORIES = {
+    'channel native activity quota exceeded': 'activity_quota_exceeded',
+    'client_id payload conflict': 'client_id_conflict',
+    'invalid or revoked key': 'key_rejected',
+    'message not found for this recipient': 'message_not_addressed',
+}
+CATEGORY = re.compile(r'[a-z][a-z0-9_]{0,39}\Z')
+ALLOWED_CATEGORIES = frozenset(HTTP_ERROR_CATEGORIES.values())
+OUTBOX_PUBLICATION_RESERVE = 2000  # rows telemetry may never take: messages and tasks must always fit
+
+
 class NativeHTTPError(NativeError):
-    def __init__(self, status):
+    def __init__(self, status, category=None):
         self.status = status
-        super().__init__('api_http_' + str(status))
+        self.category = category if category in ALLOWED_CATEGORIES else None
+        super().__init__('api_http_' + str(status) + ('_' + self.category if self.category else ''))
 
 
 def canonical(value):
@@ -282,7 +296,13 @@ class NativeHTTP:
                     raise NativeError('response_too_large')
                 return value if binary else strict_json(value)
         except HTTPError as error:
-            raise NativeHTTPError(error.code) from None
+            category = None
+            try:  # bounded, best effort: only an exact allowlisted phrase yields a category
+                text = json.loads(error.read(1024).decode('utf-8')).get('error')
+                category = HTTP_ERROR_CATEGORIES.get(text) if type(text) is str else None
+            except Exception:
+                pass
+            raise NativeHTTPError(error.code, category) from None
         except (URLError, TimeoutError, OSError):
             raise NativeError('network_unavailable') from None
 
@@ -412,7 +432,14 @@ class NativeBridge:
             if tuple(row) != (kind, path, method, encoded):
                 raise NativeError('client_id_payload_conflict')
             return False
-        if self.db.execute('SELECT count(*) FROM outbox').fetchone()[0] >= MAX_ROWS:
+        count = self.db.execute('SELECT count(*) FROM outbox').fetchone()[0]
+        if count >= MAX_ROWS - OUTBOX_PUBLICATION_RESERVE:
+            self._prune_terminal_activity()  # inside the caller's transaction; never nests atomic()
+            count = self.db.execute('SELECT count(*) FROM outbox').fetchone()[0]
+        if kind == 'activity':
+            if count >= MAX_ROWS - OUTBOX_PUBLICATION_RESERVE:
+                return None  # dropped: telemetry is best effort, the remaining room is for real publications
+        elif count >= MAX_ROWS:
             raise NativeError('durable_outbox_capacity_reached')
         self.db.execute('INSERT INTO outbox(id,kind,channel_id,path,method,payload,created_at) VALUES(?,?,?,?,?,?,?)',
                         (identity, kind, channel, path, method, encoded, time.time()))
@@ -443,6 +470,8 @@ class NativeBridge:
         if message_id is not None:
             payload['message_id'] = message_id
         inserted = self._put('activity', channel, '/v1/channels/' + channel + '/activity', 'POST', payload, 'activity:' + client_id)
+        if inserted is None:
+            return {'event_id': client_id, 'queued': False, 'dropped': True}
         return {'event_id': client_id, 'queued': True, 'duplicate': not inserted}
 
     def observe(self, event_type, tool_name=None, message_id=None, event_id=None):
@@ -771,17 +800,45 @@ class NativeBridge:
         if not identifier(item.get('id')) or any(item.get(k) != v for k, v in expected.items()):
             raise NativeError('publication_receipt_mismatch')
 
+    TERMINAL_STATUSES = (400, 401, 403, 404, 409, 413, 422)
+
+    def _block(self, row, error, *, bulk_activity=False):
+        """Mark a refused row blocked (and, for a quota refusal, every queued report) in ONE transaction.
+        Updates are conditional on the exact payload, so a row that was pruned and re-created
+        meanwhile can never be marked with the outcome of an older request."""
+        marker = canonical({'status': error.status, 'category': error.category or 'http_' + str(error.status), 'at': time.time()})
+        with self.atomic():
+            self.db.execute("UPDATE outbox SET state='blocked',response=? WHERE id=? AND state='pending' AND payload=?",
+                            (marker, row['id'], row['payload']))
+            if bulk_activity:
+                self.db.execute("UPDATE outbox SET state='blocked',response=? WHERE state='pending' AND kind='activity'", (marker,))
+
+    def _prune_terminal_activity(self):
+        """Only finished TELEMETRY rows are ever pruned. Messages, tasks, artifacts and memory keep
+        their rows: the identity is their idempotency record, and pending work is never touched."""
+        self.db.execute("DELETE FROM outbox WHERE id IN (SELECT id FROM outbox WHERE kind='activity' "
+                        "AND state IN ('sent','blocked') AND created_at<? LIMIT 5000)", (time.time() - 86400,))
+
     def flush(self, limit=20):
+        """Publish queued rows. Real publications go first and any failure of them is raised; activity
+        telemetry is best effort: its failures end the telemetry phase, are reported as
+        `telemetry_error`, and can never make a publication call fail after the publication succeeded."""
         if type(limit) is not int or not 1 <= limit <= 100:
             raise NativeError('invalid_flush_limit')
         allowed = self._authorize()
-        rows = self.db.execute("SELECT * FROM outbox WHERE state='pending' ORDER BY created_at,id LIMIT ?", (limit,)).fetchall()
-        sent = 0
+        if self.db.execute('SELECT count(*) FROM outbox').fetchone()[0] > 5000:
+            with self.atomic():
+                self._prune_terminal_activity()
+        rows = self.db.execute("SELECT * FROM outbox WHERE state='pending' ORDER BY (kind='activity'),created_at,id LIMIT ?", (limit,)).fetchall()
+        sent, telemetry_error = 0, None
         for row in rows:
+            activity = row['kind'] == 'activity'
+            if activity and telemetry_error is not None:
+                continue  # the telemetry phase already ended; rows stay pending (or were blocked in bulk)
             if row['channel_id'] is not None:
                 if row['channel_id'] not in allowed or not allowed[row['channel_id']]:
                     with self.atomic():
-                        self.db.execute("UPDATE outbox SET state='blocked' WHERE id=? AND state='pending'", (row['id'],))
+                        self.db.execute("UPDATE outbox SET state='blocked' WHERE id=? AND state='pending' AND payload=?", (row['id'], row['payload']))
                     continue
             body = strict_json(row['payload'])
             self.reject_secret(body)
@@ -789,18 +846,49 @@ class NativeBridge:
                 response = self._request(row['method'], row['path'], body)
                 self._validate_receipt(row, body, response)
             except NativeHTTPError as error:
-                if error.status in (400, 401, 403, 404, 409, 413, 422):
-                    with self.atomic():
-                        self.db.execute("UPDATE outbox SET state='blocked' WHERE id=? AND state='pending'", (row['id'],))
+                terminal = error.status in self.TERMINAL_STATUSES
+                if terminal:
+                    quota = activity and error.category == 'activity_quota_exceeded'
+                    self._block(row, error, bulk_activity=quota)
+                if activity:
+                    if not terminal or error.category == 'activity_quota_exceeded':
+                        telemetry_error = str(error)  # retryable or quota: stop sending telemetry this round
+                    continue
+                if terminal:
+                    pass
+                raise
+            except NativeError as error:
+                if activity:
+                    telemetry_error = str(error)
+                    continue
                 raise
             with self.atomic():
-                self.db.execute("UPDATE outbox SET state='sent',response=? WHERE id=?", (canonical(self.sanitize(response)), row['id']))
+                self.db.execute("UPDATE outbox SET state='sent',response=? WHERE id=? AND state='pending' AND payload=?",
+                                (canonical(self.sanitize(response)), row['id'], row['payload']))
             sent += 1
         return {'sent': sent, 'pending': self.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
-                'blocked': self.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0]}
+                'blocked': self.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0],
+                'telemetry_error': telemetry_error}
+
+    def _blocked_summary(self):
+        by_kind = {row[0]: row[1] for row in self.db.execute("SELECT kind,count(*) FROM outbox WHERE state='blocked' GROUP BY kind")}
+        by_category, last = {}, None
+        try:  # exact totals over ALL blocked rows, aggregated in SQL; the category is a fixed-shape token
+            for category, count in self.db.execute("SELECT COALESCE(json_extract(response,'$.category'),'unclassified'),count(*) "
+                                                   "FROM outbox WHERE state='blocked' GROUP BY 1"):
+                category = category if type(category) is str and CATEGORY.match(category) else 'unclassified'
+                by_category[category] = by_category.get(category, 0) + count
+            newest = self.db.execute("SELECT json_extract(response,'$.category') FROM outbox WHERE state='blocked' "
+                                     "ORDER BY json_extract(response,'$.at') DESC LIMIT 1").fetchone()
+            if newest is not None:
+                last = newest[0] if type(newest[0]) is str and CATEGORY.match(newest[0]) else 'unclassified'
+        except sqlite3.Error:
+            by_category, last = {'unclassified': sum(by_kind.values())}, None
+        return by_kind, by_category, last
 
     def status(self):
         allowed = self._authorize()
+        blocked_kinds, blocked_categories, last_blocked = self._blocked_summary()
         connector, server = CONNECTOR_BUILD or {}, self._server_build or {}
         return self.sanitize({'agent_id': self.config['agent_id'], 'project_id': self.config['project_id'], 'runtime': self.config['runtime'],
                 'connector_version': connector.get('version'), 'connector_source_commit': connector.get('source_commit'),
@@ -811,6 +899,7 @@ class NativeBridge:
                 'unseen_messages': self._pending_count(allowed, include_seen=False),
                 'pending_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
                 'blocked_publications': self.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0],
+                'blocked_by_kind': blocked_kinds, 'blocked_by_category': blocked_categories, 'last_blocked_category': last_blocked,
                 'auto_execution': False, 'legacy_heartbeat_changed': False})
 
     def peers(self, channel_id=None, after_id=None, limit=50):

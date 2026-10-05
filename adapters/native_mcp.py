@@ -161,6 +161,14 @@ class MCPServer:
             result.update(fetch=fetched, fetch_has_more=fetched['has_more'])
             try:
                 result['publication'] = self.bridge.flush(limit=4)
+                if result['publication'].get('telemetry_error'):
+                    # Best-effort telemetry could not be fully sent. Keep the documented failure shape,
+                    # add the safe category, and do not lose how many real publications did go out.
+                    flushed = result['publication']
+                    result['publication'] = {'error': 'publication_failed', 'telemetry_error': flushed['telemetry_error'],
+                                             'pending': flushed['pending'], 'blocked': flushed['blocked']}
+                    if flushed['sent']:
+                        result['publication']['sent'] = flushed['sent']
             except Exception:
                 # An ACK can be lost after commit. Do not discard offered data,
                 # claim zero sends, or include remote/private exception text.

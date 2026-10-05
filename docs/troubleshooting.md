@@ -176,6 +176,17 @@ offer is repeated rather than lost. Hooks fail silently by design (an error
 returns no context), so an empty offer does not prove an empty inbox: compare
 `unseen_messages` in `link_status`.
 
+A refused publication is reported with a safe category, for example
+`api_http_409_activity_quota_exceeded`, and `link_status` shows `blocked_by_kind`,
+`blocked_by_category` and `last_blocked_category` (exact totals over every blocked row).
+Messages, tasks, artifacts and memory are always sent before activity telemetry, and
+telemetry is best effort: when the server refuses it (for example a full channel quota) every
+queued activity report is blocked at once, the publications are unaffected, and the failure
+is reported as `telemetry_error` (or `publication.error` with a `telemetry_error` category in
+`link_inbox`) instead of failing the call. Only finished (sent or blocked) activity rows older
+than a day are pruned, and the outbox keeps room reserved for real publications; messages,
+tasks, artifacts, memory and every pending row are never pruned.
+
 `inbox.offered` is recorded once per message for an agent, on its first offer.
 Later re-offers (the 60-second repeat, or a new CLI session re-showing its unseen
 backlog) are not new activity rows; receipts and delivery alerts only read the
