@@ -14,18 +14,19 @@ import (
 // is independent: acceptance does not invent an offer, view, or completion.
 // These reports never modify the legacy delivery receipt protocol.
 type NativeReceipt struct {
-	MessageID      string     `json:"message_id"`
-	AgentID        string     `json:"agent_id"`
-	OfferedAt      *time.Time `json:"offered_at"`
-	SeenAt         *time.Time `json:"seen_at"`
-	AcceptedAt     *time.Time `json:"accepted_at"`
-	Provenance     string     `json:"provenance"`
-	ServerVerified bool       `json:"server_verified"`
+	MessageID      string        `json:"message_id"`
+	AgentID        string        `json:"agent_id"`
+	OfferedAt      *time.Time    `json:"offered_at"`
+	SeenAt         *time.Time    `json:"seen_at"`
+	AcceptedAt     *time.Time    `json:"accepted_at"`
+	Provenance     string        `json:"provenance"`
+	ServerVerified bool          `json:"server_verified"`
+	Stage          DeliveryStage `json:"stage"`
 }
 
 const nativeReceiptBatchLimit = 100
 
-const nativeReceiptQuery = `SELECT n.message_id,n.actor_id,
+const nativeReceiptQuery = `SELECT n.message_id,n.actor_id,m.created_at,
  min(n.created_at) FILTER (WHERE n.event_type='inbox.offered'),
  min(n.created_at) FILTER (WHERE n.event_type='inbox.seen'),
  min(n.created_at) FILTER (WHERE n.event_type='inbox.accepted')
@@ -33,7 +34,7 @@ const nativeReceiptQuery = `SELECT n.message_id,n.actor_id,
  WHERE n.channel_id=$1 AND n.message_id=ANY($2::text[])
  AND m.recipient_ids ? n.actor_id
  AND n.event_type IN ('inbox.offered','inbox.seen','inbox.accepted')
- GROUP BY n.message_id,n.actor_id ORDER BY n.message_id,n.actor_id`
+ GROUP BY n.message_id,n.actor_id,m.created_at ORDER BY n.message_id,n.actor_id`
 
 func nativeReceiptIDs(rawQuery string) ([]string, bool) {
 	query, err := url.ParseQuery(rawQuery)
@@ -100,10 +101,12 @@ func (s *Server) nativeReceipts(w http.ResponseWriter, r *http.Request) {
 	receipts := []NativeReceipt{}
 	for rows.Next() {
 		item := NativeReceipt{Provenance: "client_reported"}
-		if rows.Scan(&item.MessageID, &item.AgentID, &item.OfferedAt, &item.SeenAt, &item.AcceptedAt) != nil {
+		var created time.Time
+		if rows.Scan(&item.MessageID, &item.AgentID, &created, &item.OfferedAt, &item.SeenAt, &item.AcceptedAt) != nil {
 			internal(w)
 			return
 		}
+		item.Stage = deliveryStage(created, item.OfferedAt, item.SeenAt, item.AcceptedAt, nil, nil, nil, deliveryNow())
 		receipts = append(receipts, item)
 	}
 	if rows.Err() != nil {
@@ -121,6 +124,7 @@ type MessageDeliveryStatus struct {
 	Native  NativeDeliveryStatus `json:"native"`
 	Legacy  LegacyDeliveryStatus `json:"legacy"`
 	Reply   *DeliveryReply       `json:"reply"`
+	Stage   DeliveryStage        `json:"stage"`
 }
 type NativeDeliveryStatus struct {
 	OfferedAt      *time.Time `json:"offered_at"`
@@ -190,6 +194,11 @@ func loadMessageDelivery(ctx context.Context, q querier, m *Message) error {
 			item.Reply = &DeliveryReply{MessageID: *replyID, CreatedAt: *repliedAt}
 			item.Status = "replied"
 		}
+		var repliedPtr *time.Time
+		if item.Reply != nil {
+			repliedPtr = repliedAt
+		}
+		item.Stage = deliveryStage(m.CreatedAt, item.Native.OfferedAt, item.Native.SeenAt, item.Native.AcceptedAt, r.DeliveredAt, r.AcceptedAt, repliedPtr, deliveryNow())
 		statuses = append(statuses, item)
 	}
 	return rows.Err()
