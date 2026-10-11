@@ -613,7 +613,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, id := range in.RecipientIDs {
 		if !channelAccess(ctx, tx, channel, id, false) {
-			fail(w, 404, "recipient not found")
+			fail(w, 400, "recipient "+id+" is not a participant of channel "+channel+" (typo or not a member): use link_peers to find real recipient ids; nothing was sent")
 			return
 		}
 		var kind string

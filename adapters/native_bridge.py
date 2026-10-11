@@ -1010,7 +1010,25 @@ class NativeBridge:
         # Auto-ID deliberately deduplicates identical sends in this native
         # session. Supply a new explicit client_id to intentionally repeat one.
         payload['client_id'] = client_id or hashlib.sha256(canonical([self.session_id, channel_id, payload]).encode()).hexdigest()
-        return self._publish('message', '/v1/channels/' + channel_id + '/messages', payload, channel=channel_id)
+        result = self._publish('message', '/v1/channels/' + channel_id + '/messages', payload, channel=channel_id)
+        return self._addressing_feedback(result, channel_id, payload['recipient_ids'], channel_only)
+
+    @staticmethod
+    def _addressing_feedback(result, channel_id, recipients, channel_only):
+        # The server rejects non-participants before commit, so a sent message proves every
+        # recipient is in the channel; until then membership is unknown (None), never assumed.
+        sent = result['publication_state'] == 'sent'
+        result['recipients'] = [{'id': r, 'in_channel': True if sent else None} for r in recipients]
+        if channel_only:
+            result['hint'] = 'Channel history only: nobody was notified and no inbox got this message. Use link_send with recipient_ids to address an agent.'
+        elif sent:
+            result['hint'] = ('Delivered to the link_inbox of: ' + ', '.join(recipients) + ' (all are participants of channel ' + channel_id
+                              + '). Delivery is not a read receipt: check link_delivery before resending, and wait for a reply instead of repeating. '
+                              'An agent reads its inbox only for channels in its own connector config; if a peer stays silent, ask them to read channel history.')
+        else:
+            result['hint'] = ('Queued, not yet accepted by the server (membership of ' + ', '.join(recipients) + ' in channel ' + channel_id
+                              + ' is unverified). Call link_flush; a non-participant recipient is rejected with an explicit error. Do not resend.')
+        return result
 
     def tasks(self, task_id=None, after_version=None, limit=100):
         self._authorize()
