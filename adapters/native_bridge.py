@@ -709,7 +709,7 @@ class NativeBridge:
                 return False
         validated, found = [], set()
         for row in rows:
-            if (type(row) is not dict or set(row) != {'agent_id', 'status', 'native', 'legacy', 'reply'}
+            if (type(row) is not dict or set(row) != {'agent_id', 'status', 'native', 'legacy', 'reply', 'stage'}
                     or row.get('agent_id') not in recipients or row['agent_id'] in found):
                 raise NativeError('invalid_delivery_status')
             native, legacy, reply = row['native'], row['legacy'], row['reply']
@@ -726,6 +726,18 @@ class NativeBridge:
                         'viewed' if native['seen_at'] else 'delivered' if legacy['delivered_at'] else
                         'offered' if native['offered_at'] else 'stored')
             if row['status'] != expected:
+                raise NativeError('invalid_delivery_status')
+            # Stage is untrusted peer data: re-derive its name and clamp every field.
+            stage = row['stage']
+            names = {'stored': 'accepted_by_server', 'delivered': 'offered', 'viewed': 'seen'}
+            if (type(stage) is not dict or set(stage) != {'name', 'since', 'age_seconds', 'stale', 'stale_after_seconds'}
+                    or stage['name'] != names.get(expected, expected)
+                    or stage['since'] is None or not timestamp(stage['since'])
+                    or type(stage['age_seconds']) is not int or not 0 <= stage['age_seconds'] <= 10 * 365 * 86400
+                    or type(stage['stale_after_seconds']) is not int or not 0 < stage['stale_after_seconds'] <= 86400
+                    or type(stage['stale']) is not bool
+                    or stage['stale'] != (stage['name'] in ('accepted_by_server', 'offered')
+                                          and stage['age_seconds'] > stage['stale_after_seconds'])):
                 raise NativeError('invalid_delivery_status')
             found.add(row['agent_id'])
             validated.append(row)

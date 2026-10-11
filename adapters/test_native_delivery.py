@@ -6,10 +6,12 @@ from native_mcp import MCPServer
 import test_native_bridge as bridge_tests
 
 TIME = '2026-10-03T10:00:00.123456789Z'
+STAGES = {'stored': 'accepted_by_server', 'offered': 'offered', 'viewed': 'seen', 'accepted': 'accepted', 'replied': 'replied'}
 def status(stage='stored'):
     row = {'agent_id': 'b', 'status': stage,
            'native': {'offered_at': None, 'seen_at': None, 'accepted_at': None, 'provenance': 'client_reported', 'server_verified': False},
-           'legacy': {'delivered_at': None, 'accepted_at': None, 'uncertain_at': None}, 'reply': None}
+           'legacy': {'delivered_at': None, 'accepted_at': None, 'uncertain_at': None}, 'reply': None,
+           'stage': {'name': STAGES[stage], 'since': TIME, 'age_seconds': 7, 'stale': False, 'stale_after_seconds': 300}}
     if stage in ('offered', 'viewed', 'accepted'):
         row['native'][{'offered': 'offered_at', 'viewed': 'seen_at', 'accepted': 'accepted_at'}[stage]] = TIME
     if stage == 'replied':
@@ -75,10 +77,25 @@ class DeliveryTests(unittest.TestCase):
             lambda m: m['delivery_status'][0]['native'].update(server_verified=True),
             lambda m: m['delivery_status'][0]['native'].update(seen_at='2026-02-31T01:00:00Z'),
             lambda m: m['delivery_status'][0]['native'].pop('offered_at'),
+            lambda m: m['delivery_status'][0].pop('stage'),
+            lambda m: m['delivery_status'][0]['stage'].update(name='offered'),
+            lambda m: m['delivery_status'][0]['stage'].update(age_seconds=-1),
+            lambda m: m['delivery_status'][0]['stage'].update(age_seconds=True),
+            lambda m: m['delivery_status'][0]['stage'].update(stale=True),
+            lambda m: m['delivery_status'][0]['stage'].update(since=None),
+            lambda m: m['delivery_status'][0]['stage'].update(extra='x'),
             lambda m: m['delivery_status'][0].update(reply={'message_id':'wrong', 'created_at':None}),
             lambda m: m['delivery_status'][0].update(private_detail='DO NOT LEAK')]
         for mutate in mutations:
             item = self.sent('viewed'); mutate(item)
             with self.subTest(mutate=mutations.index(mutate)), self.assertRaises(NativeError): bridge.delivery('m1')
+
+    def test_stage_and_stale_flag_pass_through_and_stale_is_recomputed(self):
+        item = self.sent('offered')
+        item['delivery_status'][0]['stage'].update(age_seconds=900, stale=True)
+        stage = self.bridge().delivery('m1')['delivery_status'][0]['stage']
+        self.assertEqual((stage['name'], stage['age_seconds'], stage['stale']), ('offered', 900, True))
+        item['delivery_status'][0]['stage'].update(stale=False)  # peer hides a stale recipient
+        with self.assertRaises(NativeError): self.bridge().delivery('m1')
 
 if __name__ == '__main__': unittest.main()

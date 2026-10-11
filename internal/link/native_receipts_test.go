@@ -79,7 +79,7 @@ func TestNativeReceiptsIndependentStagesAndReadOnly(t *testing.T) {
 		for _, value := range rows {
 			row := value.(map[string]any)
 			pair := row["message_id"].(string) + "/" + row["agent_id"].(string)
-			if pair <= previous || row["provenance"] != "client_reported" || row["server_verified"] != false || len(row) != 7 {
+			if pair <= previous || row["provenance"] != "client_reported" || row["server_verified"] != false || len(row) != 8 {
 				t.Fatal("unstable ordering or unexpected report provenance/fields")
 			}
 			previous = pair
@@ -93,6 +93,10 @@ func TestNativeReceiptsIndependentStagesAndReadOnly(t *testing.T) {
 				want["seen_at"] = viewed["created_at"]
 			default:
 				t.Fatal("exposed unreported or nonrecipient pair")
+			}
+			wantStage := map[string]string{multi + "/codex-pilot": "seen", multi + "/claude-pilot": "accepted", seenOnly + "/codex-pilot": "seen"}[pair]
+			if st, _ := row["stage"].(map[string]any); st["name"] != wantStage || st["since"] == nil || st["stale"] != false {
+				t.Fatalf("wrong stage for %s: %v", pair, row["stage"])
 			}
 			for field, timestamp := range want {
 				if row[field] != timestamp {
