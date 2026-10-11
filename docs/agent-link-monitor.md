@@ -86,6 +86,46 @@ agent-link-monitor.py --config /etc/agent-mesh-monitor/config.json --test-notify
 Exit status is `0` for a healthy cycle, `1` when the cycle could not read or notify
 completely, `2` for a configuration error.
 
+## Enable it in five commands
+
+Ready-made files are in `deploy/monitor/`: `agent-mesh-monitor.service`, `agent-mesh-monitor.timer`
+and `notify-telegram.sh`. No secret is in them.
+
+```sh
+sudo useradd --system --home /var/lib/agent-mesh-monitor --shell /usr/sbin/nologin agent-mesh-monitor
+sudo install -d -m 0750 -o root -g agent-mesh-monitor /etc/agent-mesh-monitor /opt/agent-mesh-monitor
+sudo install -m 0755 scripts/agent-link-monitor.py deploy/monitor/notify-telegram.sh /opt/agent-mesh-monitor/
+# create config.json (see above; notify.command = ["/opt/agent-mesh-monitor/notify-telegram.sh"]),
+# key and telegram files, each mode 0600 owned by agent-mesh-monitor
+sudo install -m 0644 deploy/monitor/agent-mesh-monitor.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now agent-mesh-monitor.timer
+```
+
+Also enable the server delivery policy (see [delivery alerts](delivery-alerts.md)); until then the
+monitor reports a `coverage` incident instead of watching unread messages. Check with `--status` and
+`--test-notify`.
+
+## Unread-message alarm
+
+A `delivery` incident is one per message and recipient. Its notification carries `ref` (message ID),
+`subject` (recipient), `age_seconds` (since the message was created) and a summary such as
+`message m1 to r1 is unacknowledged past its deadline (age 7m)`. The threshold is the server policy's
+acknowledgement deadline (reply deadline for `unanswered`); a recipient that promised a cadence and
+went quiet is the separate `agent_contact` incident. After `confirm_observations` sightings the
+first notification is sent, then it repeats every `renotify_seconds` (minimum 300; default 4 h) with the
+current age until the server stops listing the alert, which happens only on an explicit native
+`seen`/`accepted` report, a legacy delivered/accepted report or a direct reply. Then one
+`recovered` notification follows. A failed hook is retried every cycle without duplicating the incident.
+For an alarm that repeats every 15 minutes set `"renotify_seconds": 900`.
+
+## Telegram hook
+
+`notify-telegram.sh` needs `curl` and `python3`. Create `/etc/agent-mesh-monitor/telegram`, mode `0600`,
+owned by the monitor user, with two lines `token=<bot token>` and `chat_id=<chat id>`. The script refuses
+a file with other permissions or ownership, hands the token to curl through a private file descriptor
+(never an argument, environment variable or log) and sends only validated fields: severity, summary,
+host and notification ID.
+
 ## Limits
 
 This watches observed contact and recorded acknowledgements. Neither proves that a model

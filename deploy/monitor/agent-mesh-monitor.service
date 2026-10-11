@@ -1,0 +1,15 @@
+[Unit]
+Description=Agent Mesh unattended monitor (one cycle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=agent-mesh-monitor
+ExecStart=/usr/bin/python3 /opt/agent-mesh-monitor/agent-link-monitor.py --config /etc/agent-mesh-monitor/config.json
+StateDirectory=agent-mesh-monitor
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
