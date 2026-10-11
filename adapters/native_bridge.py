@@ -330,6 +330,7 @@ class NativeBridge:
                 raise NativeError('private_owned_database_required')
         finally:
             os.close(fd)
+        self._recover_if_corrupt(database)
         self.db = sqlite3.connect(database, timeout=1.0)
         self.db.row_factory = sqlite3.Row
         try:
@@ -369,6 +370,55 @@ class NativeBridge:
         except BaseException:
             self.db.close()
             raise
+
+    @staticmethod
+    def _recover_if_corrupt(database):
+        """A malformed state database must not wedge the connector: keep the damaged file for
+        inspection, rebuild a fresh database from every row that is still readable (the
+        schema is recreated by the caller) and carry the readable rows over. Lost cursors
+        only mean messages are offered again; the server remains the source of truth."""
+        try:
+            probe = sqlite3.connect(database, timeout=1.0)
+            try:
+                healthy = probe.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+            finally:
+                probe.close()
+        except sqlite3.DatabaseError:
+            healthy = False
+        if healthy:
+            return
+        damaged = Path(str(database) + '.corrupt-' + time.strftime('%Y%m%dT%H%M%S'))
+        for suffix in ('', '-wal', '-shm'):
+            source = Path(str(database) + suffix)
+            if source.exists():
+                os.replace(source, Path(str(damaged) + suffix))
+        old = sqlite3.connect(damaged, timeout=1.0)
+        new = sqlite3.connect(database, timeout=1.0)
+        try:
+            os.chmod(database, 0o600)
+            for kind, name, sql in old.execute(
+                    "SELECT type,name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
+                    " ORDER BY type='table' DESC").fetchall():
+                try:
+                    new.execute(sql)
+                except sqlite3.DatabaseError:
+                    pass
+            tables = [r[0] for r in old.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+            for table in tables:
+                for query in ('SELECT * FROM "%s" NOT INDEXED', 'SELECT * FROM "%s"'):
+                    moved = 0
+                    try:
+                        for row in old.execute(query % table):
+                            new.execute('INSERT OR IGNORE INTO "%s" VALUES (%s)' % (table, ','.join('?' * len(row))), tuple(row))
+                            moved += 1
+                    except sqlite3.DatabaseError:
+                        pass
+                    if moved:
+                        break
+            new.commit()
+        finally:
+            old.close()
+            new.close()
 
     @contextmanager
     def atomic(self):
