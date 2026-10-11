@@ -155,10 +155,26 @@ func TestMessageAddressingPreservesDirectedReplayAndAuthorization(t *testing.T) 
 	f.expect("POST", "/v1/channels/isolated/messages", "deny-pilot", body, 404)
 	delete(body, "reply_to")
 	body["channel_only"], body["recipient_ids"] = false, []string{"deny-pilot"}
-	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 404)
+	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 400)
 	body["recipient_ids"] = []string{"viewer-pilot"}
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 400)
 	if messageJournalSnapshot(f) != before {
 		t.Fatal("authorization errors or directed replay changed durable records")
+	}
+}
+
+func TestMessageRejectsRecipientOutsideChannel(t *testing.T) {
+	f := newFixture(t)
+	for _, id := range []string{"codex-pilto", "claude-pilot-typo"} {
+		before := messageJournalSnapshot(f)
+		body := map[string]any{"client_id": "outsider-" + id, "body": "Typo recipient", "recipient_ids": []string{id}}
+		response := f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 400)
+		msg, _ := response["error"].(string)
+		if !strings.Contains(msg, id) || !strings.Contains(msg, "not a participant") || !strings.Contains(msg, "nothing was sent") {
+			t.Fatalf("recipient error is not actionable: %q", msg)
+		}
+		if messageJournalSnapshot(f) != before {
+			t.Fatal("rejected recipient changed the journal")
+		}
 	}
 }

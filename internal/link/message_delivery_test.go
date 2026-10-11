@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func deliveryRow(t *testing.T, message map[string]any, agent string) map[string]any {
@@ -35,6 +36,9 @@ func TestMessageDeliveryIndependentNativeLegacyReplyFacts(t *testing.T) {
 	if row["status"] != "stored" || row["reply"] != nil {
 		t.Fatal("unreported message is not stored-only")
 	}
+	if st := row["stage"].(map[string]any); st["name"] != "accepted_by_server" || st["stale"] != false || st["since"] == nil {
+		t.Fatal("stored message lacks accepted_by_server stage")
+	}
 	report := func(client, kind string) map[string]any {
 		in := nativeInput(client, kind)
 		in.MessageID = &id
@@ -44,11 +48,22 @@ func TestMessageDeliveryIndependentNativeLegacyReplyFacts(t *testing.T) {
 	if row = deliveryRow(t, get(), "codex-pilot"); row["status"] != "offered" || row["native"].(map[string]any)["seen_at"] != nil {
 		t.Fatal("offer invented a view")
 	}
+	if row["stage"].(map[string]any)["name"] != "offered" {
+		t.Fatal("offer stage missing")
+	}
+	deliveryNow = func() time.Time { return time.Now().Add(time.Hour) }
+	if st := deliveryRow(t, get(), "codex-pilot")["stage"].(map[string]any); st["stale"] != true || st["age_seconds"].(float64) < 3600 {
+		t.Fatal("unseen offer not flagged stale")
+	}
+	deliveryNow = time.Now
 	seen := report("delivery-view", "inbox.seen")
 	row = deliveryRow(t, get(), "codex-pilot")
 	native := row["native"].(map[string]any)
 	if row["status"] != "viewed" || native["seen_at"] != seen["created_at"] || native["offered_at"] != offered["created_at"] || native["accepted_at"] != nil || native["server_verified"] != false {
 		t.Fatal("native view facts changed")
+	}
+	if row["stage"].(map[string]any)["name"] != "seen" {
+		t.Fatal("seen stage missing")
 	}
 	afterLegacy, _ := json.Marshal(get()["receipts"])
 	if string(beforeLegacy) != string(afterLegacy) {

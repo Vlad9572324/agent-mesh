@@ -285,12 +285,20 @@ def parse_time(value):
         return None
 
 
-def describe(kind, severity, subject, ref):
+def age_label(seconds):
+    if type(seconds) not in (int, float) or seconds < 0:
+        return ""
+    seconds = int(seconds)
+    return " (age %dd%dh)" % (seconds // 86400, seconds % 86400 // 3600) if seconds >= 86400 else (
+        " (age %dh%dm)" % (seconds // 3600, seconds % 3600 // 60) if seconds >= 3600 else " (age %dm)" % (seconds // 60))
+
+
+def describe(kind, severity, subject, ref, age=None):
     """Notification text is built only from validated tokens and fixed phrases, never server free text."""
     if kind == "agent_contact":
         return "agent %s is %s: promised contact cadence missed" % (subject, "dead" if severity == "crit" else "silent")
     if kind == "delivery":
-        return "message %s to %s is %s past its deadline" % (ref, subject, "unacknowledged" if severity == "crit" else "unanswered")
+        return "message %s to %s is %s past its deadline%s" % (ref, subject, "unacknowledged" if severity == "crit" else "unanswered", age_label(age))
     if kind == "api":
         return "cannot read the Agent Mesh server completely"
     if kind == "config":
@@ -302,8 +310,8 @@ def describe(kind, severity, subject, ref):
     return str(subject)
 
 
-def incident(key, kind, severity, subject, project=None, ref=None):
-    return {"key": key, "kind": kind, "severity": severity, "subject": subject, "project": project, "ref": ref}
+def incident(key, kind, severity, subject, project=None, ref=None, since=None):
+    return {"key": key, "kind": kind, "severity": severity, "subject": subject, "project": project, "ref": ref, "since": since}
 
 
 class Observation:
@@ -411,7 +419,8 @@ def read_delivery(transport, key, config, obs):
             continue
         key_ = "delivery/%s/%s/%s" % (alert["project_id"], alert["message_id"], alert["recipient_id"])
         obs.incidents[key_] = incident(key_, "delivery", "crit" if alert["reason"] == "unacknowledged" else "warn",
-                                       alert["recipient_id"], alert["project_id"], alert["message_id"])
+                                       alert["recipient_id"], alert["project_id"], alert["message_id"],
+                                       parse_time(alert.get("created_at")))
 
 
 def observe(transport, key, config, obs=None):
@@ -470,7 +479,7 @@ def valid_state(state):
             for name in ("p", "r"):
                 if entry.get(name) is not None and not (type(entry[name]) is str and STATE_TEXT.match(entry[name])):
                     return False
-            if not _number(entry.get("f")) or not _number(entry.get("l")):
+            if not _number(entry.get("f")) or not _number(entry.get("l")) or ("c" in entry and not _number(entry["c"])):
                 return False
             for name in ("n", "h"):
                 if type(entry.get(name)) is not int or entry[name] < 0:
@@ -587,20 +596,22 @@ def room(state):
 
 def enqueue(state, event, view, now, host):
     state["seq"] += 1
-    summary = describe(view["kind"], view["severity"], view["subject"], view.get("ref"))
+    since = view.get("since")
+    age = int(max(0, now - since)) if _number(since) else None
+    summary = describe(view["kind"], view["severity"], view["subject"], view.get("ref"), age)
     if event == "resolved":
         summary = "recovered: " + summary
     first_seen = view.get("first_seen", now)
     state["pending"].append({
         "id": "%s-%d" % (hashlib.sha256(("%s|%s|%s" % (host, view["key"], first_seen)).encode()).hexdigest()[:16], state["seq"]),
         "event": event, "severity": "info" if event == "resolved" else view["severity"], "kind": view["kind"],
-        "subject": view["subject"], "summary": summary, "project": view.get("project"), "first_seen": first_seen,
+        "subject": view["subject"], "ref": view.get("ref"), "age_seconds": age, "summary": summary, "project": view.get("project"), "first_seen": first_seen,
         "observed_at": now, "host": host, "attempts": 0})
 
 
 def _view(key, entry):
     return {"key": key, "kind": entry["k"], "severity": entry["v"], "subject": entry["s"], "project": entry.get("p"),
-            "ref": entry.get("r"), "first_seen": entry["f"]}
+            "ref": entry.get("r"), "first_seen": entry["f"], "since": entry.get("c")}
 
 
 def resolvable(entry, obs):
@@ -644,6 +655,8 @@ def advance(state, obs, config, now, host):
                 continue
             entry = book[key] = {"k": current["kind"], "p": current["project"], "s": current["subject"], "r": current["ref"],
                                  "f": now, "l": now, "n": 0, "h": 0, "v": current["severity"], "t": None}
+        if _number(current.get("since")):
+            entry["c"] = current["since"]  # message creation time: lets every reminder state the real age
         entry["n"] += 1
         entry["h"] = 0
         entry["l"] = now

@@ -699,6 +699,96 @@ class HardeningTests(CycleCase):
         self.assertEqual(caught.exception.kind, "config")
 
 
+class UnreadAlarmTests(CycleCase):
+    def hook_capture(self):
+        hook = self.dir / "cap.sh"
+        hook.write_text('#!/bin/sh\ncat >> "%s/got.jsonl"; echo >> "%s/got.jsonl"\n' % (self.dir, self.dir))
+        os.chmod(hook, 0o755)
+        self.config["notify"] = {"command": [str(hook)], "timeout_seconds": 5}
+        self.config["renotify_seconds"] = 900
+        return [json.loads(x) for x in (self.dir / "got.jsonl").read_text().split("\n") if x] if (self.dir / "got.jsonl").exists() else []
+
+    def unread(self):
+        created = "2026-01-01T00:00:00Z"
+        page = alert()
+        page["created_at"] = created
+        self.api.delivery_pages[0]["alerts"] = [page]
+        return monitor.parse_time(created)
+
+    def test_unread_message_notifies_with_id_recipient_age_and_repeats_until_read(self):
+        self.hook_capture()
+        created = self.unread()
+        self.now = created + 600 - 60
+        self.cycle(); self.cycle()                       # confirm, then open
+        got = self.hook_capture()
+        self.assertEqual(len(got), 1)
+        self.assertEqual((got[0]["ref"], got[0]["subject"], got[0]["event"]), ("m1", "r1", "open"))
+        self.assertEqual(got[0]["age_seconds"], 660)
+        self.assertIn("(age 11m)", got[0]["summary"])
+        for _ in range(5):
+            self.cycle()                                 # inside the interval: no spam
+        self.assertEqual(len(self.hook_capture()), 1)
+        self.cycle(advance=900)                          # still unread: repeats with the real age
+        got = self.hook_capture()
+        self.assertEqual([g["event"] for g in got], ["open", "reminder"])
+        self.assertGreater(got[1]["age_seconds"], got[0]["age_seconds"] + 800)
+        self.cycle(advance=900)
+        self.assertEqual(len(self.hook_capture()), 3)    # keeps repeating until resolved
+        self.api.delivery_pages[0]["alerts"] = []        # explicit read: server stops listing it
+        self.cycle(); self.cycle()
+        self.assertEqual(self.hook_capture()[-1]["event"], "resolved")
+        self.cycle(advance=3600)
+        self.assertEqual(self.hook_capture()[-1]["event"], "resolved")
+        self.assertEqual(len(self.hook_capture()), 4)
+
+    def test_age_survives_a_restart_through_the_state_file(self):
+        created = self.unread()
+        self.now = created + 100
+        self.cycle(); self.cycle()
+        state = json.loads(Path(self.config["state_file"]).read_text())
+        self.assertEqual(list(state["incidents"].values())[0]["c"], created)
+
+
+class TelegramHookTests(unittest.TestCase):
+    HOOK = Path(__file__).resolve().parent.parent / "deploy" / "monitor" / "notify-telegram.sh"
+    TOKEN = "123456:ABC-def_SECRETTOKEN"
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="tg-"))
+        os.chmod(self.dir, 0o700)
+        self.bin = self.dir / "bin"
+        self.bin.mkdir()
+        fake = self.bin / "curl"
+        fake.write_text("""#!/bin/bash
+{ printf '%s\\n' "$@"; echo ---CFG; while [ "$1" ]; do [ "$1" = -K ] && cat "$2"; shift; done; } > "DIR/rec"
+""".replace("DIR", str(self.dir)))
+        os.chmod(fake, 0o755)
+        self.cred = self.dir / "telegram"
+        self.cred.write_text("token=%s\nchat_id=-1001\n" % self.TOKEN)
+        os.chmod(self.cred, 0o600)
+
+    def run_hook(self):
+        env = {"PATH": "%s:/usr/bin:/bin" % self.bin, "TELEGRAM_CRED_FILE": str(self.cred)}
+        note = json.dumps({"severity": "crit", "summary": "message m1 to r1 is unacknowledged past its deadline (age 7m)",
+                           "host": "h", "id": "abc-1"})
+        return subprocess.run([str(self.HOOK)], input=note.encode(), env=env, capture_output=True)
+
+    def test_token_reaches_curl_only_through_the_config_fd_never_argv_or_output(self):
+        done = self.run_hook()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        record = (self.dir / "rec").read_text()
+        argv, _, cfg = record.partition("---CFG")
+        self.assertNotIn("SECRETTOKEN", argv)
+        self.assertIn(self.TOKEN, cfg)
+        self.assertIn("text=[crit] message m1 to r1 is unacknowledged past its deadline (age 7m)", argv)
+        self.assertNotIn(b"SECRETTOKEN", done.stdout + done.stderr)
+
+    def test_a_credential_file_with_loose_permissions_is_refused_and_nothing_is_sent(self):
+        os.chmod(self.cred, 0o644)
+        self.assertEqual(self.run_hook().returncode, 3)
+        self.assertFalse((self.dir / "rec").exists())
+
+
 class FramingTests(unittest.TestCase):
     def transport(self, server):
         return monitor.Transport(server.origin, pin_of(CERTS["ec"][1]), timeout=2, verify="pin_only")

@@ -227,7 +227,7 @@ func TestMessageIdempotencyAndBoundaries(t *testing.T) {
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", in, 409)
 	in["client_id"] = "cross-recipient"
 	in["recipient_ids"] = []string{"deny-pilot"}
-	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", in, 404)
+	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", in, 400)
 	in["recipient_ids"] = []string{"codex-pilot", "codex-pilot"}
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", in, 400)
 	in["recipient_ids"] = []string{"viewer-pilot"}

@@ -128,6 +128,20 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(len(self.api.activity), 1)
         self.assertEqual(reopened.status()["pending_publications"], 0)
 
+    def test_send_reports_in_channel_and_hint(self):
+        bridge = self.bridge()
+        result = bridge.send("c", ["b"], "hello", client_id="hint-1")
+        self.assertEqual(result["recipients"], [{"id": "b", "in_channel": True}])
+        self.assertIn("link_inbox of: b", result["hint"])
+        self.assertIn("not a read receipt", result["hint"])
+        self.api.offline = False
+        note = bridge.broadcast("c", "history", client_id="hint-2")
+        self.assertEqual(note["recipients"], [])
+        self.assertIn("nobody was notified", note["hint"])
+        queued = native.NativeBridge._addressing_feedback({"publication_state": "pending"}, "c", ["b"], False)
+        self.assertEqual(queued["recipients"], [{"id": "b", "in_channel": None}])
+        self.assertIn("Queued", queued["hint"])
+
     def test_message_lost_ack_exact_payload_retry_and_changed_id_conflict(self):
         bridge = self.bridge()
         self.api.lose_next_ack = True
