@@ -155,7 +155,7 @@ func TestMessageAddressingPreservesDirectedReplayAndAuthorization(t *testing.T) 
 	f.expect("POST", "/v1/channels/isolated/messages", "deny-pilot", body, 404)
 	delete(body, "reply_to")
 	body["channel_only"], body["recipient_ids"] = false, []string{"deny-pilot"}
-	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 404)
+	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 400)
 	body["recipient_ids"] = []string{"viewer-pilot"}
 	f.expect("POST", "/v1/channels/general/messages", "claude-pilot", body, 400)
 	if messageJournalSnapshot(f) != before {
