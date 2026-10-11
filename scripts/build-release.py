@@ -69,6 +69,7 @@ BUILD_FILES = (
     "internal/link/admin.go",
     "internal/link/delivery_alerts.go",
     "internal/link/delivery_alerts_schema.sql",
+    "internal/link/delivery_stage.go",
     "internal/link/agent_presence.go",
     "internal/link/agent_presence_schema.sql",
     "internal/link/artifacts.go",
