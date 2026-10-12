@@ -383,11 +383,15 @@ class NativeBridge:
                 healthy = probe.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
             finally:
                 probe.close()
-        except sqlite3.DatabaseError:
-            healthy = False
+        except sqlite3.DatabaseError as error:
+            # Занятая базу (другой процесс пишет) - не повреждение: карантин здорового файла из-под
+            # работающего писателя терял бы состояние. Повреждением считаем только явные признаки.
+            text = str(error).lower()
+            healthy = not ('malformed' in text or 'not a database' in text or 'disk image' in text
+                           or 'corrupt' in text)
         if healthy:
             return
-        damaged = Path(str(database) + '.corrupt-' + time.strftime('%Y%m%dT%H%M%S'))
+        damaged = Path(str(database) + '.corrupt-' + time.strftime('%Y%m%dT%H%M%S') + '-' + uuid.uuid4().hex[:6])
         for suffix in ('', '-wal', '-shm'):
             source = Path(str(database) + suffix)
             if source.exists():

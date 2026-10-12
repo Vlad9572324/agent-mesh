@@ -70,6 +70,36 @@ def main():
         check(0 < rows <= 3000, 'no readable rows carried over')
         recovered.db.close()
 
+        # Занятая (не повреждённая) база: проба целостности получает «database is locked» -
+        # карантина быть не должно, иначе живое состояние уезжает из-под работающего писателя.
+        import native_bridge
+        before = len(list(state.glob('native.sqlite.corrupt-*')))
+        real_connect = native_bridge.sqlite3.connect
+
+        class BusyProbe:
+            def execute(self, *a, **k):
+                raise sqlite3.OperationalError('database is locked')
+
+            def close(self):
+                pass
+
+        calls = {'n': 0}
+
+        def flaky_connect(*a, **k):
+            calls['n'] += 1
+            return BusyProbe() if calls['n'] == 1 else real_connect(*a, **k)
+
+        native_bridge.sqlite3.connect = flaky_connect
+        try:
+            NativeBridge(str(config), 's-busy').db.close()
+        finally:
+            native_bridge.sqlite3.connect = real_connect
+        check(len(list(state.glob('native.sqlite.corrupt-*'))) == before, 'здоровая, но занятая база отправлена в карантин')
+        intact = sqlite3.connect(database)
+        check(intact.execute('PRAGMA integrity_check').fetchone()[0] == 'ok', 'база после проверки на занятость повреждена')
+        check(intact.execute('SELECT COUNT(*) FROM offers').fetchone()[0] > 0, 'строки пропали после проверки на занятость')
+        intact.close()
+
         again = NativeBridge(str(config), 's3')  # a healthy database is left alone
         before = len(list(state.glob('native.sqlite.corrupt-*')))
         again.db.close()
