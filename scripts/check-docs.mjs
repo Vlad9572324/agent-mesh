@@ -71,6 +71,24 @@ for (const file of markdown) {
   }
   if (/(?:^|\n)(?:<{7}|={7}|>{7})(?:\s|$)/m.test(content)) fail(file, 'merge-conflict marker');
 }
+
+// Keep the install entry points on the same reviewed release. Historical notes
+// may mention older releases, so validate only files that select what to deploy.
+const selectedRelease = 'v0.1.0-guide.7';
+const selectedCommit = '984e62fab32efb11b8c38db0f00c9bc4739e1dd5';
+const selectedDigest = 'sha256:34c3dac1f167be490bd3bfe2ebc21a5f3dba5779c8a1391d512e9b8b431c0cfd';
+for (const file of ['README.md', 'docs/README.md', 'docs/container.md', 'docs/install-release.md', 'docs/release-process.md']) {
+  const body = await text(file);
+  if (!body.includes(selectedRelease)) fail(file, `selected release must be ${selectedRelease}`);
+}
+for (const [file, expected] of [
+  ['docs/container.md', [selectedRelease, selectedCommit, selectedDigest]],
+  ['docs/release-process.md', [selectedRelease, selectedCommit]],
+  ['docs/install-release.md', [`release-install-version: ${selectedRelease}`]],
+]) {
+  const body = await text(file);
+  for (const value of expected) if (!body.includes(value)) fail(file, `missing selected release identity ${value}`);
+}
 const svgs = paths.filter(path => path.startsWith('docs/assets/') && path.endsWith('.svg'));
 for (const file of svgs) {
   const body = await text(file);

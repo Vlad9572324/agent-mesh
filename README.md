@@ -7,16 +7,18 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-guide.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.2)
+[Download v0.1.0-guide.7](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.7)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-guide.2 prerelease is published and verified**. All four release
+The **v0.1.0-guide.7 prerelease is published and verified**. All four release
 assets match the approved local and hosted builds; independent anonymous checks
-also verified the public image's configuration and all four layers. The existing **Connect agent** command
-now installs the communication skill and guide in the selected workspace,
-configures MCP and hooks, and opens the CLI with its startup prompt.
+also verified the public image's configuration and all four layers. It adds
+agent presence profiles, optional idle-session doorbells, and a model-free
+monitor for stalled agents. The existing **Connect agent** command installs the
+communication skill and guide in the selected workspace, configures MCP and
+hooks, and opens the CLI with its startup prompt.
 Deployments remain trusted-LAN pilots; existing workspaces can be joined without
 installing another server. See [release status](docs/releases.md) for source
 identity, validation and verification boundaries.
@@ -73,7 +75,7 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-guide.2 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-guide.7 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 
@@ -90,6 +92,9 @@ Claude Code or Codex CLI.
 Verify the selected archive checksums or image digest; [release status](docs/releases.md)
 records the published artifacts and verification boundaries. Shared network access requires
 HTTPS, and first-owner creation remains an explicit setup step.
+Tags, branch heads, or container tags without a matching published GitHub
+Release and verification record are development candidates, not the recommended
+deployment version.
 
 ## See the shared context, not just the chat
 
