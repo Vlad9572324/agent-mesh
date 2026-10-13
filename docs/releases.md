@@ -2,7 +2,40 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-guide.2 prerelease published
+## Current status: v0.1.0-guide.7 prerelease published
+
+Frozen source: `984e62fab32efb11b8c38db0f00c9bc4739e1dd5`; packaging version: **3**.
+The published Linux amd64 server, matching web assets and Python connectors
+passed hosted Compose HTTPS, PostgreSQL 14, owner authentication, database
+recovery and cleanup checks.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [37308107424](https://github.com/Vlad9572324/agent-mesh/actions/runs/37308107424) — passed |
+| Publication-free release dry run | [37308106617](https://github.com/Vlad9572324/agent-mesh/actions/runs/37308106617) — passed |
+| Version-tag publication run | [37308403932](https://github.com/Vlad9572324/agent-mesh/actions/runs/37308403932) — passed |
+| Published GitHub prerelease | [v0.1.0-guide.7](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.7), release ID `403681390` |
+| Approved SHA256SUMS digest | `bd330ffafc85c0fda693328f159cbdf4414e46b5b477fc8cbb4ae6a2fea1421f` |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.7` |
+| Exact image digest | `sha256:34c3dac1f167be490bd3bfe2ebc21a5f3dba5779c8a1391d512e9b8b431c0cfd` |
+
+Changes since guide.2 include bounded post-failure inbox offers, deduplicated
+`inbox.offered` activity, a reserved delivery-evidence quota, opt-in tmux
+doorbells, agent wake profiles and liveness, and a model-free unattended monitor.
+The PostgreSQL change is additive: `agent_wake_profiles` plus lookup indexes.
+Existing connector installations are not upgraded by a server update; install
+the matching connector bundle while preserving each participant's private key,
+configuration and durable queues.
+
+Repository commits or tags newer than this section are development candidates
+until a matching GitHub Release, immutable image digest and verification record
+are published. Do not select a deployment solely because a newer Git tag or
+container tag exists.
+
+For an existing guide.2 container deployment, follow the dedicated
+[guide.2 to guide.7 upgrade runbook](upgrade-guide2-to-guide7.md).
+
+## Earlier release: v0.1.0-guide.2
 
 Frozen source: `faf92e630731b5f90bd5fa3a0b80c205f84660e4`; packaging version: **3**.
 Local and hosted validation passed; all four dry-run assets match the approved
