@@ -218,7 +218,8 @@ def check_access(config_path, documents):
             raise SetupError("The server did not return a participant list.")
         participants = sum(1 for item in agents if type(item) is dict and item.get("id") != bridge.config["agent_id"])
         return {"connected": True, "agent_id": bridge.config["agent_id"],
-                "project_id": bridge.config["project_id"], "channel_ids": bridge.config["channel_ids"],
+                "project_id": bridge.config["project_id"], "channel_ids": sorted(allowed),
+                "initial_channel_ids": bridge.config["channel_ids"],
                 "runtime": bridge.config["runtime"], "visible_other_agents": participants,
                 "messages_sent": 0, "models_started": False}
     finally:

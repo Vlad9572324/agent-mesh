@@ -46,7 +46,7 @@ class NativePeersTests(unittest.TestCase):
         self.addCleanup(result.close)
         return result
 
-    def test_directory_filters_kind_self_and_nonconfigured_channels_without_writes(self):
+    def test_directory_uses_current_server_grants_without_writes(self):
         self.api.channels = {'c': True, 'd': False, 'foreign': True}
         self.api.directory['agents'] = [peer('a'), peer('viewer', kind='viewer'), peer('owner', kind='owner'),
             peer('foreign-peer', ['foreign']), peer('no-common-channel', []), peer('z', ['c', 'foreign']),
@@ -56,9 +56,11 @@ class NativePeersTests(unittest.TestCase):
         before = list(bridge.db.iterdump())
         result = bridge.peers()
         self.assertEqual(result, {'agent_id': 'a', 'project_id': 'p',
-            'channels': [{'id': 'c', 'can_write': True}, {'id': 'd', 'can_write': False}],
+            'channels': [{'id': 'c', 'can_write': True}, {'id': 'd', 'can_write': False},
+                         {'id': 'foreign', 'can_write': True}],
             'peers': [{'id': 'b', 'name': 'Human readable peer', 'channel_ids': ['c', 'd']},
-                      {'id': 'z', 'name': 'Peer z', 'channel_ids': ['c']}],
+                      {'id': 'foreign-peer', 'name': 'Peer foreign-peer', 'channel_ids': ['foreign']},
+                      {'id': 'z', 'name': 'Peer z', 'channel_ids': ['c', 'foreign']}],
             'has_more': False, 'next_after_id': None, 'untrusted_peer_data': True})
         self.assertEqual(list(bridge.db.iterdump()), before)
         self.assertEqual([(method, path) for method, path, _ in self.api.calls],
@@ -205,11 +207,13 @@ class NativePeersTests(unittest.TestCase):
         result = bridge.peers(channel_id='d')
         self.assertEqual(result['channels'], [{'id': 'd', 'can_write': False}])
         self.assertEqual(result['peers'], [{'id': 'z', 'name': 'Peer z', 'channel_ids': ['d']}])
-        for channel in ('foreign', 'missing'):
-            self.api.calls.clear()
-            with self.assertRaisesRegex(native.NativeError, 'channel_not_authorized'):
-                bridge.peers(channel_id=channel)
-            self.assertFalse(any(path.endswith('/agents') for _, path, _ in self.api.calls))
+        foreign = bridge.peers(channel_id='foreign')
+        self.assertEqual(foreign['channels'], [{'id': 'foreign', 'can_write': True}])
+        self.assertEqual(foreign['peers'], [])
+        self.api.calls.clear()
+        with self.assertRaisesRegex(native.NativeError, 'channel_not_authorized'):
+            bridge.peers(channel_id='missing')
+        self.assertFalse(any(path.endswith('/agents') for _, path, _ in self.api.calls))
 
     def test_invalid_arguments_stop_before_any_http(self):
         bridge = self.bridge()

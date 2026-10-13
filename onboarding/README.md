@@ -19,8 +19,11 @@ The explicit runtime allows this check even if the CLI is not installed.
 The default workspace is a new, empty `workspace` directory in this package.
 On the first run, `--workspace /absolute/existing/repository` selects existing
 code instead. The workspace must not contain this private package. Subsequent
-runs reuse `config.json` and `native-state` unchanged; a different binding needs
-a separate package. The installer prints the command for later runs.
+runs reuse `config.json` and `native-state` unchanged. Current server-managed
+channel grants are discovered at runtime, so granting another channel does not
+require a separate package or key rotation. A different identity, project,
+runtime or workspace binding still needs a separate package. The installer
+prints the command for later runs.
 
 The normal run installs the communication skill in the selected workspace,
 opens a new CLI session and passes `PROMPT.md` automatically.
