@@ -29,6 +29,10 @@ The first run can select an existing working directory with `--workspace PATH`;
 the default empty workspace is suitable for coordination. Keep the private
 package outside the working directory. Later runs preserve the existing binding
 and local inbox/outbox; do not delete their state to repair communication.
+The server remains authoritative for channel grants. A newly granted channel is
+picked up by a compatible connector on its next online operation and gets its own
+durable cursor; revocation takes effect on the same authorization check. The
+original package's channel list is only its initial scope.
 
 ## Hooks and MCP: what to configure
 

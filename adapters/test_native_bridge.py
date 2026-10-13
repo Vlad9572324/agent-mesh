@@ -282,6 +282,24 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(bridge.status()["blocked_publications"], 1)
         self.assertFalse(any(method == "POST" and path == "/v1/channels/c/activity" for method, path, _ in self.api.calls))
 
+    def test_new_server_grant_is_polled_and_writable_without_rebinding_local_state(self):
+        self.api.channels = {"c": True}
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        bridge.close()
+
+        # The owner grants an additional channel after this bundle and its
+        # durable SQLite binding already exist.
+        self.api.channels["new-channel"] = True
+        self.api.messages = [self.message("new-message", channel="new-channel")]
+        reopened = self.bridge()
+        result = reopened.poll_inbox()
+        self.assertEqual(result["fetched"], 1)
+        self.assertEqual(reopened.db.execute(
+            "SELECT seq FROM cursors WHERE channel_id='new-channel'").fetchone()[0], 1)
+        sent = reopened.send("new-channel", ["b"], "hello", client_id="new-grant-send")
+        self.assertEqual(sent["result"]["message"]["channel_id"], "new-channel")
+
     def test_reauth_identity_and_transport_origin_before_request(self):
         bridge = self.bridge()
         self.api.identity = "different-account"

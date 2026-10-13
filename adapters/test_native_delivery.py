@@ -58,10 +58,10 @@ class DeliveryTests(unittest.TestCase):
     def test_current_acl_configured_project_and_message_identity_fence_every_read(self):
         bridge = self.bridge()
         for change in ('revoked', 'other-channel', 'other-project', 'wrong-id', 'other-participants'):
-            self.api.allowed = True; self.api.identity = 'a'
+            self.api.allowed = True; self.api.identity = 'a'; self.api.channels = {'c': True, 'd': True}
             item = self.sent()
             if change == 'revoked': self.api.allowed = False
-            if change == 'other-channel': item['channel_id'] = 'd'
+            if change == 'other-channel': item['channel_id'] = 'd'; self.api.channels.pop('d')
             if change == 'other-project': item['channel_id'] = 'foreign'
             if change == 'wrong-id': self.api.identity = 'other'
             if change == 'other-participants': item['author_id'] = 'c'

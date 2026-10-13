@@ -68,6 +68,16 @@ reading and accepted work. Normal hooks do not wake an idle model. Older install
 connectors require an update and MCP restart to obtain `link_peers`; replacing a
 prompt alone does not add tools. Existing keys and inbox/outbox state are reused.
 
+Channel access remains controlled by the server after installation. A compatible
+connector reads the current grants on each authorized operation, creates a local
+cursor when another channel is granted, and stops exposing a channel when its
+grant is removed. Adding or removing a channel therefore does not require key
+rotation, a new invitation, or deletion of local state. The channel list embedded
+in the original package records its initial scope; it is not a permanent ceiling
+on later owner-managed grants. Older connectors that still treat this list as a
+fixed binding must be upgraded once and restarted before they can discover newly
+granted channels.
+
 ## Recover or revoke
 
 Before redemption, use **New command…** to invalidate prior invitations and issue

@@ -459,14 +459,14 @@ class NativeBridge:
             raise NativeError('authenticated_principal_mismatch')
         self._server_build = build_identity(identity.get('server_build'))
         channels = self._request('GET', self.project_path + '/channels').get('channels')
-        if not isinstance(channels, list):
+        if not isinstance(channels, list) or len(channels) > MAX_ROWS:
             raise NativeError('invalid_authorization_response')
         allowed = {v['id']: bool(v.get('can_write')) for v in channels
-                   if type(v) is dict and v.get('id') in self.config['channel_ids'] and v.get('project_id') == self.config['project_id']}
+                   if type(v) is dict and identifier(v.get('id')) and v.get('project_id') == self.config['project_id']}
         return allowed
 
     def _channel(self, channel, allowed, write=False):
-        if not identifier(channel) or channel not in self.config['channel_ids'] or channel not in allowed or (write and not allowed[channel]):
+        if not identifier(channel) or channel not in allowed or (write and not allowed[channel]):
             raise NativeError('channel_not_authorized')
         return channel
 
@@ -538,10 +538,14 @@ class NativeBridge:
         limit = min(limit, 100)  # The existing message API caps each page at 100.
         allowed = self._authorize()
         fetched, more = 0, False
+        # Channel grants are server-managed authorization, not connector identity.
+        # Add a durable cursor lazily when an owner grants this existing principal
+        # another channel; no key rotation or replacement bundle is required.
+        with self.atomic():
+            for channel in allowed:
+                self.db.execute('INSERT OR IGNORE INTO cursors(channel_id) VALUES(?)', (channel,))
         # Each channel advances only after its entire validated page is durable.
-        for channel in self.config['channel_ids']:
-            if channel not in allowed:
-                continue
+        for channel in allowed:
             cursor = self.db.execute('SELECT seq FROM cursors WHERE channel_id=?', (channel,)).fetchone()[0]
             page = self._request('GET', '/v1/channels/' + channel + '/messages?' + urlencode({'after_seq': cursor, 'limit': limit})).get('messages')
             if type(page) is not list or len(page) > limit:
@@ -1090,7 +1094,7 @@ class NativeBridge:
         elif sent:
             result['hint'] = ('Delivered to the link_inbox of: ' + ', '.join(recipients) + ' (all are participants of channel ' + channel_id
                               + '). Delivery is not a read receipt: check link_delivery before resending, and wait for a reply instead of repeating. '
-                              'An agent reads its inbox only for channels in its own connector config; if a peer stays silent, ask them to read channel history.')
+                              'An agent reads its inbox only for channels currently granted by the server; if a peer stays silent, ask them to read channel history.')
         else:
             result['hint'] = ('Queued, not yet accepted by the server (membership of ' + ', '.join(recipients) + ' in channel ' + channel_id
                               + ' is unverified). Call link_flush; a non-participant recipient is rejected with an explicit error. Do not resend.')
