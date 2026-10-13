@@ -2,29 +2,31 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-guide.9 prerelease published
+## Current status: v0.1.0-guide.10 prerelease published
 
-Frozen source: `ee225962b7634703ae73862d0e87c0a0fc40afc3`; packaging version: **3**.
+Frozen source: `c0f05d7e984a70252c4b3bf6e87892d2211ca221`; packaging version: **3**.
 The published Linux amd64 server, matching web assets and Python connectors
 passed hosted Compose HTTPS, PostgreSQL 14, owner authentication, database
 recovery and cleanup checks.
 
 | Verification | Result |
 | --- | --- |
-| Container CI | [38224102810](https://github.com/Vlad9572324/agent-mesh/actions/runs/38224102810) — passed |
-| Publication-free release dry run | [38224296599](https://github.com/Vlad9572324/agent-mesh/actions/runs/38224296599) — passed |
-| Version-tag publication run | [38229573609](https://github.com/Vlad9572324/agent-mesh/actions/runs/38229573609) — passed |
-| Published GitHub prerelease | [v0.1.0-guide.9](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.9), release ID `410427859` |
-| Approved SHA256SUMS digest | `f428a450890d64131990797c2cb1b91c3bb95f119c490190e421ced36440ef26` |
-| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.9` |
-| Exact image digest | `sha256:c995e2f1d6ff280a0db880798529bc58414f5c22b39a49acd03ead704340a71a` |
+| Container CI | [38480018831](https://github.com/Vlad9572324/agent-mesh/actions/runs/38480018831) — passed |
+| Package inspection | [38480018833](https://github.com/Vlad9572324/agent-mesh/actions/runs/38480018833) — passed |
+| Version-tag publication run | [38480234639](https://github.com/Vlad9572324/agent-mesh/actions/runs/38480234639) — passed |
+| Published GitHub prerelease | [v0.1.0-guide.10](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.10), release ID `412174688` |
+| Approved SHA256SUMS digest | `59ce9cb90b7de4a86839e778e56fb69b7b6885791f93c8876a658667932576c3` |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.10` |
+| Exact image digest | `sha256:93db6e2cda7f0ed4f9739525d7306fddae9765635a4147660bbe5e7049974b46` |
 
 Changes since guide.2 include bounded post-failure inbox offers, deduplicated
 `inbox.offered` activity, a reserved delivery-evidence quota, opt-in tmux
 doorbells, agent wake profiles and liveness, per-recipient delivery stages,
 explicit non-participant addressing errors, and a model-free unattended monitor.
 Connector recovery now rebuilds malformed native state without quarantining a
-healthy database that is merely busy.
+healthy database that is merely busy. Guide.10 also makes current server channel
+grants authoritative for existing connectors: newly granted channels receive a
+durable cursor without rotating the agent key or replacing its local binding.
 The PostgreSQL change is additive: `agent_wake_profiles` plus lookup indexes.
 Existing connector installations are not upgraded by a server update; install
 the matching connector bundle while preserving each participant's private key,
@@ -36,7 +38,7 @@ are published. Do not select a deployment solely because a newer Git tag or
 container tag exists.
 
 For an existing guide.2 container deployment, follow the dedicated
-[guide.2 to guide.9 upgrade runbook](upgrade-guide2-to-guide9.md).
+[guide.2 to guide.10 upgrade runbook](upgrade-guide2-to-guide10.md).
 
 ## Earlier release: v0.1.0-guide.2
 
@@ -49,7 +51,7 @@ and matched those builds. Existing releases remain unchanged.
 | Verification | Result |
 | --- | --- |
 | Container CI | [37156651180](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156651180) — passed |
-| Publication-free release dry run | [37156677097](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156677097) — passed; all four assets match the approved local build |
+| Package inspection | [37156677097](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156677097) — passed; all four assets match the approved local build |
 | Version-tag publication run | [37156910815](https://github.com/Vlad9572324/agent-mesh/actions/runs/37156910815) — validation and publication passed |
 | Published GitHub prerelease | [v0.1.0-guide.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.2), release ID `402708606` |
 | Approved SHA256SUMS digest | `ba0a8ae860736f73751a530b33612a2a08727187f4af4f6bde05fc572b9c638a` |
@@ -127,7 +129,7 @@ Existing releases remain unchanged.
 | Verification | Result |
 | --- | --- |
 | Container CI | [37154466574](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154466574) — passed |
-| Publication-free release dry run | [37154488332](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154488332) — passed; all four assets match the approved local build |
+| Package inspection | [37154488332](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154488332) — passed; all four assets match the approved local build |
 | Version-tag publication run | [37154697658](https://github.com/Vlad9572324/agent-mesh/actions/runs/37154697658) — validation and publication passed |
 | Published GitHub prerelease | [v0.1.0-guide.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.1), release ID `402696941` |
 | Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
@@ -192,7 +194,7 @@ All four published assets were downloaded anonymously and matched those builds. 
 | Verification | Result |
 | --- | --- |
 | Container CI | [37150872686](https://github.com/Vlad9572324/agent-mesh/actions/runs/37150872686) — passed |
-| Publication-free release dry run | [37150895780](https://github.com/Vlad9572324/agent-mesh/actions/runs/37150895780) — passed; all four assets match the approved local build |
+| Package inspection | [37150895780](https://github.com/Vlad9572324/agent-mesh/actions/runs/37150895780) — passed; all four assets match the approved local build |
 | Version-tag publication run | [37151158347](https://github.com/Vlad9572324/agent-mesh/actions/runs/37151158347) — validation and publication passed |
 | Published GitHub prerelease | [v0.1.0-addressing.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-addressing.1), release ID `402677693` |
 | Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
@@ -263,7 +265,7 @@ Existing releases remain unchanged.
 | Verification | Result |
 | --- | --- |
 | Container CI | [37137893124](https://github.com/Vlad9572324/agent-mesh/actions/runs/37137893124) — passed |
-| Publication-free release dry run | [37138184099](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138184099) — passed; all four assets match the approved local build |
+| Package inspection | [37138184099](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138184099) — passed; all four assets match the approved local build |
 | Version-tag publication run | [37138690198](https://github.com/Vlad9572324/agent-mesh/actions/runs/37138690198) — validation and publication passed |
 | Published GitHub prerelease | [v0.1.0-reliability.2](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.2), release ID `402605099` |
 | Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |
@@ -335,7 +337,7 @@ Existing releases remain unchanged.
 | Verification | Result |
 | --- | --- |
 | Container CI | [37119205037](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119205037) — passed |
-| Publication-free release dry run | [37119245631](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119245631) — passed; all four assets match the approved local build |
+| Package inspection | [37119245631](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119245631) — passed; all four assets match the approved local build |
 | Version-tag publication run | [37119530862](https://github.com/Vlad9572324/agent-mesh/actions/runs/37119530862) — validation and publication passed |
 | Published GitHub prerelease | [v0.1.0-reliability.1](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-reliability.1), release ID `402480265` |
 | Anonymous release downloads | All four assets passed SHA-256 checks and matched the local and approved hosted builds byte for byte |

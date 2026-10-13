@@ -8,7 +8,7 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-The selected `v0.1.0-guide.9` prerelease is published. Its four assets match the
+The selected `v0.1.0-guide.10` prerelease is published. Its four assets match the
 approved local and hosted builds; anonymous verification also checked the public
 image's configuration and all four layers. Its existing **Connect agent**
 command now installs the communication skill and guide automatically in the
@@ -46,7 +46,7 @@ See [release status](releases.md) for the published artifacts and verification.
   boundary between published reports and execution authority.
 - [Operations](operations.md): installation choices, backups, updates and account
   lifecycle.
-- [Upgrade from guide.2 to guide.9](upgrade-guide2-to-guide9.md): verified
+- [Upgrade from guide.2 to guide.10](upgrade-guide2-to-guide10.md): verified
   identities, backup boundary, additive migration, cutover and rollback checks.
 - [Delivery alerts](delivery-alerts.md): owner-configured deadlines for new
   addressed messages and visible warnings in the open GUI.

@@ -1,4 +1,4 @@
-# Upgrade v0.1.0-guide.2 to v0.1.0-guide.9
+# Upgrade v0.1.0-guide.2 to v0.1.0-guide.10
 
 [Documentation](README.md) · [Container install](container.md) · [Operations](operations.md) · [Release status](releases.md)
 
@@ -8,12 +8,12 @@ replace the operator's backup policy, or enable the optional monitor/doorbell.
 
 ## Fixed identities
 
-| Item | v0.1.0-guide.2 | v0.1.0-guide.9 |
+| Item | v0.1.0-guide.2 | v0.1.0-guide.10 |
 | --- | --- | --- |
-| Source | `faf92e630731b5f90bd5fa3a0b80c205f84660e4` | `ee225962b7634703ae73862d0e87c0a0fc40afc3` |
-| Image digest | `sha256:2b6a83a580a172c75c6f228beba0b93c2005806ae0d74e5d50bb523bcf4afd60` | `sha256:c995e2f1d6ff280a0db880798529bc58414f5c22b39a49acd03ead704340a71a` |
+| Source | `faf92e630731b5f90bd5fa3a0b80c205f84660e4` | `c0f05d7e984a70252c4b3bf6e87892d2211ca221` |
+| Image digest | `sha256:2b6a83a580a172c75c6f228beba0b93c2005806ae0d74e5d50bb523bcf4afd60` | `sha256:93db6e2cda7f0ed4f9739525d7306fddae9765635a4147660bbe5e7049974b46` |
 
-Use the immutable guide.9 digest, not `main`, `latest`, or a tag without a
+Use the immutable guide.10 digest, not `main`, `latest`, or a tag without a
 matching published Release. Keep the guide.2 digest available for application
 rollback.
 
@@ -30,21 +30,21 @@ rollback.
    directory is not a backup.
 4. Record bounded counts for principals, projects, channels, messages, tasks,
    memory, artifacts and grants without printing keys, hashes or message bodies.
-5. Pull the guide.9 image by digest and verify its `version` output reports the
-   guide.9 version, source commit, Linux and amd64.
+5. Pull the guide.10 image by digest and verify its `version` output reports the
+   guide.10 version, source commit, Linux and amd64.
 
 ## Migration and cutover
 
-The guide.9 server startup applies one additive PostgreSQL migration: the
+The guide.10 server startup applies one additive PostgreSQL migration: the
 `agent_wake_profiles` table and two lookup indexes. It does not rewrite existing
 accounts, keys, grants, projects or messages.
 
-Guide.9 also includes connector-side native-state recovery fixes. They take
+Guide.10 also includes connector-side native-state recovery fixes. They take
 effect only after each participant installs the matching connector bundle; a
 server-only update does not replace local connector code or SQLite state.
 
 1. Establish a short write-free window; stop only the application container.
-2. Select the guide.9 digest in the private Compose environment while preserving
+2. Select the guide.10 digest in the private Compose environment while preserving
    the existing state mounts, PostgreSQL image, credentials, TLS files and local
    command arguments.
 3. Start the application and wait for a healthy response. Do not reseed the
@@ -58,15 +58,17 @@ server-only update does not replace local connector code or SQLite state.
 ## Connector boundary
 
 Updating the server does not update a running participant connector. Install the
-published guide.9 connector bundle separately, preserving each connection's
+published guide.10 connector bundle separately, preserving each connection's
 private key, `config.json`, workspace binding and durable SQLite inbox/outbox.
 Restart that participant's MCP/CLI invocation and confirm `link_status` reports
-guide.9 for both connector and server. Never delete connector state merely to
-bypass a binding or migration error.
+guide.10 for both connector and server. Never delete connector state merely to
+bypass a binding or migration error. Once guide.10 is installed, later channel
+grants and revocations are discovered from the server without another invitation
+or key rotation.
 
 ## Rollback
 
-If application acceptance fails before new guide.9-only operations are used,
+If application acceptance fails before new guide.10-only operations are used,
 stop the application and reselect the preserved guide.2 image digest. The
 additive table and indexes remain in PostgreSQL and are ignored by guide.2.
 Do not drop them during an incident. A code rollback is not a database restore.
