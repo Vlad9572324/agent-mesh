@@ -396,7 +396,13 @@ func addEvent(ctx context.Context, tx pgx.Tx, channel, kind, id string) (int64, 
 	if err := tx.QueryRow(ctx, "UPDATE channels SET cursor=cursor+1 WHERE id=$1 RETURNING cursor", channel).Scan(&seq); err != nil {
 		return 0, err
 	}
-	_, err := tx.Exec(ctx, "INSERT INTO events(channel_id,seq,kind,entity_id) VALUES($1,$2,$3,$4)", channel, seq, kind, id)
+	if _, err := tx.Exec(ctx, "INSERT INTO events(channel_id,seq,kind,entity_id) VALUES($1,$2,$3,$4)", channel, seq, kind, id); err != nil {
+		return 0, err
+	}
+	// Wake any live SSE stream for this channel the instant the row commits,
+	// instead of waiting for its poll tick. pg_notify delivers on COMMIT, so a
+	// rolled-back event produces no wake; the payload is just the channel id.
+	_, err := tx.Exec(ctx, "SELECT pg_notify('mesh_events', $1)", channel)
 	return seq, err
 }
 func fresh(last *time.Time, now time.Time) string {
