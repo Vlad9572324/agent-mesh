@@ -38,6 +38,8 @@ type Server struct {
 	Build          BuildInformation
 	onboardingGate chan struct{}
 	onboardingOnce sync.Once
+	notify         *eventNotifier
+	notifyOnce     sync.Once
 }
 
 // BuildInformation identifies this running binary, independently of connector builds.
@@ -878,16 +880,37 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	controller := http.NewResponseController(w)
 	key := bearer(r)
 	channel := r.PathValue("channel")
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// Wake the instant an event commits (addEvent -> pg_notify -> in-process
+	// fan-out) rather than polling once per second. The safety ticker still
+	// drives a periodic re-auth, a keepalive, and a fallback poll that covers any
+	// notification missed across a listener reconnect.
+	s.notifyOnce.Do(func() {
+		s.notify = newEventNotifier(s.Store.Pool)
+		go s.notify.run(context.Background())
+	})
+	signal, unsubscribe := s.notify.subscribe(channel)
+	defer unsubscribe()
+	// The safety ticker bounds how long a revoked key, lost ACL or archived
+	// channel can keep the stream open, and also serves as keepalive and a
+	// fallback poll for any NOTIFY missed across a listener reconnect. Delivery
+	// of new events does NOT wait for it — the pg_notify signal drives that.
+	const recheck = 2 * time.Second
+	safety := time.NewTicker(recheck)
+	defer safety.Stop()
 	heartbeat := time.Now()
 	deadline := time.NewTimer(30 * time.Minute)
 	defer deadline.Stop()
+	// The request is already authenticated by middleware and channelAllowed above;
+	// re-validate key and ACL on the recheck cadence, not on every delivered event
+	// (which would put a DB round-trip on the hot, notify-driven delivery path).
+	lastAuth := time.Now()
 	for {
-		// Recheck both current key and ACL before each batch, including idle periods.
-		p, err := s.auth(r.Context(), key)
-		if err != nil || !channelAccess(r.Context(), s.Store.Pool, channel, p.ID, false) {
-			return
+		if time.Since(lastAuth) >= recheck {
+			p, err := s.auth(r.Context(), key)
+			if err != nil || !channelAccess(r.Context(), s.Store.Pool, channel, p.ID, false) {
+				return
+			}
+			lastAuth = time.Now()
 		}
 		events, err := s.loadEvents(r.Context(), channel, after, 100)
 		if err != nil {
@@ -924,7 +947,10 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-deadline.C:
 			return
-		case <-ticker.C:
+		case <-signal:
+			// An event committed on this channel: load and deliver it now.
+		case <-safety.C:
+			// Periodic: re-auth window, keepalive, and missed-notify fallback.
 		}
 	}
 }
