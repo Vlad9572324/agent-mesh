@@ -50,6 +50,13 @@ class RuntimeProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolError, "object"):
             decode_frame(b"[]\n")
 
+    def test_adversarial_nesting_and_huge_integer_are_protocol_errors(self):
+        nested = (b"[" * 10000) + (b"]" * 10000) + b"\n"
+        huge_integer = (b"9" * 5000) + b"\n"
+        for raw in (nested, huge_integer):
+            with self.subTest(size=len(raw)), self.assertRaises(ProtocolError):
+                decode_frame(raw)
+
     def test_wake_cannot_contain_peer_body_or_commands(self):
         for field in ("body", "command", "args", "environment", "session_id"):
             with self.subTest(field=field), self.assertRaisesRegex(ProtocolError, "unexpected"):
@@ -83,11 +90,13 @@ class RuntimeProtocolTests(unittest.TestCase):
     def test_reference_echo_transcript(self):
         script = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                               "scripts", "agent-mesh-echo-runtime.py")
-        child = subprocess.Popen([sys.executable, script], stdin=subprocess.PIPE,
+        child = subprocess.Popen([sys.executable, script, "--agent-id", "agent-1",
+                                  "--runtime", "codex"], stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
             hello = read_frame(child.stdout)
             self.assertEqual(hello["type"], "hello")
+            self.assertEqual((hello["agent_id"], hello["runtime"]), ("agent-1", "codex"))
             write_frame(child.stdin, {"type": "welcome", "v": "1.0",
                                       "accepted_version": "1.0", "host_id": "test-host",
                                       "policy": {"max_turn_seconds": 10}})

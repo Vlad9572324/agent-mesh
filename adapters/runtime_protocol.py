@@ -192,7 +192,9 @@ def decode_frame(line):
     try:
         text = line[:-1].decode("utf-8", errors="strict")
         value = json.loads(text, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except ProtocolError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise ProtocolError("invalid JSON frame") from exc
     return validate_message(value)
 

@@ -5,6 +5,7 @@ import sqlite3
 import stat
 import sys
 import tempfile
+import time
 import unittest
 
 from runtime_host import HostError, RuntimeHost, load_policy
@@ -18,7 +19,10 @@ send({"type":"hello","v":"1.0","agent_id":"adapter","caps":["wake","result"],"ru
 welcome=json.loads(sys.stdin.readline())
 wake=json.loads(sys.stdin.readline())
 if mode == "eof": sys.exit(0)
-send({"type":"ack","v":"1.0","wake_id":wake["wake_id"],"state":"accepted"})
+if mode == "partial":
+ sys.stdout.write('{'); sys.stdout.flush(); __import__('time').sleep(10)
+ack_version="9.9" if mode == "wrong-version" else "1.0"
+send({"type":"ack","v":ack_version,"wake_id":wake["wake_id"],"state":"accepted"})
 if mode == "uncertain": sys.exit(0)
 send({"type":"result","v":"1.0","wake_id":wake["wake_id"],"state":"done","summary":"ok"})
 '''
@@ -81,6 +85,41 @@ class RuntimeHostTests(unittest.TestCase):
             wake = host.enqueue("development", ["message-1"], "peer-agent")
             self.assertEqual(host.dispatch(wake), "uncertain")
             self.assertEqual(host.status()["wakes"][0]["detail"], "ambiguous_after_submission")
+        finally:
+            host.close()
+
+    def test_partial_frame_cannot_bypass_deadline(self):
+        policy = self.policy("partial")
+        policy["handshake_seconds"] = 1
+        host = RuntimeHost(policy)
+        try:
+            wake = host.enqueue("development", ["message-1"], "peer-agent")
+            started = time.monotonic()
+            self.assertEqual(host.dispatch(wake), "uncertain")
+            self.assertLess(time.monotonic() - started, 4)
+        finally:
+            host.close()
+
+    def test_frames_must_use_negotiated_version(self):
+        host = RuntimeHost(self.policy("wrong-version"))
+        try:
+            wake = host.enqueue("development", ["message-1"], "peer-agent")
+            self.assertEqual(host.dispatch(wake), "uncertain")
+            self.assertEqual(host.status()["wakes"][0]["detail"], "ambiguous_after_submission")
+        finally:
+            host.close()
+
+    def test_reference_echo_accepts_local_connector_identity(self):
+        policy = self.policy()
+        script = Path(__file__).resolve().parents[1] / "scripts" / "agent-mesh-echo-runtime.py"
+        policy["agent_id"] = "connector-agent"
+        policy["runtime"] = "codex"
+        policy["argv"] = [os.path.realpath(sys.executable), str(script),
+                          "--agent-id", "connector-agent", "--runtime", "codex"]
+        host = RuntimeHost(policy)
+        try:
+            wake = host.enqueue("development", ["message-1"], "peer-agent")
+            self.assertEqual(host.dispatch(wake), "done")
         finally:
             host.close()
 

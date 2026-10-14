@@ -43,7 +43,8 @@ CONNECTOR_FILES = frozenset({"scripts/agent-link-cli.py", "scripts/native_launch
                              "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
                              "scripts/artifact_client.py", "scripts/agent-link-artifacts.py",
                              "docs/task-listener.md", "listener-contract.json",
-                             "docs/runtime-host.md", "runtime-host-contract.json"})
+                             "docs/runtime-host.md", "docs/wake-runtime-rfc.md",
+                             "runtime-host-contract.json"})
 VERSION_RE = r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?"
 SCHEMA_RE = r"release_smoke_[0-9a-f]{32}"
 MAX_ARCHIVE = 128 * 1024 * 1024

@@ -15,8 +15,8 @@ import time
 import uuid
 
 from coordination import CoordinationError, canonical, identifier, origin_identity
-from runtime_protocol import (ProtocolError, negotiate_version, read_frame,
-                              validate_message, write_frame)
+from runtime_protocol import (MAX_FRAME_BYTES, ProtocolError, decode_frame,
+                              negotiate_version, validate_message, write_frame)
 
 
 class HostError(ValueError):
@@ -215,12 +215,32 @@ class RuntimeHost:
             # Claims remain durable after a terminal result: message evidence is
             # independent and an unaccepted message must not trigger a second turn.
 
-    @staticmethod
-    def _read_with_timeout(stream, seconds):
-        ready, _, _ = select.select([stream], [], [], seconds)
-        if not ready:
-            raise TimeoutError("runtime frame timeout")
-        return read_frame(stream)
+    def _read_with_timeout(self, stream, seconds, buffer):
+        """Read one frame by deadline without BufferedReader/readline stalls."""
+        fd = stream.fileno()
+        deadline = self.clock() + seconds
+        while True:
+            newline = buffer.find(b"\n")
+            if newline >= 0:
+                if newline + 1 > MAX_FRAME_BYTES:
+                    raise ProtocolError("frame exceeds byte limit")
+                frame = bytes(buffer[:newline + 1])
+                del buffer[:newline + 1]
+                return decode_frame(frame)
+            if len(buffer) >= MAX_FRAME_BYTES:
+                raise ProtocolError("frame exceeds byte limit")
+            remaining = deadline - self.clock()
+            if remaining <= 0:
+                raise TimeoutError("runtime frame timeout")
+            ready, _, _ = select.select([fd], [], [], remaining)
+            if not ready:
+                raise TimeoutError("runtime frame timeout")
+            chunk = os.read(fd, min(8192, MAX_FRAME_BYTES + 1 - len(buffer)))
+            if not chunk:
+                if not buffer:
+                    return None
+                raise ProtocolError("runtime closed with a partial frame")
+            buffer.extend(chunk)
 
     def dispatch(self, wake_id):
         owner = self.db.execute("SELECT generation,epoch FROM routes WHERE route_id=?",
@@ -240,10 +260,14 @@ class RuntimeHost:
                               cwd=self.policy["working_directory"],
                               env={name: os.environ[name] for name in self.policy["env_allowlist"] if name in os.environ},
                               shell=False, close_fds=True)
-            hello = validate_message(self._read_with_timeout(proc.stdout, self.policy["handshake_seconds"]), {"hello"})
+            receive_buffer = bytearray()
+            hello = validate_message(self._read_with_timeout(
+                proc.stdout, self.policy["handshake_seconds"], receive_buffer), {"hello"})
             if hello["agent_id"] != self.policy["agent_id"] or hello["runtime"] != self.policy["runtime"]:
                 raise ProtocolError("runtime identity differs from local policy")
             version = negotiate_version(hello["proto"])
+            if hello["v"] != version:
+                raise ProtocolError("hello version differs from negotiated version")
             write_frame(proc.stdin, {"v": version, "type": "welcome", "host_id": self.policy["route_id"],
                                      "accepted_version": version, "policy": {"max_turn_seconds": self.policy["turn_seconds"]}})
             wake = {"v": version, "type": "wake", "wake_id": wake_id,
@@ -256,12 +280,18 @@ class RuntimeHost:
             self._transition(wake_id, "submitted")
             submitted = True
             write_frame(proc.stdin, wake)
-            ack = validate_message(self._read_with_timeout(proc.stdout, self.policy["handshake_seconds"]), {"ack"})
+            ack = validate_message(self._read_with_timeout(
+                proc.stdout, self.policy["handshake_seconds"], receive_buffer), {"ack"})
+            if ack["v"] != version:
+                raise ProtocolError("ack version differs from negotiated version")
             if ack["wake_id"] != wake_id or ack["state"] != "accepted":
                 self._transition(wake_id, "error", "runtime_rejected")
                 return "error"
             self._transition(wake_id, "running")
-            result = validate_message(self._read_with_timeout(proc.stdout, self.policy["turn_seconds"]), {"result"})
+            result = validate_message(self._read_with_timeout(
+                proc.stdout, self.policy["turn_seconds"], receive_buffer), {"result"})
+            if result["v"] != version:
+                raise ProtocolError("result version differs from negotiated version")
             if result["wake_id"] != wake_id:
                 raise ProtocolError("result wake mismatch")
             self._transition(wake_id, result["state"], result.get("summary"))
