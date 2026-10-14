@@ -22,7 +22,7 @@ const workspaceSnapshotSQL = `
 WITH caller AS MATERIALIZED (
  SELECT id,name,kind FROM principals WHERE key_hash=$1
 ), visible_projects AS MATERIALIZED (
- SELECT p.id,p.name,p.archived_at,p.lifecycle_version,
+ SELECT p.id,p.name,p.archived_at,p.lifecycle_version,p.context_version,
         CASE WHEN me.kind='owner' THEN false ELSE pm.can_write END AS can_write
  FROM projects p CROSS JOIN caller me
  LEFT JOIN project_members pm ON pm.project_id=p.id AND pm.agent_id=me.id

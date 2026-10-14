@@ -184,6 +184,8 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /v1/navigation", s.navigation)
 	api.HandleFunc("PUT /v1/channels/{channel}/read", s.markChannelRead)
 	api.HandleFunc("GET /v1/projects", s.projects)
+	api.HandleFunc("GET /v1/projects/{project}/context", s.projectContext)
+	api.HandleFunc("PUT /v1/projects/{project}/context", s.updateProjectContext)
 	api.HandleFunc("GET /v1/projects/{project}/channels", s.channels)
 	api.HandleFunc("GET /v1/projects/{project}/agents", s.agents)
 	api.HandleFunc("GET /v1/projects/{project}/agents/{agent}/wake-profile", s.getWakeProfile)

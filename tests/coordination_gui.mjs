@@ -143,6 +143,20 @@ try {
     assert(tabs.every(tab => tab.requests.filter(r => r.path.startsWith('/v1/')).every(r => r.method === 'GET')), 'Startup/nav issued mutation');
     assert(await writer.eval(`!document.getElementById('task-create-section').hidden`), 'Writer capability missing');
   });
+  await check('project brief is editable by a writer and becomes shared agent context', async () => {
+    await writer.click('nav-overview');
+    await writer.wait(`!document.getElementById('project-context-form').hidden`, 'project context writer form');
+    await writer.fill('project-context-objective', `${run} objective <img src=x onerror=window.contextInjected=1>`);
+    await writer.fill('project-context-working', 'Current milestone: validate the unified project snapshot');
+    await writer.fill('project-context-instructions', 'Read link_project_context and addressed inbox messages before acting.');
+    await writer.submit('project-context-form');
+    await writer.wait(textHas('project-context-status', 'link_project_context'), 'project context save');
+    const snapshot = await api(projectPath('context'), 'GET', undefined, 'viewer');
+    assert(snapshot.project.context_version === 2 && snapshot.project.objective.includes(`${run} objective`), 'Shared project brief did not persist');
+    await viewer.click('nav-overview');
+    await viewer.wait(textHas('project-brief-objective', `${run} objective`), 'viewer shared brief');
+    assert(await viewer.eval(`document.getElementById('project-context-form').hidden && !window.contextInjected && !document.querySelector('#project-brief-objective img')`), 'Read-only or plain-text project context boundary failed');
+  });
   await check('writer creates scoped task with separate reviewer; live cards and safe plain text propagate', async () => {
     await writer.eval(`document.getElementById('task-create-section').open=true`);
     for (const [id, value] of Object.entries({'task-title': `${run} <img src=x onerror=alert(1)>`, 'task-owner': ids.writer, 'task-reviewer': ids.reviewer, 'task-scope': 'src/example.go\ntests/example_test.go', 'task-acceptance': 'All fixture checks pass\nReview the exact artifact set'})) await writer.fill(id, value);

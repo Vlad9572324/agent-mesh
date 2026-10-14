@@ -315,10 +315,15 @@ type Agent struct {
 	Freshness  string     `json:"freshness"`
 }
 type Project struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name"`
-	ArchivedAt       *time.Time `json:"archived_at"`
-	LifecycleVersion int64      `json:"lifecycle_version"`
+	ID                string     `json:"id"`
+	Name              string     `json:"name"`
+	Objective         string     `json:"objective,omitempty"`
+	WorkingContext    string     `json:"working_context,omitempty"`
+	AgentInstructions string     `json:"agent_instructions,omitempty"`
+	ContextVersion    int64      `json:"context_version,omitempty"`
+	ContextUpdatedAt  *time.Time `json:"context_updated_at,omitempty"`
+	ArchivedAt        *time.Time `json:"archived_at"`
+	LifecycleVersion  int64      `json:"lifecycle_version"`
 }
 type Channel struct {
 	ID        string `json:"id"`

@@ -855,6 +855,10 @@ class NativeBridge:
             item = response.get('task', {})
             expected = {k: body[k] for k in ('title', 'owner_id', 'reviewer_id', 'scope', 'acceptance')}
             expected.update(project_id=self.config['project_id'], created_by=self.config['agent_id'])
+        elif row['kind'] == 'project_context':
+            item = response.get('project', {})
+            expected = {k: body[k] for k in ('objective', 'working_context', 'agent_instructions')}
+            expected.update(id=self.config['project_id'], context_version=body['expected_version'] + 1)
         else:
             item = response.get('memory', {})
             expected = {'project_id': self.config['project_id'], 'updated_by': self.config['agent_id'],
@@ -1177,6 +1181,22 @@ class NativeBridge:
                 raise NativeError('invalid_task_event_cursor')
             path += '/events?' + urlencode({'after_version': after_version, 'limit': limit})
         return self.sanitize(self._request('GET', path))
+
+    def project_context(self):
+        """Read one bounded, repeatable snapshot used to orient an agent."""
+        self._authorize()
+        return self.sanitize(self._request('GET', self.project_path + '/context'))
+
+    def write_project_context(self, client_id, expected_version, objective, working_context, agent_instructions):
+        self._identifier(client_id)
+        if type(expected_version) is not int or expected_version < 1:
+            raise NativeError('invalid_project_context_version')
+        values = ((objective, 4000), (working_context, 16384), (agent_instructions, 8000))
+        if any(type(value) is not str or '\x00' in value or len(value.encode('utf-8')) > maximum for value, maximum in values):
+            raise NativeError('invalid_project_context_text')
+        body = {'client_id': client_id, 'expected_version': expected_version, 'objective': objective,
+                'working_context': working_context, 'agent_instructions': agent_instructions}
+        return self._publish('project_context', self.project_path + '/context', body, method='PUT')
 
     def create_task(self, **body):
         required = {'client_id', 'title', 'owner_id', 'reviewer_id', 'scope', 'acceptance'}

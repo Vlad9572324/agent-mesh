@@ -84,7 +84,7 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         listing = self.server.handle(rpc(2, 'tools/list'))['result']['tools']
         names = {v['name'] for v in listing}
-        self.assertEqual(len(names), 19)
+        self.assertEqual(len(names), 21)
         peers = next(v for v in listing if v['name'] == 'link_peers')
         self.assertTrue(peers['annotations']['readOnlyHint'])
         self.assertEqual(peers['inputSchema']['required'], [])
@@ -98,6 +98,8 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn('link_accept', names)
         self.assertIn('link_seen', names)
         self.assertIn('link_message', names)
+        self.assertIn('link_project_context', names)
+        self.assertIn('link_project_context_write', names)
         delivery = next(v for v in listing if v['name'] == 'link_delivery')
         self.assertTrue(delivery['annotations']['readOnlyHint'])
         for item in listing:
