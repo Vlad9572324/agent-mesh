@@ -2,29 +2,29 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-guide.13 prerelease published
+## Current status: v0.1.0-guide.14 prerelease published
 
-Frozen source: `70abfbe111d255be0b2341ed8fb9d321afe542d5`; packaging version: **3**.
+Frozen source: `81a425e5a3cc9a3fa1f72abb60bf26e2dc7b2ed7`; packaging version: **3**.
 The published Linux amd64 server, matching web assets and Python connectors
 passed hosted Compose HTTPS, PostgreSQL 14, owner authentication, database
 recovery and cleanup checks.
 
 | Verification | Result |
 | --- | --- |
-| Container CI | [38614968079](https://github.com/Vlad9572324/agent-mesh/actions/runs/38614968079) — passed |
-| Package inspection | [38614968112](https://github.com/Vlad9572324/agent-mesh/actions/runs/38614968112) — passed |
-| Version-tag publication run | [38615206403](https://github.com/Vlad9572324/agent-mesh/actions/runs/38615206403) — passed |
-| Published GitHub prerelease | [v0.1.0-guide.13](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.13), release ID `413049407` |
-| Approved SHA256SUMS digest | `58090845b2095f484abf6f723e05f86983130771f1ecbdd4614a871cf31f0f6d` |
-| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.13` |
-| Exact image digest | `sha256:8ecfd8331bf9ae087adafcb7ebda163794556a80e163dd8e83c463dd83205f36` |
+| Container CI | [38631780605](https://github.com/Vlad9572324/agent-mesh/actions/runs/38631780605) — passed |
+| Package inspection | [38631780525](https://github.com/Vlad9572324/agent-mesh/actions/runs/38631780525) — passed |
+| Version-tag publication run | [38632114841](https://github.com/Vlad9572324/agent-mesh/actions/runs/38632114841) — passed |
+| Published GitHub prerelease | [v0.1.0-guide.14](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.14), release ID `413154412` |
+| Approved SHA256SUMS digest | `9f32a73c0691c7c446582a09d67bbe90d2c2e1e3f2114b50d4af98d4aa3764be` |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.14` |
+| Exact image digest | `sha256:a04aba04dd5d25c357407ff7f490061cae4d3b18882280555402e55d0688f503` |
 
 Changes since guide.2 include bounded post-failure inbox offers, deduplicated
 `inbox.offered` activity, a reserved delivery-evidence quota, opt-in tmux
 doorbells, agent wake profiles and liveness, per-recipient delivery stages,
 explicit non-participant addressing errors, and a model-free unattended monitor.
 Connector recovery now rebuilds malformed native state without quarantining a
-healthy database that is merely busy. Guide.13 makes current server channel
+healthy database that is merely busy. Guide.13 made current server channel
 grants authoritative for existing connectors: newly granted channels receive a
 durable cursor without rotating the agent key or replacing its local binding.
 It also replaces the SSE stream's one-second database polling with PostgreSQL
@@ -38,7 +38,14 @@ The doorbell is now part of the connector archive. An opt-in `run --doorbell`
 launch inside tmux supervises it for the CLI session lifetime and wakes an idle
 prompt with only validated sender/channel identifiers and the unseen count;
 untrusted message bodies are never typed into the terminal.
-The PostgreSQL change is additive: `agent_wake_profiles` plus lookup indexes.
+Guide.14 adds a canonical, versioned project brief and one bounded
+`link_project_context` snapshot containing the brief, active-first task
+summaries, versioned-memory previews and recent note previews. The Overview GUI
+shows and safely edits the same objective, working context and agent
+instructions with compare-and-swap and idempotent replay. Onboarding now tells
+agents to read that snapshot when joining, waking or resuming work.
+The PostgreSQL changes are additive: project context columns, immutable context
+versions, `agent_wake_profiles` and lookup indexes.
 Existing connector installations are not upgraded by a server update; install
 the matching connector bundle while preserving each participant's private key,
 configuration and durable queues.
