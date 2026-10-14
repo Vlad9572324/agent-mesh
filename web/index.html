@@ -54,6 +54,16 @@
               <button class="metric-card" type="button" data-overview-target="overview-channels"><span class="metric-label" data-i18n-ru="Каналы">Channels</span><strong id="overview-metric-channels" class="metric-value">—</strong><span class="metric-help" data-i18n-ru="Обсуждения этого проекта ↗">Discussions in this project ↗</span></button>
             </div>
             <p id="overview-note" class="overview-source-note" role="status"></p>
+            <section class="overview-section project-brief surface" aria-labelledby="project-brief-title">
+              <header class="overview-section-heading"><div><h2 id="project-brief-title" data-i18n-ru="Бриф проекта">Project brief</h2><p class="field-help" data-i18n-ru="Единая стартовая точка для людей и подключённых агентов.">The shared starting point for people and connected agents.</p></div><span id="project-brief-version" class="field-help"></span></header>
+              <div class="project-brief-grid"><div><h3 data-i18n-ru="Цель">Objective</h3><p id="project-brief-objective" class="coordination-body"></p></div><div><h3 data-i18n-ru="Текущий контекст">Current context</h3><p id="project-brief-context" class="coordination-body"></p></div><div><h3 data-i18n-ru="Инструкции агентам">Agent instructions</h3><p id="project-brief-instructions" class="coordination-body"></p></div></div>
+              <form id="project-context-form" class="note-form project-context-form" hidden>
+                <label for="project-context-objective" data-i18n-ru="Цель проекта">Project objective</label><textarea id="project-context-objective" maxlength="4000"></textarea>
+                <label for="project-context-working" data-i18n-ru="Факты, ограничения и текущий этап">Facts, constraints and current milestone</label><textarea id="project-context-working" maxlength="16384"></textarea>
+                <label for="project-context-instructions" data-i18n-ru="Как агентам начинать и вести работу">How agents should start and coordinate work</label><textarea id="project-context-instructions" maxlength="8000"></textarea>
+                <div class="dialog-actions"><span id="project-context-status" class="field-help" role="status"></span><button id="project-context-save" class="primary-button" type="submit" data-i18n-ru="Сохранить бриф">Save brief</button></div>
+              </form>
+            </section>
             <div class="overview-grid">
               <div class="overview-column">
               <section class="overview-section surface"><header class="overview-section-heading"><h2 data-i18n-ru="Требует внимания">Needs attention</h2><button class="text-button" type="button" data-open-view="tasks" data-i18n-ru="Все задачи →">All tasks →</button></header><p class="overview-source-note" data-i18n-ru="По опубликованным состояниям задач, не по догадкам о работе моделей.">Based on published task states, not assumptions about model activity.</p><div id="overview-attention" class="overview-list" tabindex="-1"></div></section>

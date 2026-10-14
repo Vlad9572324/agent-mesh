@@ -35,6 +35,11 @@ class FakeAPI(hook_tests.FakeNativeAPI):
         if method == "GET" and path == "/v1/projects/p/channels":
             return {"channels": [{"id": channel, "project_id": "p", "can_write": write}
                                  for channel, write in self.channels.items()] if self.allowed else []}
+        if method == "GET" and path == "/v1/projects/p/context":
+            return {"project": {"id": "p", "name": "Project", "objective": "Ship it", "working_context": "Now", "agent_instructions": "Read inbox", "context_version": 2},
+                    "tasks": [], "memory": [], "notes": [], "limits": {"tasks": 50, "memory": 25, "notes": 25}, "can_write": True}
+        if method == "PUT" and path == "/v1/projects/p/context":
+            return self.receipt({"project": {"id": "p", "context_version": body["expected_version"] + 1, **copy.deepcopy(body)}})
         if method == "GET" and path.startswith("/v1/channels/") and "/messages?" in path:
             channel = path.split("/")[3]
             query = parse_qs(urlsplit(path).query)
@@ -115,6 +120,15 @@ class NativeBridgeTests(unittest.TestCase):
     def message(self, identifier="m1", channel="c", seq=1, recipient="a", **fields):
         return {"id": identifier, "channel_id": channel, "seq": seq, "author_id": "b",
                 "recipient_ids": [recipient], "reply_to": None, "body": "bounded peer text", **fields}
+
+    def test_project_context_is_one_bounded_read_and_cas_write(self):
+        bridge = self.bridge()
+        snapshot = bridge.project_context()
+        self.assertEqual(snapshot["project"]["objective"], "Ship it")
+        result = bridge.write_project_context("brief-1", 2, "New objective", "Current facts", "Read inbox")
+        self.assertEqual(result["result"]["project"]["context_version"], 3)
+        self.assertIn(("GET", "/v1/projects/p/context", None), self.api.calls)
+        self.assertTrue(any(method == "PUT" and path == "/v1/projects/p/context" for method, path, _ in self.api.calls))
 
     def test_activity_lost_ack_reopen_replay_preserves_one_server_event(self):
         bridge = self.bridge()

@@ -1,6 +1,6 @@
 {
   "scope": "Owner-only project archive/restore and explicitly confirmed hard deletion. No existing pilot project is to be archived/deleted during rollout; tests use isolated databases and newly created fixtures.",
-  "project_fields": "Project adds archived_at:null|RFC3339 and lifecycle_version:nonnegative integer. Additive migration preserves existing data and keys, active projects start version0.",
+  "project_fields": "Project includes archived_at:null|RFC3339, lifecycle_version:nonnegative integer and separately versioned shared context fields. Additive migration preserves existing data and keys; active projects start lifecycle version0 and context version1.",
   "archive_semantics": [
     "GET /v1/projects lists active projects only for every identity. Admin overview includes all projects and lifecycle fields.",
     "Archived project content is readable only by owner via existing read APIs; owner GUI can open archived history from administration. Ordinary agent/viewer direct project/channel/message/event/notes reads and writes return404 while archived, existing ordinary SSE closes on its authorization recheck. Owner cannot send agent messages/receipts/heartbeat.",
@@ -10,7 +10,7 @@
   "routes": {
     "POST /v1/admin/projects/{project}/archive": "{} ->200 {project}; owner transaction, exclusive management lock, archived_at server clock, lifecycle_version+1, atomic project.archive audit",
     "POST /v1/admin/projects/{project}/restore": "{} ->200 {project}; owner transaction, clear archived_at, lifecycle_version+1, atomic project.restore audit",
-    "GET /v1/admin/projects/{project}/deletion-preview": "200 {project,counts:{channels,messages,notes,receipts,events,project_members,channel_members},can_delete:boolean}; owner-only consistent read, can_delete iff archived",
+    "GET /v1/admin/projects/{project}/deletion-preview": "200 {project,counts:{channels,messages,notes,receipts,events,project_members,channel_members,tasks,task_runs,task_events,memory,memory_versions,project_context_versions,artifacts,artifact_bytes,sessions,native_activity,onboarding_invitations,navigation_reads},can_delete:boolean}; owner-only consistent read, can_delete iff archived",
     "DELETE /v1/admin/projects/{project}": "{confirm_id:exact project ID,expected_version:integer from preview} ->200 {deleted:true,project_id}; archived required409, wrong ID400, stale lifecycle version409, unknown/deleted404. Delete only target project's notes/receipts/messages/events/channels/memberships/project in one transaction; retain project.delete audit. Never delete principals, keys or unrelated data."
   },
   "retired_ids": "Hard deletion keeps content-free tombstones for the deleted project ID and its channel IDs. Creation of any retired project/channel ID returns409. This prevents an old adapter's queued messages or cursor from silently binding to a new unrelated project with the same channel ID. These minimal IDs and audit survive deletion; not deleted conversation data.",

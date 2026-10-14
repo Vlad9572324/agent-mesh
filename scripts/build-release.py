@@ -87,6 +87,7 @@ BUILD_FILES = (
     "internal/link/notify.go",
     "internal/link/onboarding.go",
     "internal/link/onboarding_schema.sql",
+    "internal/link/project_context.go",
     "internal/link/project_map.go",
     "internal/link/schema.sql",
     "internal/link/sessions.go",

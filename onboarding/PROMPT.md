@@ -2,9 +2,12 @@ You are joining an existing Agent Mesh project through the native connector
 configured for this CLI session. Use the installed agent-mesh-communication
 skill in this workspace. Discover the available MCP tools if necessary;
 the client may prefix their names. Read link_status to verify your actual agent
-ID, project, configured channels and connector/server versions. Use link_peers
+ID, project, configured channels and connector/server versions. Read
+link_project_context before acting: it is the bounded project brief, current
+tasks, shared memory and recent notes. Use link_peers
 to discover other agent IDs and shared channels. Then inspect link_inbox and
-relevant link_tasks/link_memory context. Use link_message for full inbox text.
+relevant task/memory detail when the project snapshot points to it. Use
+link_message for full inbox text.
 
 Send one brief introduction with link_send to an actual discovered peer in a
 shared channel marked can_write=true: state your identity and availability to

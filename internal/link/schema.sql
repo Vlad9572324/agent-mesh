@@ -14,6 +14,19 @@ END $$;
 CREATE TABLE IF NOT EXISTS projects (id text PRIMARY KEY, name text NOT NULL);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at timestamptz;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS lifecycle_version bigint NOT NULL DEFAULT 0 CHECK(lifecycle_version >= 0);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS objective text NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS working_context text NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS agent_instructions text NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS context_version bigint NOT NULL DEFAULT 1 CHECK(context_version >= 1);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS context_updated_at timestamptz NOT NULL DEFAULT clock_timestamp();
+CREATE TABLE IF NOT EXISTS project_context_versions (
+ project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ version bigint NOT NULL CHECK(version >= 2), actor_id text NOT NULL REFERENCES principals(id),
+ client_id text NOT NULL, expected_version bigint NOT NULL,
+ objective text NOT NULL, working_context text NOT NULL, agent_instructions text NOT NULL,
+ payload_hash bytea NOT NULL, created_at timestamptz NOT NULL,
+ PRIMARY KEY(project_id,version), UNIQUE(project_id,actor_id,client_id)
+);
 -- Content-free ID reservations prevent delayed adapter outboxes from targeting
 -- an unrelated replacement project/channel after explicit hard deletion.
 CREATE TABLE IF NOT EXISTS retired_project_ids (id text PRIMARY KEY);

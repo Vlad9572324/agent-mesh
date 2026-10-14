@@ -7,6 +7,10 @@
   let language = new URLSearchParams(location.search).get("lang") === "ru" ? "ru" : "en";
   const localeName = () => language === "ru" ? "ru-RU" : "en-US";
   const RU_MESSAGES = {
+    "Not published yet.": "Пока не опубликовано.",
+    "Version {0} · updated {1}": "Версия {0} · обновлено {1}",
+    "Saving shared project brief…": "Сохраняем общий бриф проекта…",
+    "Project brief saved. Connected agents receive it through link_project_context.": "Бриф проекта сохранён. Подключённые агенты получают его через link_project_context.",
     "Key issued": "Ключ выдан",
     "Delivery alerts": "Уведомления о доставке",
     "Delivery monitoring is off": "Проверка сроков доставки выключена",
@@ -832,7 +836,7 @@
     adminDelete: null, adminDeleteEpoch: 0, adminDeleteLoading: false, adminDeleteSubmitting: false,
     adminReadSeq: 0, adminWriteVersion: 0, adminLoadBackground: false,
     coordination: null, coordinationEpoch: 0, coordinationBusy: false, downloads: new Set(),
-    overview: null, adminSection: "accounts", accessRecheckUntil: 0,
+    overview: null, projectContextDraft: null, projectContextSaving: false, adminSection: "accounts", accessRecheckUntil: 0,
     deliveryAlerts: null, deliveryDraft: null, deliveryDirty: false, deliveryConflict: false,
     deliverySeq: 0, deliveryWriteSeq: 0, deliveryLoading: false, deliverySaving: false, deliveryPolicyLoading: false,
     deliveryDraftSeq: 0, deliveryDenied: false,
@@ -1058,6 +1062,7 @@
     state.projects = []; state.channels = []; state.agents = []; state.notes = []; state.notesTruncated = false;
     $("notes-truncated").hidden = true;
     state.project = null; state.channel = null; state.me = null;
+    state.projectContextDraft = null; state.projectContextSaving = false;
     state.messages.clear(); state.events.clear(); state.cursors.clear();
     state.messageSeq = 0; state.dataReady = false; state.projectReady = false; state.view = "chat";
     clearDrafts();
@@ -1116,6 +1121,8 @@
     for (const id of ["overview-agents", "overview-channels", "overview-attention", "overview-tasks"]) $(id).replaceChildren();
     for (const kind of ["agents", "tasks", "attention", "channels"]) setText($(`overview-metric-${kind}`), () => ("—"));
     setText($("overview-title"), () => (tr("Project overview"))); setText($("overview-note"), () => (""));
+    for (const id of ["project-brief-objective", "project-brief-context", "project-brief-instructions", "project-brief-version", "project-context-status"]) setText($(id), () => (""));
+    $("project-context-form").hidden = true;
   }
   async function overviewSnapshot(context) {
     const projectId = state.project.id;
@@ -1123,21 +1130,22 @@
       if ([401, 403, 404].includes(reason?.status)) throw reason;
       return {status: "rejected", reason};
     });
-    const [taskResult, sessionResult] = await Promise.all([
-      scopedRead(`/v1/projects/${pathId(projectId)}/tasks`), scopedRead(`/v1/projects/${pathId(projectId)}/sessions`),
+    const [contextResult, sessionResult] = await Promise.all([
+      scopedRead(`/v1/projects/${pathId(projectId)}/context`), scopedRead(`/v1/projects/${pathId(projectId)}/sessions`),
     ]);
     if (!current(context) || state.project?.id !== projectId || state.view !== "overview") return;
     // Never retain data after explicit authorization denial. Temporary failures
     // are separate: an unavailable session summary must not hide readable tasks.
     const prior = state.overview?.projectId === projectId ? state.overview : null;
-    const tasks = taskResult.status === "fulfilled" ? taskResult.value : null;
+    const contextData = contextResult.status === "fulfilled" ? contextResult.value : null;
     const sessions = sessionResult.status === "fulfilled" ? sessionResult.value : null;
     state.overview = {
-      projectId, tasks: tasks ? list(tasks.tasks).filter((task) => task.project_id === projectId) : prior?.tasks || [],
+      projectId, context: contextData || prior?.context || null,
+      tasks: contextData ? list(contextData.tasks).filter((task) => task.project_id === projectId) : prior?.tasks || [],
       sessions: sessions ? list(sessions.sessions).filter((session) => session.project_id === projectId) : prior?.sessions || [],
-      tasksReady: Boolean(tasks || prior?.tasksReady), sessionsReady: Boolean(sessions || prior?.sessionsReady),
-      taskError: !tasks, sessionError: !sessions,
-      tasksTruncated: tasks ? tasks.truncated === true : prior?.tasksTruncated,
+      tasksReady: Boolean(contextData || prior?.tasksReady), sessionsReady: Boolean(sessions || prior?.sessionsReady),
+      taskError: !contextData, sessionError: !sessions,
+      tasksTruncated: false,
       sessionsTruncated: sessions ? sessions.truncated === true : prior?.sessionsTruncated,
       at: new Date().toISOString(),
     };
@@ -1154,6 +1162,20 @@
     const data = state.overview?.projectId === state.project.id ? state.overview : null;
     const tasks = data ? [...data.tasks].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))) : [];
     const attention = tasks.filter((task) => ["uncertain", "review_pending", "changes_requested"].includes(task.state));
+    const brief = data?.context?.project || state.project;
+    const emptyBrief = tr("Not published yet.");
+    setText($("project-brief-objective"), () => (brief?.objective || emptyBrief));
+    setText($("project-brief-context"), () => (brief?.working_context || emptyBrief));
+    setText($("project-brief-instructions"), () => (brief?.agent_instructions || emptyBrief));
+    setText($("project-brief-version"), () => (brief?.context_version ? tr("Version {0} · updated {1}", () => (brief.context_version), () => (dateText(brief.context_updated_at))) : ""));
+    const contextForm = $("project-context-form"), canWriteContext = data?.context?.can_write === true && !state.project.archived_at;
+    contextForm.hidden = !canWriteContext;
+    if (canWriteContext && contextForm.dataset.loadedVersion !== String(brief.context_version) && !contextForm.contains(document.activeElement)) {
+      $("project-context-objective").value = brief.objective || "";
+      $("project-context-working").value = brief.working_context || "";
+      $("project-context-instructions").value = brief.agent_instructions || "";
+      contextForm.dataset.loadedVersion = String(brief.context_version);
+    }
     setText($("overview-title"), () => (formatText(["", "", ""], () => (state.project.name), () => (state.project.archived_at ? tr(" · archived") : ""))));
     setText($("overview-metric-agents"), () => (state.dataReady ? String(state.agents.length) : "—"));
     setText($("overview-metric-channels"), () => (state.projectReady ? String(state.channels.length) : "—"));
@@ -2465,6 +2487,34 @@
   function clientId() {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     return "web-" + [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function saveProjectContext(event) {
+    event.preventDefault();
+    const data = state.overview, project = data?.context?.project;
+    if (state.view !== "overview" || !state.project || !project || data.context?.can_write !== true || state.projectContextSaving) return;
+    const fields = {
+      expected_version: project.context_version,
+      objective: $("project-context-objective").value,
+      working_context: $("project-context-working").value,
+      agent_instructions: $("project-context-instructions").value,
+    };
+    state.projectContextDraft = pendingPayload(state.projectContextDraft, fields);
+    state.projectContextSaving = true; $("project-context-save").disabled = true;
+    setText($("project-context-status"), () => (tr("Saving shared project brief…")));
+    try {
+      const result = await api(`/v1/projects/${pathId(state.project.id)}/context`, {method: "PUT", body: state.projectContextDraft.body});
+      if (!result.project || result.project.id !== state.project.id) throw new Error("Invalid project context response");
+      data.context = {...data.context, project: result.project}; state.project = {...state.project, ...result.project};
+      state.projectContextDraft = null; $("project-context-form").dataset.loadedVersion = "";
+      setText($("project-context-status"), () => (tr("Project brief saved. Connected agents receive it through link_project_context.")));
+      renderOverview();
+    } catch (error) {
+      setText($("project-context-status"), () => (errorText(error)));
+      showError(error);
+    } finally {
+      state.projectContextSaving = false; $("project-context-save").disabled = false;
+    }
   }
 
   function pendingPayload(previous, payload) {
@@ -3934,6 +3984,7 @@
   }
 
   $("nav-overview").addEventListener("click", () => void selectOverview());
+  $("project-context-form").addEventListener("submit", saveProjectContext);
   $("nav-project-native").addEventListener("click", () => void selectProjectNative());
   $("nav-project-map").addEventListener("click", () => void selectProjectMap());
   for (const button of $("project-map-schema").querySelectorAll("[data-map-type]")) button.addEventListener("click", () => selectMapType(button.dataset.mapType, true));

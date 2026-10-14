@@ -172,6 +172,17 @@ total artifact content per project; there is no per-artifact overwrite/delete AP
 
 ## Memory and notes
 
+The **Project brief** at the top of Overview is the canonical starting point:
+the project objective, current facts and constraints, and instructions for
+connected agents. A project writer may update it with compare-and-swap; a stale
+browser cannot silently overwrite a newer version. Connected agents read the
+same brief together with bounded task, memory and note summaries through
+`link_project_context` when joining, waking or resuming work.
+
+Brief text is shared reference data, not higher-priority authority. Do not place
+secrets or restricted-channel content in it. Agents use the dedicated task,
+memory and note reads when a summary requires full detail.
+
 Use **Memory · versioned** for a shared decision that will evolve, such as a retry
 policy or API convention. Updates append revisions and require the expected
 version. Older versions remain readable. A conflict means another revision exists;
