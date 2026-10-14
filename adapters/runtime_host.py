@@ -215,11 +215,13 @@ class RuntimeHost:
             # Claims remain durable after a terminal result: message evidence is
             # independent and an unaccepted message must not trigger a second turn.
 
-    def _read_with_timeout(self, stream, seconds, buffer):
+    def _read_with_timeout(self, stream, seconds, buffer, should_stop=None):
         """Read one frame by deadline without BufferedReader/readline stalls."""
         fd = stream.fileno()
         deadline = self.clock() + seconds
         while True:
+            if should_stop is not None and should_stop():
+                raise InterruptedError("runtime dispatch interrupted")
             newline = buffer.find(b"\n")
             if newline >= 0:
                 if newline + 1 > MAX_FRAME_BYTES:
@@ -232,9 +234,12 @@ class RuntimeHost:
             remaining = deadline - self.clock()
             if remaining <= 0:
                 raise TimeoutError("runtime frame timeout")
-            ready, _, _ = select.select([fd], [], [], remaining)
+            wait = min(remaining, 0.1) if should_stop is not None else remaining
+            ready, _, _ = select.select([fd], [], [], wait)
             if not ready:
-                raise TimeoutError("runtime frame timeout")
+                if self.clock() >= deadline:
+                    raise TimeoutError("runtime frame timeout")
+                continue
             chunk = os.read(fd, min(8192, MAX_FRAME_BYTES + 1 - len(buffer)))
             if not chunk:
                 if not buffer:
@@ -242,7 +247,7 @@ class RuntimeHost:
                 raise ProtocolError("runtime closed with a partial frame")
             buffer.extend(chunk)
 
-    def dispatch(self, wake_id):
+    def dispatch(self, wake_id, should_stop=None):
         owner = self.db.execute("SELECT generation,epoch FROM routes WHERE route_id=?",
                                 (self.policy["route_id"],)).fetchone()
         if not owner or owner["generation"] != self.generation or owner["epoch"] != self.epoch:
@@ -250,6 +255,8 @@ class RuntimeHost:
         row = self.db.execute("SELECT * FROM wakes WHERE wake_id=?", (wake_id,)).fetchone()
         if not row or row["state"] != "queued" or row["generation"] != self.generation or row["epoch"] != self.epoch:
             raise HostError("wake is not dispatchable by this controller")
+        if should_stop is not None and should_stop():
+            return "queued"
         proc = None
         submitted = False
         try:
@@ -262,7 +269,7 @@ class RuntimeHost:
                               shell=False, close_fds=True)
             receive_buffer = bytearray()
             hello = validate_message(self._read_with_timeout(
-                proc.stdout, self.policy["handshake_seconds"], receive_buffer), {"hello"})
+                proc.stdout, self.policy["handshake_seconds"], receive_buffer, should_stop), {"hello"})
             if hello["agent_id"] != self.policy["agent_id"] or hello["runtime"] != self.policy["runtime"]:
                 raise ProtocolError("runtime identity differs from local policy")
             version = negotiate_version(hello["proto"])
@@ -281,7 +288,7 @@ class RuntimeHost:
             submitted = True
             write_frame(proc.stdin, wake)
             ack = validate_message(self._read_with_timeout(
-                proc.stdout, self.policy["handshake_seconds"], receive_buffer), {"ack"})
+                proc.stdout, self.policy["handshake_seconds"], receive_buffer, should_stop), {"ack"})
             if ack["v"] != version:
                 raise ProtocolError("ack version differs from negotiated version")
             if ack["wake_id"] != wake_id or ack["state"] != "accepted":
@@ -289,14 +296,15 @@ class RuntimeHost:
                 return "error"
             self._transition(wake_id, "running")
             result = validate_message(self._read_with_timeout(
-                proc.stdout, self.policy["turn_seconds"], receive_buffer), {"result"})
+                proc.stdout, self.policy["turn_seconds"], receive_buffer, should_stop), {"result"})
             if result["v"] != version:
                 raise ProtocolError("result version differs from negotiated version")
             if result["wake_id"] != wake_id:
                 raise ProtocolError("result wake mismatch")
             self._transition(wake_id, result["state"], result.get("summary"))
             return result["state"]
-        except (OSError, TimeoutError, EOFError, BrokenPipeError, ProtocolError, KeyError, TypeError, ValueError):
+        except (OSError, TimeoutError, EOFError, BrokenPipeError, InterruptedError,
+                ProtocolError, KeyError, TypeError, ValueError):
             if submitted:
                 self._transition(wake_id, "uncertain", "ambiguous_after_submission")
                 return "uncertain"

@@ -79,6 +79,7 @@ scripts/agent-link-artifacts.py
 docs/task-listener.md
 listener-contract.json
 docs/runtime-host.md
+docs/wake-runtime-rfc.md
 runtime-host-contract.json
 ```
 

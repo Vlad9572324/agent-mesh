@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import signal
 import sys
-import time
+import threading
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,10 +21,9 @@ def main(argv=None):
     parser.add_argument("--once", action="store_true", help="poll and dispatch at most one wake")
     args = parser.parse_args(argv)
     host = bridge = None
-    stopping = False
+    stop_event = threading.Event()
     def stop(_sig, _frame):
-        nonlocal stopping
-        stopping = True
+        stop_event.set()
     previous = {}
     try:
         policy = load_policy(args.policy)
@@ -36,10 +35,10 @@ def main(argv=None):
                 or origin_identity(bridge.config["url"]) != origin_identity(policy["server_origin"])):
             raise ValueError("host policy identity differs from connector identity")
         previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
-        while not stopping:
+        while not stop_event.is_set():
             recoverable = host.recoverable()
             if recoverable:
-                host.dispatch(recoverable[0])
+                host.dispatch(recoverable[0], should_stop=stop_event.is_set)
                 print(json.dumps(host.status(), sort_keys=True), flush=True)
                 if args.once:
                     break
@@ -56,13 +55,13 @@ def main(argv=None):
                     continue
                 wake_id = host.enqueue(channel, ids, sender)
                 if wake_id:
-                    host.dispatch(wake_id)
+                    host.dispatch(wake_id, should_stop=stop_event.is_set)
                     dispatched = True
                     break
             print(json.dumps(host.status(), sort_keys=True), flush=True)
             if args.once:
                 break
-            time.sleep(policy["poll_seconds"])
+            stop_event.wait(policy["poll_seconds"])
         return 0
     except (Exception, KeyboardInterrupt) as error:
         print(json.dumps({"success": False, "error_category": type(error).__name__}), file=sys.stderr)

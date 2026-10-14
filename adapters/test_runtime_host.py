@@ -24,6 +24,8 @@ if mode == "partial":
 ack_version="9.9" if mode == "wrong-version" else "1.0"
 send({"type":"ack","v":ack_version,"wake_id":wake["wake_id"],"state":"accepted"})
 if mode == "uncertain": sys.exit(0)
+if mode == "partial-result":
+ sys.stdout.write('{'); sys.stdout.flush(); __import__('time').sleep(10)
 send({"type":"result","v":"1.0","wake_id":wake["wake_id"],"state":"done","summary":"ok"})
 '''
 
@@ -105,6 +107,20 @@ class RuntimeHostTests(unittest.TestCase):
         try:
             wake = host.enqueue("development", ["message-1"], "peer-agent")
             self.assertEqual(host.dispatch(wake), "uncertain")
+            self.assertEqual(host.status()["wakes"][0]["detail"], "ambiguous_after_submission")
+        finally:
+            host.close()
+
+    def test_stop_request_interrupts_running_turn_and_reaps_child(self):
+        policy = self.policy("partial-result")
+        policy["turn_seconds"] = 30
+        host = RuntimeHost(policy)
+        started = time.monotonic()
+        try:
+            wake = host.enqueue("development", ["message-1"], "peer-agent")
+            self.assertEqual(host.dispatch(
+                wake, should_stop=lambda: time.monotonic() - started > 0.5), "uncertain")
+            self.assertLess(time.monotonic() - started, 3)
             self.assertEqual(host.status()["wakes"][0]["detail"], "ambiguous_after_submission")
         finally:
             host.close()
