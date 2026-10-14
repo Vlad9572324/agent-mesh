@@ -20,7 +20,6 @@ It does not start models, accept tasks, or read/mark messages itself.
 """
 
 import argparse
-import json
 import math
 import os
 import re
@@ -182,51 +181,87 @@ class SSEWaker:
     event line means only "something changed, poll now".
     """
 
-    def __init__(self, url, token, ca_file, channels, interval, log, *, opener=None):
+    def __init__(self, config, token, channel_source, interval, log, *, opener=None):
         self.interval = interval
         self.log = log
+        self._channel_source = channel_source
         self._event = threading.Event()
         self._stop = threading.Event()
-        self._opener = opener or self._network_opener(url, token, ca_file)
-        self._threads = [threading.Thread(target=self._watch, args=(c,), daemon=True) for c in channels]
-        for thread in self._threads:
-            thread.start()
+        self._opener = opener or self._network_opener(config, token)
+        self._threads = {}
+        self._lock = threading.Lock()
+        self._sync_channels()
 
     def wait(self):
         """Return as soon as an event arrives, otherwise after the interval."""
+        self._sync_channels()
         self._event.wait(self.interval)
         self._event.clear()
 
     def stop(self):
         self._stop.set()
+        with self._lock:
+            rows = list(self._threads.values())
+            self._threads.clear()
+        for local_stop, _thread in rows:
+            local_stop.set()
+        for _local_stop, thread in rows:
+            thread.join(timeout=0.2)
 
-    def _watch(self, channel):
-        while not self._stop.is_set():
+    def _sync_channels(self):
+        """Follow current server grants instead of the install-time channel list."""
+        try:
+            wanted = set(self._channel_source())
+        except Exception as error:
+            self.log("sse grant refresh failed (%s)" % type(error).__name__)
+            return
+        retired = []
+        with self._lock:
+            for channel in set(self._threads) - wanted:
+                local_stop, thread = self._threads.pop(channel)
+                local_stop.set()
+                retired.append(thread)
+            for channel in wanted - set(self._threads):
+                local_stop = threading.Event()
+                thread = threading.Thread(target=self._watch, args=(channel, local_stop), daemon=True)
+                self._threads[channel] = (local_stop, thread)
+                thread.start()
+        for thread in retired:
+            thread.join(timeout=0.2)
+
+    def _watch(self, channel, local_stop):
+        while not self._stop.is_set() and not local_stop.is_set():
             try:
                 with self._opener(channel) as stream:
                     for line in stream:
-                        if self._stop.is_set():
+                        if self._stop.is_set() or local_stop.is_set():
                             return
                         if line.startswith(b"id:") or line.startswith(b"event:"):
                             self._event.set()  # keepalive comment lines (": ...") are ignored
             except Exception as error:
                 self.log("sse watch %s failed (%s)" % (channel, type(error).__name__))
-            self._stop.wait(1.0)  # brief backoff; the ring loop's interval still polls meanwhile
+            if local_stop.wait(1.0) or self._stop.is_set():
+                return
 
     @staticmethod
-    def _network_opener(url, token, ca_file):
+    def _network_opener(config, token):
         import ssl
         import urllib.request
-        context = ssl.create_default_context(cafile=ca_file) if ca_file else None
-        if context is not None:
-            context.check_hostname = False  # the mesh certificate is pinned by ca_file; its SAN may be an IP
-        base = url.rstrip("/")
+        context = ssl.create_default_context(cafile=config.get("ca_file"))
+        base = config["url"].rstrip("/")
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+
+        client = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}), NoRedirect, urllib.request.HTTPSHandler(context=context))
 
         def _open(channel):
             request = urllib.request.Request(
                 base + "/v1/channels/" + channel + "/stream",
                 headers={"Authorization": "Bearer " + token, "Accept": "text/event-stream"})
-            return urllib.request.urlopen(request, timeout=35, context=context)
+            return client.open(request, timeout=35)
 
         return _open
 
@@ -363,10 +398,7 @@ def main(argv=None):
             return run_loop(ringer, lambda: None, True, log)
         # Wake the instant a granted channel gets an event (SSE) instead of only
         # every --interval seconds; the interval remains the fallback poll.
-        config = json.loads(Path(args.config).read_text())
-        token = Path(config["key_file"]).read_text().strip()
-        waker = SSEWaker(config["url"], token, config.get("ca_file"),
-                         config.get("channel_ids", []), args.interval, log)
+        waker = SSEWaker(bridge.config, bridge.key, bridge._authorize, args.interval, log)
         try:
             return run_loop(ringer, waker.wait, False, log)
         finally:

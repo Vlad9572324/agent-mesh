@@ -356,10 +356,6 @@ class ArgumentTests(unittest.TestCase):
             doorbell.main(["--config", "/x.json", "--tmux-target", "t", "--base-delay", "60", "--max-delay", "30"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class _FakeStream:
     """A fake SSE response: a context manager that yields the given byte lines."""
 
@@ -374,6 +370,9 @@ class _FakeStream:
 
     def __iter__(self):
         return iter(self._lines)
+
+    def close(self):
+        pass
 
 
 class RunLoopTest(unittest.TestCase):
@@ -414,7 +413,7 @@ class RunLoopTest(unittest.TestCase):
 
 class SSEWakerTest(unittest.TestCase):
     def test_wait_returns_early_when_a_channel_emits_an_event(self):
-        waker = doorbell.SSEWaker("https://x", "tok", None, ["c"], 5.0, lambda m: None,
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: ["c"], 5.0, lambda m: None,
                                   opener=lambda channel: _FakeStream([b"id: 7\n", b"event: hint\n"]))
         try:
             start = time.monotonic()
@@ -424,7 +423,7 @@ class SSEWakerTest(unittest.TestCase):
             waker.stop()
 
     def test_keepalive_only_stream_falls_back_to_interval(self):
-        waker = doorbell.SSEWaker("https://x", "tok", None, ["c"], 0.3, lambda m: None,
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: ["c"], 0.3, lambda m: None,
                                   opener=lambda channel: _FakeStream([b": keepalive\n"]))
         try:
             start = time.monotonic()
@@ -439,10 +438,33 @@ class SSEWakerTest(unittest.TestCase):
         def boom(channel):
             raise OSError("connection refused")
 
-        waker = doorbell.SSEWaker("https://x", "tok", None, ["c"], 0.3, logs.append, opener=boom)
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: ["c"], 0.3, logs.append, opener=boom)
         try:
             waker.wait()  # must simply fall back to the interval, never raise
             self.assertTrue(any("sse watch" in m for m in logs))
+        finally:
+            waker.stop()
+
+    def test_channel_watchers_follow_current_grants(self):
+        grants = []
+        opened = []
+
+        def open_stream(channel):
+            opened.append(channel)
+            return _FakeStream([b": keepalive\n"])
+
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: tuple(grants),
+                                  0.05, lambda m: None, opener=open_stream)
+        try:
+            grants.append("new-channel")
+            waker.wait()
+            deadline = time.monotonic() + 1
+            while "new-channel" not in opened and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertIn("new-channel", opened)
+            grants.clear()
+            waker.wait()
+            self.assertNotIn("new-channel", waker._threads)
         finally:
             waker.stop()
 
