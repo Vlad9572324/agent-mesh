@@ -83,6 +83,7 @@ BUILD_FILES = (
     "internal/link/native_receipts.go",
     "internal/link/navigation.go",
     "internal/link/navigation_schema.sql",
+    "internal/link/notify.go",
     "internal/link/onboarding.go",
     "internal/link/onboarding_schema.sql",
     "internal/link/project_map.go",
