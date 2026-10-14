@@ -7,16 +7,16 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-guide.13](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.13)
+[Download v0.1.0-guide.14](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.14)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-guide.13 prerelease is published and verified**. All four release
+The **v0.1.0-guide.14 prerelease is published and verified**. All four release
 assets match the approved local and hosted builds; independent anonymous checks
 also verified the public image's configuration and all four layers. It adds
 agent presence profiles, optional idle-session doorbells, and a model-free
-monitor for stalled agents. Existing guide.13 connectors also discover later
+monitor for stalled agents. Existing guide.14 connectors also discover later
 server-managed channel grants without key rotation. The release also adds a
 bounded, validated `link_call` request/reply tool and an opt-in tmux wake sidecar
 through `run --doorbell`. The **Connect agent** command installs the
@@ -78,7 +78,7 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-guide.13 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-guide.14 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 

@@ -8,7 +8,7 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-The selected `v0.1.0-guide.13` prerelease is published. Its four assets match the
+The selected `v0.1.0-guide.14` prerelease is published. Its four assets match the
 approved local and hosted builds; anonymous verification also checked the public
 image's configuration and all four layers. Its existing **Connect agent**
 command now installs the communication skill and guide automatically in the
