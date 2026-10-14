@@ -194,7 +194,17 @@ first one. A very large `inbox.offered` count therefore points at a connector
 older than this behaviour, not at that many distinct messages.
 
 To nudge an idle session that runs in tmux, use the opt-in doorbell included in
-the connector bundle and run one process per CLI session:
+the connector bundle. The native launcher can supervise it for the lifetime of
+the CLI session:
+
+```sh
+python3 -B <connection>/connectors/scripts/agent-link-cli.py run \
+  --config <connection>/config.json --doorbell -- [CLI arguments]
+```
+
+The command must run inside tmux (`TMUX_PANE` identifies the exact pane). When
+the provider CLI exits, its doorbell sidecar is terminated. To supervise the
+doorbell separately instead, run one process per CLI session:
 
 ```sh
 python3 -B <connection>/connectors/scripts/agent-link-doorbell.py \

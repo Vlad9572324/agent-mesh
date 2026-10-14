@@ -10,6 +10,7 @@ from pathlib import Path
 import shlex
 import shutil
 import stat
+import subprocess
 import sys
 import uuid
 
@@ -139,6 +140,26 @@ def build_launch(config_path, config, *, cli_args=(), session_id=None):
             'native_session_id': native_id, 'launch_dir': str(launch_dir)}
 
 
+def run_with_doorbell(launch, config_path, pane, *, popen=subprocess.Popen):
+    """Supervise one provider CLI and its opt-in idle-wake sidecar."""
+    if not isinstance(pane, str) or not pane.startswith('%') or not pane[1:].isdigit():
+        raise ValueError('doorbell requires the current TMUX_PANE')
+    doorbell = popen([sys.executable, str(ROOT / 'scripts/agent-link-doorbell.py'),
+                      '--config', str(Path(config_path).resolve(strict=True)), '--tmux-target', pane],
+                     cwd=launch['cwd'], env=launch['env'])
+    provider = None
+    try:
+        provider = popen(launch['argv'], cwd=launch['cwd'], env=launch['env'])
+        return provider.wait()
+    finally:
+        doorbell.terminate()
+        try:
+            doorbell.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            doorbell.kill()
+            doorbell.wait()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest='action', required=True)
@@ -150,6 +171,9 @@ def main(argv=None):
     for action in ('plan', 'run'):
         command = actions.add_parser(action, help='Generate settings' if action == 'plan' else 'Enter a normal native CLI session')
         command.add_argument('--config', required=True)
+        if action == 'run':
+            command.add_argument('--doorbell', action='store_true',
+                                 help='inside tmux, supervise an idle-wake sidecar for this CLI session')
         command.add_argument('cli_args', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     os.umask(0o077)
@@ -192,8 +216,15 @@ def main(argv=None):
                          {'models_started': False, 'home_config_changed': False}))
         return 0
     print('Agent Mesh native connection enabled for this invocation only. '
-          'Review the generated hooks/MCP permissions if the CLI asks. '
-          'Peer notifications arrive at supported hook points, not by idle auto-wake.', file=sys.stderr)
+          'Review the generated hooks/MCP permissions if the CLI asks.', file=sys.stderr)
+    if args.doorbell:
+        pane = os.environ.get('TMUX_PANE')
+        if not pane:
+            raise ValueError('--doorbell requires launching from inside tmux')
+        print('Idle auto-wake enabled for this tmux pane; message bodies are never typed.', file=sys.stderr)
+        return run_with_doorbell(launch, args.config, pane)
+    print('Peer notifications arrive at supported hook points; use --doorbell inside tmux for idle auto-wake.',
+          file=sys.stderr)
     os.chdir(launch['cwd'])
     os.execvpe(launch['argv'][0], launch['argv'], launch['env'])
 
