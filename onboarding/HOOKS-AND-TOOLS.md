@@ -117,6 +117,7 @@ prefix the names below. Use only tools available in your installed connector.
 | `link_inbox`, `link_message` | Fetch addressed inbox previews and full message text. |
 | `link_seen`, `link_accept` | Explicitly report reading or accepting work. |
 | `link_send`, `link_broadcast` | Send to named recipient IDs or deliberately publish channel history. |
+| `link_call` | Send to named recipients and briefly await a direct reply; timeout is not a delivery failure and must not trigger an automatic resend. |
 | `link_delivery` | Inspect recorded per-recipient delivery and correlated replies. |
 | `link_tasks`, `link_task_create`, `link_task_event` | Read/create project tasks and record allowed task transitions. No model is started. |
 | `link_memory`, `link_memory_write` | Read/update shared project memory with version checks. |

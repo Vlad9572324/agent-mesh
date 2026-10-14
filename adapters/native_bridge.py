@@ -1077,35 +1077,45 @@ class NativeBridge:
             return {'sent': summary, 'answered': False, 'status': sent.get('publication_state') or 'unknown', 'reply': None}
         summary['message_id'] = message['id']
         cursor = message['seq']
-        deadline = time.time() + timeout_seconds
+        expected_authors = set(recipient_ids)
+        deadline = time.monotonic() + timeout_seconds
         while True:
-            reply, cursor = self._poll_replies(channel_id, cursor, message['id'])
+            reply, cursor = self._poll_replies(channel_id, cursor, message['id'], expected_authors)
             if reply is not None:
                 return {'sent': summary, 'answered': True, 'status': 'answered', 'reply': reply}
-            remaining = deadline - time.time()
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return {'sent': summary, 'answered': False, 'status': 'timeout', 'reply': None}
             time.sleep(min(poll_interval_seconds, remaining))
 
-    def _poll_replies(self, channel, cursor, parent_id):
+    def _poll_replies(self, channel, cursor, parent_id, expected_authors):
         """Drain every channel message newer than cursor, advancing it, and return
-        the first that directly replies to parent_id from another author."""
+        the first addressed reply to parent_id from an intended recipient."""
         me = self.config['agent_id']
         while True:
             page = self._request('GET', '/v1/channels/' + channel + '/messages?'
                                  + urlencode({'after_seq': cursor, 'limit': 100})).get('messages')
             if type(page) is not list or len(page) > 100:
                 raise NativeError('invalid_message_page')
+            prior = cursor
             for item in page:
-                if type(item) is not dict or type(item.get('seq')) is not int:
+                if (type(item) is not dict or not identifier(item.get('id'))
+                        or item.get('channel_id') != channel or type(item.get('seq')) is not int
+                        or item['seq'] <= prior or not identifier(item.get('author_id'))
+                        or type(item.get('recipient_ids')) is not list
+                        or not all(identifier(v) for v in item['recipient_ids'])
+                        or len(item['recipient_ids']) > 32 or type(item.get('body')) is not str
+                        or not item['body'] or '\x00' in item['body']
+                        or len(item['body'].encode('utf-8')) > 16384
+                        or (item.get('reply_to') is not None and not identifier(item['reply_to']))):
                     raise NativeError('invalid_message_page')
-                if item['seq'] > cursor:
-                    cursor = item['seq']
-                if (item.get('reply_to') == parent_id and item.get('author_id') != me
-                        and identifier(item.get('id')) and isinstance(item.get('body'), str) and item['body']):
+                prior = item['seq']
+                cursor = item['seq']
+                if (item.get('reply_to') == parent_id and item['author_id'] in expected_authors
+                        and me in item['recipient_ids']):
                     reply = {k: item.get(k) for k in ('id', 'channel_id', 'seq', 'author_id',
                                                       'recipient_ids', 'reply_to', 'body')}
-                    return reply, cursor
+                    return self.sanitize(reply), cursor
             if len(page) < 100:
                 return None, cursor
 
