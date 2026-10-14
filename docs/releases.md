@@ -2,34 +2,38 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-guide.11 prerelease published
+## Current status: v0.1.0-guide.12 prerelease published
 
-Frozen source: `1d6b08141d2abce7307e3c467858d28577600dbd`; packaging version: **3**.
+Frozen source: `67495171615d14106a07954777469c817b1d6c81`; packaging version: **3**.
 The published Linux amd64 server, matching web assets and Python connectors
 passed hosted Compose HTTPS, PostgreSQL 14, owner authentication, database
 recovery and cleanup checks.
 
 | Verification | Result |
 | --- | --- |
-| Container CI | [38552022768](https://github.com/Vlad9572324/agent-mesh/actions/runs/38552022768) — passed |
-| Package inspection | [38552022853](https://github.com/Vlad9572324/agent-mesh/actions/runs/38552022853) — passed |
-| Version-tag publication run | [38552266741](https://github.com/Vlad9572324/agent-mesh/actions/runs/38552266741) — passed |
-| Published GitHub prerelease | [v0.1.0-guide.11](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.11), release ID `412610752` |
-| Approved SHA256SUMS digest | `169705b76b337864ae5ff4b4fc69c88c11fff58e1012a1f7a0e713f1c6f6c97f` |
-| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.11` |
-| Exact image digest | `sha256:c64e79b23d874f5baea4b1f00168f0220238dc030c7e70a694206c205b057de2` |
+| Container CI | [38559555390](https://github.com/Vlad9572324/agent-mesh/actions/runs/38559555390) — passed |
+| Package inspection | [38559555406](https://github.com/Vlad9572324/agent-mesh/actions/runs/38559555406) — passed |
+| Version-tag publication run | [38561018865](https://github.com/Vlad9572324/agent-mesh/actions/runs/38561018865) — passed |
+| Published GitHub prerelease | [v0.1.0-guide.12](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.12), release ID `412671589` |
+| Approved SHA256SUMS digest | `ce5ba8bccb8a1a929c19aa3c43a53b91aa2551ed2aaffe47182ce409769d317f` |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.12` |
+| Exact image digest | `sha256:1c019e9b02e574c8551b2561e5753e589040dcca41c0a7a5e840a1e304efcdd6` |
 
 Changes since guide.2 include bounded post-failure inbox offers, deduplicated
 `inbox.offered` activity, a reserved delivery-evidence quota, opt-in tmux
 doorbells, agent wake profiles and liveness, per-recipient delivery stages,
 explicit non-participant addressing errors, and a model-free unattended monitor.
 Connector recovery now rebuilds malformed native state without quarantining a
-healthy database that is merely busy. Guide.11 makes current server channel
+healthy database that is merely busy. Guide.12 makes current server channel
 grants authoritative for existing connectors: newly granted channels receive a
 durable cursor without rotating the agent key or replacing its local binding.
 It also replaces the SSE stream's one-second database polling with PostgreSQL
 notifications and lets the optional doorbell wake on those events while
 retaining interval polling as a fallback.
+It also closes the notifier connection during graceful shutdown and adds the
+bounded `link_call` connector tool. Replies are strictly validated, sanitized,
+addressed back to the caller and accepted only from the requested recipients;
+a timeout does not imply publication or delivery failure.
 The PostgreSQL change is additive: `agent_wake_profiles` plus lookup indexes.
 Existing connector installations are not upgraded by a server update; install
 the matching connector bundle while preserving each participant's private key,
