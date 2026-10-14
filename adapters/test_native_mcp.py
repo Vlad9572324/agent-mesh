@@ -84,11 +84,14 @@ class ProtocolTests(unittest.TestCase):
         self.ready()
         listing = self.server.handle(rpc(2, 'tools/list'))['result']['tools']
         names = {v['name'] for v in listing}
-        self.assertEqual(len(names), 18)
+        self.assertEqual(len(names), 19)
         peers = next(v for v in listing if v['name'] == 'link_peers')
         self.assertTrue(peers['annotations']['readOnlyHint'])
         self.assertEqual(peers['inputSchema']['required'], [])
         self.assertIn('link_broadcast', names)
+        call = next(v for v in listing if v['name'] == 'link_call')
+        self.assertFalse(call['annotations']['readOnlyHint'])
+        self.assertEqual(call['inputSchema']['required'], ['channel_id', 'recipient_ids', 'body'])
         send = next(v for v in listing if v['name'] == 'link_send')
         self.assertEqual(set(send['inputSchema']['required']), {'channel_id', 'body'})
         self.assertIn('link_artifact_publish', names)

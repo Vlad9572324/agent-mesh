@@ -142,6 +142,91 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(queued["recipients"], [{"id": "b", "in_channel": None}])
         self.assertIn("Queued", queued["hint"])
 
+    def test_call_returns_the_first_direct_reply(self):
+        bridge = self.bridge()
+        # A later channel message that replies to the sent message, from another author.
+        self.api.messages.append(self.message(identifier="r1", channel="c", seq=5,
+                                              author_id="b", recipient_ids=["a"],
+                                              reply_to="sent-c-ask-1", body="pong"))
+        result = bridge.call("c", ["b"], "ping", client_id="ask-1", timeout_seconds=5)
+        self.assertTrue(result["answered"])
+        self.assertEqual(result["status"], "answered")
+        self.assertEqual(result["sent"]["message_id"], "sent-c-ask-1")
+        self.assertEqual(result["sent"]["publication_state"], "sent")
+        self.assertEqual(result["reply"]["id"], "r1")
+        self.assertEqual(result["reply"]["author_id"], "b")
+        self.assertEqual(result["reply"]["body"], "pong")
+
+    def test_call_ignores_own_messages_and_unrelated_replies(self):
+        bridge = self.bridge()
+        # Same thread but authored by me, and a reply to a different parent: neither answers the call.
+        self.api.messages.append(self.message(identifier="mine", channel="c", seq=5,
+                                              author_id="a", reply_to="sent-c-ask-3", body="self note"))
+        self.api.messages.append(self.message(identifier="other", channel="c", seq=6,
+                                              author_id="b", reply_to="some-other-message", body="unrelated"))
+        clock = {"t": 0.0}
+        with patch("native_bridge.time.monotonic", lambda: clock["t"]), \
+             patch("native_bridge.time.sleep", lambda _s: clock.__setitem__("t", clock["t"] + 1000)):
+            result = bridge.call("c", ["b"], "ping", client_id="ask-3", timeout_seconds=1)
+        self.assertFalse(result["answered"])
+        self.assertEqual(result["status"], "timeout")
+        self.assertIsNone(result["reply"])
+
+    def test_call_times_out_without_blocking_and_never_sleeps_past_the_deadline(self):
+        bridge = self.bridge()
+        clock = {"t": 0.0}
+        slept = []
+        with patch("native_bridge.time.monotonic", lambda: clock["t"]), \
+             patch("native_bridge.time.sleep", lambda s: (slept.append(s), clock.__setitem__("t", clock["t"] + 1000))):
+            result = bridge.call("c", ["b"], "ping", client_id="ask-4", timeout_seconds=1, poll_interval_seconds=5)
+        self.assertEqual(result["status"], "timeout")
+        self.assertTrue(slept and slept[0] <= 1)  # capped to the remaining time, not the full interval
+
+    def test_call_requires_recipients_before_any_network(self):
+        bridge = self.bridge()
+        for bad in (None, []):
+            with self.subTest(recipients=bad):
+                with self.assertRaisesRegex(native.NativeError, "recipient_ids_required_for_call"):
+                    bridge.call("c", bad, "ping")
+        self.assertEqual(self.api.calls, [])
+
+    def test_call_rejects_out_of_range_timeout_and_interval(self):
+        bridge = self.bridge()
+        with self.assertRaisesRegex(native.NativeError, "invalid_timeout"):
+            bridge.call("c", ["b"], "ping", timeout_seconds=0)
+        with self.assertRaisesRegex(native.NativeError, "invalid_poll_interval"):
+            bridge.call("c", ["b"], "ping", poll_interval_seconds=0)
+
+    def test_call_ignores_reply_from_unrequested_author_or_not_addressed_back(self):
+        bridge = self.bridge()
+        self.api.messages.append(self.message(identifier="intruder", channel="c", seq=5,
+                                              author_id="z", recipient_ids=["a"],
+                                              reply_to="sent-c-ask-5", body="spoof"))
+        self.api.messages.append(self.message(identifier="public", channel="c", seq=6,
+                                              author_id="b", recipient_ids=[],
+                                              reply_to="sent-c-ask-5", body="not addressed"))
+        clock = {"t": 0.0}
+        with patch("native_bridge.time.monotonic", lambda: clock["t"]), \
+             patch("native_bridge.time.sleep", lambda _s: clock.__setitem__("t", 2.0)):
+            result = bridge.call("c", ["b"], "ping", client_id="ask-5", timeout_seconds=1)
+        self.assertEqual(result["status"], "timeout")
+
+    def test_call_rejects_malformed_reply_page_before_returning_peer_content(self):
+        bridge = self.bridge()
+        self.api.messages.append(self.message(identifier="bad", channel="c", seq=5,
+                                              author_id="b", recipient_ids=[None],
+                                              reply_to="sent-c-ask-6", body="spoof"))
+        with self.assertRaisesRegex(native.NativeError, "invalid_message_page"):
+            bridge.call("c", ["b"], "ping", client_id="ask-6", timeout_seconds=1)
+
+    def test_link_call_is_registered_readwrite_and_routed_to_the_bridge(self):
+        import native_mcp
+        specs = {tool["name"]: tool for tool in native_mcp.tools()}
+        self.assertIn("link_call", specs)
+        self.assertEqual(specs["link_call"]["inputSchema"]["required"], ["channel_id", "recipient_ids", "body"])
+        self.assertFalse(specs["link_call"]["annotations"]["readOnlyHint"])
+        self.assertTrue(callable(getattr(native.NativeBridge, "call")))
+
     def test_message_lost_ack_exact_payload_retry_and_changed_id_conflict(self):
         bridge = self.bridge()
         self.api.lose_next_ack = True

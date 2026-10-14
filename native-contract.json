@@ -83,6 +83,7 @@
   "native_message_publication": {
     "link_send": "New messages require nonempty recipient_ids. With reply_to and missing/empty recipients, freshly authorize the configured writable channel, load the exact same-channel parent and resolve its non-self author only. Explicit recipient lists remain unchanged. Names/mentions in body never choose addressees. The result carries recipients[{id,in_channel}] (null until the server accepts) and a hint for the sender.",
     "link_broadcast": "Explicit channel-only publication: recipient_ids:[] and channel_only:true. No native recipient inbox delivery or model wake. Uses the same durable idempotent outbox and receipt verification.",
+    "link_call": "Send to explicit nonempty recipient_ids and wait up to 120 seconds for the first strictly validated, sanitized reply addressed back to this agent by one of those recipients. Timeout does not undo publication or imply delivery failure; the reply remains available through the normal inbox. Queued or blocked publication returns immediately.",
     "compatibility": "Legacy directed request hashes unchanged; old queued payloads are never rewritten. New accidental empty sends fail, while exact replay of existing legacy broadcasts remains available. Restart an updated MCP process to load new tools.",
     "inbox": "Sending and status calls do not read inbox. Call link_inbox explicitly; publication success is not recipient viewing."
   }

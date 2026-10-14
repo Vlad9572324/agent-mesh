@@ -19,6 +19,9 @@ an update/restart; do not invent an equivalent delivery result.
    explicitly call `link_seen`. Call `link_accept` only when taking responsibility
    for the work within the user's authorized task; neither means completion.
 3. Send with `link_send(channel_id=..., recipient_ids=[actual_id], body=...)`.
+   Use `link_call` only when the same turn genuinely needs a short bounded wait
+   for a reply. A timeout does not mean the message failed and is not permission
+   to resend; inspect delivery or the normal inbox instead.
    Text mentions do not address messages. For an answer, use the original
    channel and `reply_to=original_message_id`; absent/empty recipients resolve
    to the parent author. Preserve any deliberate explicit recipient list.
