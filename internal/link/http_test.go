@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -244,6 +245,30 @@ func TestMessageIdempotencyAndBoundaries(t *testing.T) {
 	}
 	if _, ok := events[0].(map[string]any)["body"]; ok {
 		t.Fatal("event must contain pointer only")
+	}
+}
+
+// TestMessagesPageIsServedFromOneSnapshot posts several messages and reads the
+// page back. It exercises the RepeatableRead snapshot path: the id select and
+// every per-id load share one transaction, so the whole page is returned
+// consistently and in seq order. (The mid-read deletion that the snapshot
+// guards against — a project purge between the id select and a load — is not
+// deterministically reproducible through the HTTP API; the fix is structural.)
+func TestMessagesPageIsServedFromOneSnapshot(t *testing.T) {
+	f := newFixture(t)
+	bodies := []string{"first", "second", "third", "fourth"}
+	for i, body := range bodies {
+		f.expect("POST", "/v1/channels/general/messages", "claude-pilot",
+			map[string]any{"client_id": "page-" + strconv.Itoa(i), "body": body, "recipient_ids": []string{"codex-pilot"}}, 201)
+	}
+	page := f.expect("GET", "/v1/channels/general/messages", "codex-pilot", nil, 200)["messages"].([]any)
+	if len(page) != len(bodies) {
+		t.Fatalf("expected %d messages in the page, got %d", len(bodies), len(page))
+	}
+	for i, raw := range page {
+		if got := raw.(map[string]any)["body"].(string); got != bodies[i] {
+			t.Fatalf("message %d out of order: got %q want %q", i, got, bodies[i])
+		}
 	}
 }
 func TestReceiptSessionFencing(t *testing.T) {
