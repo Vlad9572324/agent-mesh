@@ -53,8 +53,9 @@ model loop (the host spawns or queues a turn).
 - **Agent Mesh Runtime Protocol (AMRP)** — a small, versioned, provider-neutral
   protocol spoken between the Host and an *agent runtime adapter* over a
   local-only transport: newline-delimited JSON (JSONL) over stdio, or a unix
-  domain socket / Windows named pipe (mode 0600, capability-token on connect).
-  An agent that speaks AMRP, or is wrapped by an adapter, is *protocol-aware*.
+  domain socket (owning uid only, mode 0600) / Windows named pipe (a DACL that
+  grants only the owning user), with a capability-token on connect. An agent
+  that speaks AMRP, or is wrapped by an adapter, is *protocol-aware*.
 
 Provider CLIs are just adapters behind this stable protocol; third-party agents
 implement it through a thin SDK. The Host core never imports a provider CLI.
@@ -79,7 +80,7 @@ hello    adapter→host  {v, agent_id, caps:[wake,cancel,resume,result], runtime
 welcome  host→adapter  {v, accepted_version, host_id, policy}
 wake     host→adapter  {v, wake_id, channel_id, message_ids:[...], envelope, resume_hint?}
 ack      adapter→host  {wake_id, state: accepted|rejected, reason?}
-result   adapter→host  {wake_id, state: done|error|cancelled, summary?}
+result   adapter→host  {wake_id, state: done|error|cancelled|uncertain, summary?}
 cancel   host→adapter  {wake_id}
 heartbeat both ways
 ```
@@ -88,23 +89,65 @@ heartbeat both ways
 peer body. The adapter fetches message bodies itself through the mesh connector
 (authorized); they never travel in the wake.
 
-## 4. State machine (per wake)
+**Framing.** If JSONL is kept, each message is exactly one line: embedded raw
+newlines are forbidden (escaped as `\n`), each line is byte-bounded with a hard
+cap, and the protocol owns a dedicated stdout/socket stream (never interleaved
+with other output). If any of those cannot be guaranteed for a given adapter,
+use explicit `Content-Length` framing instead of line-delimited JSON.
 
-```
-queued → delivered(ack) → running → { done | error | cancelled }
-```
+## 4. Three separate automata, not one lifecycle
 
-- **durable** at `queued` (host journal) → survives a host crash and is
-  redelivered on restart.
-- **dedup**: idempotency key `(agent_id, sorted message_ids)`; a duplicate wake
-  while one is in flight is coalesced, not re-run.
-- **fencing**: one host owns a given runtime (lease); only it may send `wake`. If
-  the agent is busy with its own turn, the host defers until the adapter reports
-  idle. For the Codex thread path, the target thread is chosen only from the
-  local owned `(agent_id ↔ thread_id)` registry — never from message content —
-  and is not written while a turn is in flight.
-- **timeout/retry**: no `ack` within the deadline → bounded retry → notification
-  fallback; `running` past its deadline with no `result` → cancel and mark error.
+Three independent facts must never be conflated:
+
+- **Wake lifecycle** (host-owned):
+  `queued → delivered(ack) → running → { done | error | cancelled | uncertain }`.
+- **Message evidence** (server-recorded): `stored → offered → seen → accepted`
+  (plus a reply). This is the existing delivery stage — about the *message*, not
+  the work.
+- **Work result**: `done` means the adapter reported that a turn completed — a
+  client-reported turn completion, **not** task success or a review verdict.
+
+A wake can reach `done` while the message is still only `offered`, and vice
+versa; the three are tracked independently.
+
+### Durability and the terminal `uncertain`
+
+A wake is **durable** at `queued` (host journal) and redelivered on host
+restart — but only while it is safe to do so. Once a turn may have started
+(`running`), a lost `ack`, a lost `result`, or an unconfirmed `cancel` cannot be
+resolved by the host alone: it must **not** `cancel and mark error`, and it must
+**not** silently redeliver (that risks a double turn). The terminal state is
+**`uncertain`**, which triggers reconcile / manual policy (ask the owner, or read
+the adapter's own record if it keeps one). Automatic **retry is allowed only up
+to submission** (before a turn could have started), or when the adapter
+negotiated an **`idempotent_wake`** capability in `hello` so a repeat is provably
+side-effect-free.
+
+### Identity, routing and per-message claim (not a set key)
+
+An idempotency key of `(agent_id, sorted message_ids)` is insufficient — two
+waking sets can overlap. Instead: the host mints a **stable `wake_id`** and a
+monotonic **route generation** per (agent, transport binding); each message
+carries a **per-message ownership/claim** — a message is claimed by exactly one
+in-flight `wake_id`, and a later wake takes only the still-unclaimed messages. An
+action from a stale generation (an old binding) is rejected.
+
+### Fencing (concrete)
+
+Exactly one controller may drive a given runtime, enforced by a **durable
+epoch**: the owning host writes an epoch for the (agent, runtime) binding; only
+the current epoch may `wake`/`cancel`; any action carrying a stale epoch is
+rejected. This is a dedicated durable fencing token — the heartbeat lease /
+`execution_sessions` are **not** suitable and must not be overloaded for it. If
+the agent is busy with its own turn the host defers until the adapter reports
+idle; the Codex thread target is chosen only from the local owned
+`(agent_id ↔ thread_id)` registry, never from message content.
+
+### Timeout
+
+No `ack` within the deadline → bounded, submission-only retry (per above) →
+notification fallback. `running` past its deadline with no `result` →
+**`uncertain`** (never a unilateral error), reconcile.
 
 ## 5. Host services and SDK
 
@@ -151,7 +194,11 @@ MVP: Host + AMRP + one managed-worker adapter (from `runtimes.py`) on Unix, woke
 by the existing SSE, with a durable journal, dedup, fencing and a notification
 fallback, reaping children on exit.
 
-Tests: redelivery after a host crash; dedup of a message set; fencing
-(busy → defer); cancel; envelope contains only validated IDs (no body); IPC
-socket is 0600 and rejects a non-owner; a signal carrying a body cannot cause
-execution (the server cannot drive a local turn's content).
+Tests: redelivery of a pre-submission wake after a host crash, and that a
+`running` wake resolves to `uncertain` (never a double turn); per-message claim
+across overlapping sets; stale-epoch and stale-generation rejection; fencing
+(busy → defer); cancel; the three automata stay independent (`done` with the
+message still `offered`); envelope contains only validated IDs (no body); the IPC
+endpoint is owner-only (Unix uid+mode 0600 / Windows DACL) and rejects a
+non-owner; a signal carrying a body cannot cause execution (the server cannot
+drive a local turn's content).
