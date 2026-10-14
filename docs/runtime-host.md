@@ -27,15 +27,15 @@ directory must already exist locally:
 ```json
 {
   "version": 1,
-  "connector_config": "/home/me/.local/share/agent-mesh/connection/config.json",
+  "connector_config": "/etc/agent-mesh/connection/config.json",
   "server_origin": "https://mesh.example:8766",
   "project_id": "my-project",
-  "state_dir": "/home/me/.local/state/agent-mesh-host",
+  "state_dir": "/var/lib/agent-mesh-host",
   "route_id": "local-primary",
   "agent_id": "my-agent",
   "runtime": "reference-echo",
   "argv": ["/usr/bin/python3", "/opt/agent-mesh/scripts/agent-mesh-echo-runtime.py"],
-  "working_directory": "/home/me/project",
+  "working_directory": "/srv/agent-project",
   "env_allowlist": ["HOME"],
   "poll_seconds": 10,
   "handshake_seconds": 10,
