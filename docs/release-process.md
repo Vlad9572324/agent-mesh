@@ -2,12 +2,12 @@
 
 [Documentation](README.md) · [Install a release](install-release.md) · [Release notes](releases.md)
 
-The current published prerelease is `v0.1.0-guide.11`, frozen at source
-`1d6b08141d2abce7307e3c467858d28577600dbd`, using packaging version 3.
-Local validation, [Container CI](https://github.com/Vlad9572324/agent-mesh/actions/runs/38552022768)
-and [package inspection](https://github.com/Vlad9572324/agent-mesh/actions/runs/38552022853)
+The current published prerelease is `v0.1.0-guide.12`, frozen at source
+`67495171615d14106a07954777469c817b1d6c81`, using packaging version 3.
+Local validation, [Container CI](https://github.com/Vlad9572324/agent-mesh/actions/runs/38559555390)
+and [package inspection](https://github.com/Vlad9572324/agent-mesh/actions/runs/38559555406)
 passed. All four hosted assets match the approved local build byte for byte.
-The [version-tag release run](https://github.com/Vlad9572324/agent-mesh/actions/runs/38552266741)
+The [version-tag release run](https://github.com/Vlad9572324/agent-mesh/actions/runs/38561018865)
 completed validation and publication. All four published assets were downloaded
 anonymously and matched the approved builds byte for byte. See
 [release status](releases.md) for image verification and preserved guide.1/addressing.1/reliability.2/reliability.1/receipts.1/rc.3/rc.2
@@ -36,7 +36,7 @@ reviewed commit from this repository's fresh history.
 
 ## Artifact contract
 
-The table describes the `v0.1.0-guide.11` packaging-version-3 contract. It
+The table describes the `v0.1.0-guide.12` packaging-version-3 contract. It
 retains the complete connector bundle, including the opt-in task listener, its
 coordination and artifact modules, and its guide/contract. The server embeds reviewed connector
 sources for owner-issued invitations. Both archives retain root `LICENSE`
@@ -46,8 +46,8 @@ remain unchanged; never overwrite an already published version.
 
 | Artifact | Included files |
 | --- | --- |
-| `agent-mesh_v0.1.0-guide.11_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
-| `agent-mesh_v0.1.0-guide.11_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-guide.12_linux_amd64.tar.gz` | `bin/agent-mesh`, `web/index.html`, `web/app.js`, `web/app.css`, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
+| `agent-mesh_v0.1.0-guide.12_connectors.tar.gz` | The native Python runtime files listed below, `INSTALL.md`, `RELEASE.json`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md` |
 | `RELEASE.json` | The same release/build metadata included in each archive |
 | `SHA256SUMS` | SHA-256 checksums for both archives and external `RELEASE.json` |
 
@@ -214,7 +214,7 @@ when needed and report skips explicitly.
 ## Local build and verification reference
 
 The commands below describe reproducible local packaging and verification.
-Examples use `v0.1.0-guide.11`; select a new version before a new publication. Local builds
+Examples use `v0.1.0-guide.12`; select a new version before a new publication. Local builds
 do not create tags or publish assets. For publication, use the guarded tag/dry-run
 workflow above and its exact reviewed version.
 
@@ -250,7 +250,7 @@ From the clean source checkout:
 
 ```sh
 python3 -B scripts/build-release.py \
-  --version v0.1.0-guide.11 \
+  --version v0.1.0-guide.12 \
   --output /absolute/path/to/new-release-output
 ```
 
@@ -285,8 +285,8 @@ The smoke tool must never receive a production/shared workspace DSN.
 
 ```sh
 python3 -B scripts/smoke-release.py \
-  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.11_linux_amd64.tar.gz \
-  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.11_connectors.tar.gz \
+  --server /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.12_linux_amd64.tar.gz \
+  --connectors /absolute/path/to/new-release-output/agent-mesh_v0.1.0-guide.12_connectors.tar.gz \
   --checksums /absolute/path/to/new-release-output/SHA256SUMS \
   --database-url-file /private/path/to/test-database-url
 ```

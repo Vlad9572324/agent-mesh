@@ -74,9 +74,9 @@ for (const file of markdown) {
 
 // Keep the install entry points on the same reviewed release. Historical notes
 // may mention older releases, so validate only files that select what to deploy.
-const selectedRelease = 'v0.1.0-guide.11';
-const selectedCommit = '1d6b08141d2abce7307e3c467858d28577600dbd';
-const selectedDigest = 'sha256:c64e79b23d874f5baea4b1f00168f0220238dc030c7e70a694206c205b057de2';
+const selectedRelease = 'v0.1.0-guide.12';
+const selectedCommit = '67495171615d14106a07954777469c817b1d6c81';
+const selectedDigest = 'sha256:1c019e9b02e574c8551b2561e5753e589040dcca41c0a7a5e840a1e304efcdd6';
 for (const file of ['README.md', 'docs/README.md', 'docs/container.md', 'docs/install-release.md', 'docs/release-process.md']) {
   const body = await text(file);
   if (!body.includes(selectedRelease)) fail(file, `selected release must be ${selectedRelease}`);
