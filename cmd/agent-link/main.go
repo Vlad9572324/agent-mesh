@@ -137,8 +137,10 @@ func run() error {
 		fmt.Fprintln(os.Stderr, "key rotated; private output written")
 		return nil
 	}
-	server := &http.Server{Addr: *listen, Handler: (&link.Server{Store: store, WebDir: *web, Onboarding: onboarding,
-		Build: link.BuildInformation{Version: version, SourceCommit: commit, BuildDate: buildDate}}).Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	app := &link.Server{Store: store, WebDir: *web, Onboarding: onboarding,
+		Build: link.BuildInformation{Version: version, SourceCommit: commit, BuildDate: buildDate}}
+	defer app.Close() // stop the background LISTEN notifier and its dedicated connection on exit
+	server := &http.Server{Addr: *listen, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	stopped := make(chan os.Signal, 1)
 	signal.Notify(stopped, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(stopped)
