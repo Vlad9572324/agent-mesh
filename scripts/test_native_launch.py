@@ -88,6 +88,16 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertNotEqual(first['native_session_id'], second['native_session_id'])
         self.assertNotEqual(first['launch_dir'], second['launch_dir'])
 
+    def test_explicit_provider_executable_is_absolute_regular_and_pinned(self):
+        executable = self.root / 'provider'
+        executable.write_text('#!/bin/sh\nexit 0\n')
+        executable.chmod(0o700)
+        launch = native_launch.build_launch(
+            self.config_path, self.config, executable=str(executable))
+        self.assertEqual(launch['argv'][0], str(executable))
+        with self.assertRaisesRegex(ValueError, 'absolute executable'):
+            native_launch.build_launch(self.config_path, self.config, executable='relative')
+
     def test_hook_command_quotes_paths(self):
         import shlex
         path = self.root / 'has space; not shell.json'

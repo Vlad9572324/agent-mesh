@@ -45,6 +45,7 @@ CONNECTOR_FILES = (
     "adapters/task_listener.py",
     "scripts/agent-mesh-host.py",
     "scripts/agent-mesh-echo-runtime.py",
+    "scripts/agent-mesh-provider-runtime.py",
     "adapters/runtime_host.py",
     "adapters/runtime_protocol.py",
     "adapters/coordination.py",

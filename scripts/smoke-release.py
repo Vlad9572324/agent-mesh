@@ -39,6 +39,7 @@ CONNECTOR_FILES = frozenset({"scripts/agent-link-cli.py", "scripts/native_launch
                              "THIRD_PARTY_NOTICES.md", "RELEASE.json",
                              "scripts/agent-link-listener.py", "adapters/task_listener.py",
                              "scripts/agent-mesh-host.py", "scripts/agent-mesh-echo-runtime.py",
+                             "scripts/agent-mesh-provider-runtime.py",
                              "adapters/runtime_host.py", "adapters/runtime_protocol.py",
                              "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
                              "scripts/artifact_client.py", "scripts/agent-link-artifacts.py",
@@ -291,7 +292,7 @@ class Smoke:
         self.report["version_verified"] = True
         for name in ("agent-link-cli.py", "agent-link-hook.py", "agent-link-mcp.py",
                      "agent-link-listener.py", "agent-link-artifacts.py", "agent-mesh-host.py",
-                     "agent-mesh-echo-runtime.py"):
+                     "agent-mesh-echo-runtime.py", "agent-mesh-provider-runtime.py"):
             output = self.command([sys.executable, "-E", "-s", "-B", str(connectors / "scripts" / name), "--help"])
             require(b"usage:" in output.lower(), "connector help missing")
             self.report["connector_help_checks"] += 1

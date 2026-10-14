@@ -83,7 +83,7 @@ def hook_definitions(config_path, runtime):
             for name in events}
 
 
-def build_launch(config_path, config, *, cli_args=(), session_id=None):
+def build_launch(config_path, config, *, cli_args=(), session_id=None, executable=None):
     """Create private generated settings and argv, without launching a provider."""
     runtime = config['runtime']
     if runtime not in ('codex', 'claude'):
@@ -105,9 +105,16 @@ def build_launch(config_path, config, *, cli_args=(), session_id=None):
     mcp = {'type': 'stdio', 'command': sys.executable,
            'args': [str(ROOT / 'scripts/agent-link-mcp.py'), '--config', str(config_path)],
            'env': {'AGENT_LINK_NATIVE_SESSION_ID': native_id}}
-    executable = shutil.which(runtime)
-    if not executable:
-        raise ValueError('requested CLI is not installed')
+    if executable is None:
+        executable = shutil.which(runtime)
+        if not executable:
+            raise ValueError('requested CLI is not installed')
+    else:
+        executable = Path(executable)
+        if (not executable.is_absolute() or executable.is_symlink()
+                or not executable.is_file() or not os.access(executable, os.X_OK)):
+            raise ValueError('provider executable must be an absolute executable regular file')
+        executable = str(executable)
     if runtime == 'claude':
         private_json(launch_dir / 'mcp.json', {'mcpServers': {'agent_link_native': mcp}})
         private_json(launch_dir / 'settings.json', {'hooks': hooks})

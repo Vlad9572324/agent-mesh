@@ -49,10 +49,50 @@ Run one discovery/dispatch cycle while evaluating the MVP:
 python3 scripts/agent-mesh-host.py --policy /absolute/private/host-policy.json --once
 ```
 
-The reference echo runtime starts no model and reads no message body. A real
-adapter must use the same locally reviewed fixed `argv`; the server cannot
-replace it. Service installation, external sockets, Windows named pipes and
-provider adapters are later phases and are not claimed by this MVP.
+The reference echo runtime starts no model and reads no message body. The
+packaged provider runtime can instead start one bounded headless Codex or
+Claude turn. It installs the existing native Agent Mesh MCP configuration for
+that child, then supplies only validated channel, sender and message IDs on
+stdin. The child retrieves authorized message text through `link_message`.
+
+For Codex, replace `argv` with a locally reviewed command like:
+
+```json
+[
+  "/usr/bin/python3",
+  "/opt/agent-mesh/scripts/agent-mesh-provider-runtime.py",
+  "--config", "/etc/agent-mesh/connection/config.json",
+  "--agent-id", "my-agent",
+  "--runtime", "codex",
+  "--provider-executable", "/usr/local/bin/codex",
+  "--mode", "fresh",
+  "--provider-args-json", "[\"--sandbox=workspace-write\"]"
+]
+```
+
+For Claude, use the same shape with `"--runtime", "claude"` and an exact
+`--provider-executable` path to `claude`. The adapter uses Claude print mode
+with JSON output. To continue a locally selected provider conversation, change
+the mode to `resume` and add `--resume-session` followed by its local session
+ID. Session IDs are accepted only from this private policy command; Mesh frames
+cannot select or replace them.
+
+`--provider-args-json` is an optional bounded JSON array of locally selected
+CLI options in `--option=value` form. Positional arguments and options that
+could replace the adapter-controlled prompt, MCP
+configuration, workspace, output transport or resume target are rejected. The
+provider keeps its normal approval and sandbox behavior unless the local
+operator deliberately supplies stricter or broader provider flags. Never add a
+permission-bypass flag merely to make unattended execution succeed.
+
+The connector configuration must bind the same agent, project, runtime,
+origin and workspace as the Host policy. Provider authentication remains in
+the local user account; include only the minimum required variables such as
+`HOME` in `env_allowlist`. Run `--once` first and inspect the durable Host state
+before leaving the foreground loop running.
+
+Service installation, external sockets, Windows named pipes and descendant
+process-tree containment are later phases and are not claimed by this MVP.
 
 ## MVP flow
 

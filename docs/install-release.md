@@ -313,7 +313,8 @@ local listener requires a separate private policy and explicit model-execution
 authorization; ordinary native launches retain their existing behavior. Follow
 the bundled guide for exact creator/file limits, budgets and recovery. The same
 archive includes the experimental provider-neutral Runtime Host,
-reference echo adapter, [Runtime Host guide](runtime-host.md), and
+reference echo adapter, Codex/Claude provider adapter,
+[Runtime Host guide](runtime-host.md), and
 `runtime-host-contract.json`. Merely extracting them starts no process. The Host
 requires a private local policy and an explicit foreground invocation; the first
 MVP does not install a service or claim native Windows/macOS acceptance. Upgrade
