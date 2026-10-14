@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS messages (
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  UNIQUE(channel_id,seq), UNIQUE(channel_id,author_id,client_id)
 );
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS urgent boolean NOT NULL DEFAULT false;
 CREATE TABLE IF NOT EXISTS receipts (
  message_id text REFERENCES messages(id), agent_id text REFERENCES principals(id),
  delivered_at timestamptz, accepted_at timestamptz, uncertain_at timestamptz, session_id text NOT NULL DEFAULT '',

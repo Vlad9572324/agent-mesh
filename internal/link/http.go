@@ -558,6 +558,10 @@ type messageInput struct {
 	Body         string   `json:"body"`
 	RecipientIDs []string `json:"recipient_ids"`
 	ReplyTo      *string  `json:"reply_to"`
+	// Urgent: optional, untrusted sender hint, stored verbatim and inert on the
+	// server (no authority/ACL/ordering/accept/permission/queue effect); only a
+	// local-policy-bounded wake hint for the recipient.
+	Urgent       bool     `json:"urgent,omitempty"`
 	ChannelOnly  bool     `json:"channel_only,omitempty"`
 }
 
@@ -667,7 +671,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		internal(w)
 		return
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO messages(id,channel_id,seq,author_id,client_id,body,recipient_ids,reply_to,payload_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, channel, seq, p.ID, in.ClientID, in.Body, in.RecipientIDs, in.ReplyTo, hash); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO messages(id,channel_id,seq,author_id,client_id,body,recipient_ids,reply_to,urgent,payload_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", id, channel, seq, p.ID, in.ClientID, in.Body, in.RecipientIDs, in.ReplyTo, in.Urgent, hash); err != nil {
 		internal(w)
 		return
 	}

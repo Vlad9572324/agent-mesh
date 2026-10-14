@@ -346,6 +346,11 @@ type Message struct {
 	Body           string                   `json:"body"`
 	RecipientIDs   []string                 `json:"recipient_ids"`
 	ReplyTo        *string                  `json:"reply_to"`
+	// Urgent is untrusted, sender-set metadata, stored and echoed verbatim. It is
+	// inert here: it grants no authority and changes no ACL, ordering, acceptance,
+	// permission or queueing. It is only a local-policy-bounded hint a recipient
+	// MAY use to prioritise its own wake.
+	Urgent         bool                     `json:"urgent"`
 	CreatedAt      time.Time                `json:"created_at"`
 	Receipts       []Receipt                `json:"receipts"`
 	DeliveryStatus *[]MessageDeliveryStatus `json:"delivery_status,omitempty"`
@@ -373,11 +378,11 @@ type querier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-const messageSelect = `SELECT id,channel_id,seq,author_id,client_id,body,recipient_ids,reply_to,created_at FROM messages `
+const messageSelect = `SELECT id,channel_id,seq,author_id,client_id,body,recipient_ids,reply_to,urgent,created_at FROM messages `
 
 func loadMessage(ctx context.Context, q querier, id string) (Message, error) {
 	var m Message
-	err := q.QueryRow(ctx, messageSelect+"WHERE id=$1", id).Scan(&m.ID, &m.ChannelID, &m.Seq, &m.AuthorID, &m.ClientID, &m.Body, &m.RecipientIDs, &m.ReplyTo, &m.CreatedAt)
+	err := q.QueryRow(ctx, messageSelect+"WHERE id=$1", id).Scan(&m.ID, &m.ChannelID, &m.Seq, &m.AuthorID, &m.ClientID, &m.Body, &m.RecipientIDs, &m.ReplyTo, &m.Urgent, &m.CreatedAt)
 	if err != nil {
 		return m, err
 	}

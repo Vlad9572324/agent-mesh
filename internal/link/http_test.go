@@ -271,6 +271,26 @@ func TestMessagesPageIsServedFromOneSnapshot(t *testing.T) {
 		}
 	}
 }
+func TestUrgentFlagStoredReturnedAndDefaultsFalse(t *testing.T) {
+	f := newFixture(t)
+	urgent := f.expect("POST", "/v1/channels/general/messages", "claude-pilot",
+		map[string]any{"client_id": "u-1", "body": "drop everything", "recipient_ids": []string{"codex-pilot"}, "urgent": true}, 201)["message"].(map[string]any)
+	if urgent["urgent"] != true {
+		t.Fatalf("urgent message must report urgent=true, got %v", urgent["urgent"])
+	}
+	normal := f.message("u-2", "claude-pilot") // no urgent field
+	if normal["urgent"] != false {
+		t.Fatalf("a message without the flag must default to urgent=false, got %v", normal["urgent"])
+	}
+	// The flag survives a reload (GET), not just the create response.
+	fetched := f.expect("GET", "/v1/messages/"+urgent["id"].(string), "codex-pilot", nil, 200)["message"].(map[string]any)
+	if fetched["urgent"] != true {
+		t.Fatalf("urgent must persist across a reload, got %v", fetched["urgent"])
+	}
+	// Same client_id + a different urgent value is a different payload -> conflict, not silent replay.
+	f.expect("POST", "/v1/channels/general/messages", "claude-pilot",
+		map[string]any{"client_id": "u-1", "body": "drop everything", "recipient_ids": []string{"codex-pilot"}}, 409)
+}
 func TestReceiptSessionFencing(t *testing.T) {
 	f := newFixture(t)
 	id := f.message("receipt", "claude-pilot")["id"].(string)
