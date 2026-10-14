@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import sqlite3
+import time
 import unittest
 from pathlib import Path
 
@@ -353,6 +354,119 @@ class ArgumentTests(unittest.TestCase):
     def test_max_delay_below_base_delay_is_rejected(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             doorbell.main(["--config", "/x.json", "--tmux-target", "t", "--base-delay", "60", "--max-delay", "30"])
+
+
+class _FakeStream:
+    """A fake SSE response: a context manager that yields the given byte lines."""
+
+    def __init__(self, lines):
+        self._lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        return iter(self._lines)
+
+    def close(self):
+        pass
+
+
+class RunLoopTest(unittest.TestCase):
+    def test_once_maps_outcome_to_exit_status(self):
+        class R:
+            def __init__(self, outcome):
+                self.outcome = outcome
+
+            def step(self):
+                return self.outcome
+
+        self.assertEqual(doorbell.run_loop(R("rang"), lambda: None, True, lambda m: None), 0)
+        self.assertEqual(doorbell.run_loop(R("idle"), lambda: None, True, lambda m: None), 0)
+        self.assertEqual(doorbell.run_loop(R("error"), lambda: None, True, lambda m: None), 1)
+        self.assertEqual(doorbell.run_loop(R("send_failed"), lambda: None, True, lambda m: None), 1)
+
+    def test_loop_waits_between_steps_and_survives_step_errors(self):
+        calls = {"step": 0, "wait": 0}
+
+        class R:
+            def step(self):
+                calls["step"] += 1
+                if calls["step"] == 2:
+                    raise RuntimeError("transient")  # must not kill the loop
+                return "idle"
+
+        def wait():
+            calls["wait"] += 1
+            if calls["wait"] >= 3:
+                raise KeyboardInterrupt
+
+        logs = []
+        with self.assertRaises(KeyboardInterrupt):
+            doorbell.run_loop(R(), wait, False, logs.append)
+        self.assertEqual(calls["step"], 3)  # one step before each of three waits
+        self.assertTrue(any("cycle failed" in m for m in logs))
+
+
+class SSEWakerTest(unittest.TestCase):
+    def test_wait_returns_early_when_a_channel_emits_an_event(self):
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: ["c"], 5.0, lambda m: None,
+                                  opener=lambda channel: _FakeStream([b"id: 7\n", b"event: hint\n"]))
+        try:
+            start = time.monotonic()
+            waker.wait()
+            self.assertLess(time.monotonic() - start, 2.0)  # woke on the event, not the 5s interval
+        finally:
+            waker.stop()
+
+    def test_keepalive_only_stream_falls_back_to_interval(self):
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: ["c"], 0.3, lambda m: None,
+                                  opener=lambda channel: _FakeStream([b": keepalive\n"]))
+        try:
+            start = time.monotonic()
+            waker.wait()
+            self.assertGreaterEqual(time.monotonic() - start, 0.25)  # keepalive is not an event
+        finally:
+            waker.stop()
+
+    def test_opener_failure_is_logged_and_does_not_raise(self):
+        logs = []
+
+        def boom(channel):
+            raise OSError("connection refused")
+
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: ["c"], 0.3, logs.append, opener=boom)
+        try:
+            waker.wait()  # must simply fall back to the interval, never raise
+            self.assertTrue(any("sse watch" in m for m in logs))
+        finally:
+            waker.stop()
+
+    def test_channel_watchers_follow_current_grants(self):
+        grants = []
+        opened = []
+
+        def open_stream(channel):
+            opened.append(channel)
+            return _FakeStream([b": keepalive\n"])
+
+        waker = doorbell.SSEWaker({"url": "https://x"}, "tok", lambda: tuple(grants),
+                                  0.05, lambda m: None, opener=open_stream)
+        try:
+            grants.append("new-channel")
+            waker.wait()
+            deadline = time.monotonic() + 1
+            while "new-channel" not in opened and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertIn("new-channel", opened)
+            grants.clear()
+            waker.wait()
+            self.assertNotIn("new-channel", waker._threads)
+        finally:
+            waker.stop()
 
 
 if __name__ == "__main__":
