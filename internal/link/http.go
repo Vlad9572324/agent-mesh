@@ -40,6 +40,17 @@ type Server struct {
 	onboardingOnce sync.Once
 	notify         *eventNotifier
 	notifyOnce     sync.Once
+	notifyStop     context.CancelFunc
+}
+
+// Close stops the background LISTEN notifier (and its dedicated connection) when
+// the server shuts down. Safe to call once; a server that never opened a stream
+// started no notifier and Close is then a no-op.
+func (s *Server) Close() {
+	s.notifyOnce.Do(func() {}) // win the race so no notifier can start after Close
+	if s.notifyStop != nil {
+		s.notifyStop()
+	}
 }
 
 // BuildInformation identifies this running binary, independently of connector builds.
@@ -885,9 +896,15 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	// drives a periodic re-auth, a keepalive, and a fallback poll that covers any
 	// notification missed across a listener reconnect.
 	s.notifyOnce.Do(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.notifyStop = cancel // Server.Close() cancels this, stopping run() and its LISTEN connection.
 		s.notify = newEventNotifier(s.Store.Pool)
-		go s.notify.run(context.Background())
+		go s.notify.run(ctx)
 	})
+	if s.notify == nil { // Close won the once during shutdown: do not open a new stream.
+		fail(w, 503, "server shutting down")
+		return
+	}
 	signal, unsubscribe := s.notify.subscribe(channel)
 	defer unsubscribe()
 	// The safety ticker bounds how long a revoked key, lost ACL or archived

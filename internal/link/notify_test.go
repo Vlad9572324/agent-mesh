@@ -1,6 +1,9 @@
 package link
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // pending reports whether a buffered wake is already waiting on ch.
 func pending(ch <-chan struct{}) bool {
@@ -71,6 +74,37 @@ func TestNotifierUnsubscribeStopsWakesAndCleansUp(t *testing.T) {
 	n.mu.Unlock()
 	if present {
 		t.Fatal("the last unsubscribe must drop the channel's subscriber set")
+	}
+}
+
+func TestNotifierSubscriberWokenIndependentlyOfListener(t *testing.T) {
+	// A stream may subscribe before run() has established its LISTEN connection.
+	// subscribe/wake are purely in-process, so once the listener connects and the
+	// first NOTIFY arrives, the already-registered subscriber is woken; the gap
+	// before the connection is covered by the stream's own safety poll. Proven
+	// here with no listener running at all (nil pool, run() never called).
+	n := newEventNotifier(nil)
+	ch, cancel := n.subscribe("c")
+	defer cancel()
+	n.wake("c")
+	if !pending(ch) {
+		t.Fatal("a subscriber registered before the listener runs must still be woken")
+	}
+}
+
+func TestNotifyPayloadStaysWithinPostgresLimit(t *testing.T) {
+	// addEvent sends the channel id as the NOTIFY payload. validID caps ids at
+	// 128 bytes; PostgreSQL's NOTIFY payload limit is 8000 bytes, so a channel id
+	// can never overflow it.
+	maxID := strings.Repeat("a", 128)
+	if !validID(maxID) {
+		t.Fatal("a 128-character channel id must be valid")
+	}
+	if validID(strings.Repeat("a", 129)) {
+		t.Fatal("a 129-character channel id must be rejected")
+	}
+	if len(maxID) >= 8000 {
+		t.Fatalf("channel id length %d must stay well under the 8000-byte NOTIFY limit", len(maxID))
 	}
 }
 
