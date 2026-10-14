@@ -33,6 +33,7 @@ SERVER_FILES = frozenset({"bin/agent-mesh", "web/index.html", "web/app.js", "web
                           "INSTALL.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "RELEASE.json"})
 CONNECTOR_FILES = frozenset({"scripts/agent-link-cli.py", "scripts/native_launch.py",
                              "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py",
+                             "scripts/agent-link-doorbell.py",
                              "adapters/native_bridge.py", "adapters/native_hooks.py",
                              "adapters/native_mcp.py", "INSTALL.md", "LICENSE", "NOTICE",
                              "THIRD_PARTY_NOTICES.md", "RELEASE.json",
