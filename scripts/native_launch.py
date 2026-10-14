@@ -12,6 +12,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import threading
 import sys
 import uuid
 
@@ -146,11 +147,13 @@ def run_with_doorbell(launch, config_path, pane, *, popen=subprocess.Popen):
 
     A terminating signal to the supervisor (SIGTERM from tmux kill-session or a
     service stop, SIGINT from Ctrl-C) stops BOTH children before exit, so neither
-    the provider CLI nor the doorbell is left orphaned. Without the handler a bare
-    SIGTERM would skip the cleanup below entirely."""
+    the provider CLI nor the doorbell is left orphaned. The handler also latches a
+    terminating flag, so a stop that arrives while a child is being spawned cannot
+    be swallowed and then let the provider start after the stop request."""
     if not isinstance(pane, str) or not pane.startswith('%') or not pane[1:].isdigit():
         raise ValueError('doorbell requires the current TMUX_PANE')
     children = []
+    terminating = threading.Event()
 
     def stop_children():
         for child in children:
@@ -160,7 +163,8 @@ def run_with_doorbell(launch, config_path, pane, *, popen=subprocess.Popen):
                 pass
 
     def on_signal(_signum, _frame):
-        stop_children()  # the interrupted provider.wait() then returns into finally
+        terminating.set()  # latch the stop so no further child is spawned after this
+        stop_children()
 
     restore = []
     for signum in (signal.SIGTERM, signal.SIGINT):
@@ -169,13 +173,27 @@ def run_with_doorbell(launch, config_path, pane, *, popen=subprocess.Popen):
         except (ValueError, OSError):
             pass  # signals can only be installed on the main thread (e.g. under tests)
 
-    doorbell = popen([sys.executable, str(ROOT / 'scripts/agent-link-doorbell.py'),
-                      '--config', str(Path(config_path).resolve(strict=True)), '--tmux-target', pane],
-                     cwd=launch['cwd'], env=launch['env'])
-    children.append(doorbell)
+    def spawn(argv):
+        # A stop latched before this point must prevent the spawn outright; one
+        # that lands in the tiny window after the check is caught right after the
+        # child is tracked, and that child is terminated at once.
+        if terminating.is_set():
+            return None
+        child = popen(argv, cwd=launch['cwd'], env=launch['env'])
+        children.append(child)
+        if terminating.is_set():
+            try:
+                child.terminate()
+            except Exception:
+                pass
+        return child
+
     try:
-        provider = popen(launch['argv'], cwd=launch['cwd'], env=launch['env'])
-        children.append(provider)
+        spawn([sys.executable, str(ROOT / 'scripts/agent-link-doorbell.py'),
+               '--config', str(Path(config_path).resolve(strict=True)), '--tmux-target', pane])
+        provider = spawn(launch['argv'])
+        if provider is None:
+            return 0  # a stop request arrived before the provider could start
         return provider.wait()
     finally:
         stop_children()
