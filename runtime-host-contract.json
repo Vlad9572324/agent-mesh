@@ -1,0 +1,72 @@
+{
+  "protocol": "AMRP",
+  "version": "1.0",
+  "status": "mvp",
+  "transport": {
+    "managed": "stdio-jsonl",
+    "encoding": "utf-8",
+    "max_frame_bytes": 65536,
+    "raw_newlines_inside_frame": false,
+    "stdout_is_protocol_only": true,
+    "unix_socket_mode": "0600",
+    "windows_pipe_owner_only": true
+  },
+  "identifiers": {
+    "max_bytes": 128,
+    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+    "message_ids": {"minimum": 1, "maximum": 256, "unique": true}
+  },
+  "frames": {
+    "adapter_to_host": ["hello", "ack", "result", "heartbeat"],
+    "host_to_adapter": ["welcome", "wake", "cancel", "heartbeat"],
+    "wake_required": ["type", "v", "wake_id", "channel_id", "message_ids", "envelope"],
+    "wake_allowed": ["type", "v", "wake_id", "channel_id", "message_ids", "epoch", "generation", "envelope", "resume_hint"],
+    "wake_forbidden": ["body", "message_body", "prompt", "command", "executable", "argv", "args", "env", "environment", "cwd", "shell", "thread_id", "session_id"]
+  },
+  "wake_states": {
+    "initial": "queued",
+    "terminal": ["done", "error", "cancelled", "uncertain"],
+    "transitions": {
+      "queued": ["submitted", "error", "cancelled"],
+      "submitted": ["running", "error", "cancelled", "uncertain"],
+      "running": ["done", "error", "cancelled", "uncertain"],
+      "done": [],
+      "error": [],
+      "cancelled": [],
+      "uncertain": []
+    }
+  },
+  "recovery": {
+    "queued": "retry_with_same_wake_id",
+    "submitted": "uncertain_unless_idempotent_wake",
+    "running": "uncertain",
+    "automatic_retry_after_possible_submission": false
+  },
+  "claims": {
+    "granularity": "message_id",
+    "one_inflight_wake_per_message": true,
+    "overlap_policy": "claim_only_unclaimed",
+    "stable_wake_id_on_retry": true
+  },
+  "fencing": {
+    "scope": "agent_runtime_binding",
+    "epoch": "durable_monotonic_controller_token",
+    "generation": "durable_monotonic_route_token",
+    "reject_stale_epoch": true,
+    "reject_stale_generation": true
+  },
+  "policy": {
+    "executable_source": "local_allowlist_only",
+    "arguments_source": "local_configuration_only",
+    "environment_source": "local_allowlist_only",
+    "server_can_grant_permissions": false,
+    "peer_body_can_change_permissions": false,
+    "shell_interpolation": false,
+    "provider_credentials_leave_host": false
+  },
+  "independent_evidence": {
+    "wake": ["queued", "submitted", "running", "done", "error", "cancelled", "uncertain"],
+    "message": ["stored", "offered", "seen", "accepted"],
+    "work": ["unverified", "reported_done", "verified"]
+  }
+}

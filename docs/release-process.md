@@ -68,17 +68,27 @@ adapters/native_hooks.py
 adapters/native_mcp.py
 scripts/agent-link-listener.py
 adapters/task_listener.py
+scripts/agent-mesh-host.py
+scripts/agent-mesh-echo-runtime.py
+adapters/runtime_host.py
+adapters/runtime_protocol.py
 adapters/coordination.py
 scripts/dev_trial_runtimes.py
 scripts/artifact_client.py
 scripts/agent-link-artifacts.py
 docs/task-listener.md
 listener-contract.json
+docs/runtime-host.md
+docs/wake-runtime-rfc.md
+runtime-host-contract.json
 ```
 
 Including the listener does not enable it. A participant must create its private
 policy and explicitly authorize bounded model execution. Ordinary messages do
-not start models, and the server has no model scheduler. The separate owner-issued
+not start models, and the server has no model scheduler. Including the Runtime
+Host also does not enable it; its first release is an
+experimental foreground managed-process path under a separate private policy.
+The separate owner-issued
 [connection installer](agent-onboarding.md) uses the server’s embedded sources;
 it starts a normal local CLI only when the recipient runs the generated command.
 The server also embeds the canonical `PROMPT.md`, `SKILL.md` and

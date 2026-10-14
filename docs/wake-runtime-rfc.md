@@ -100,7 +100,7 @@ use explicit `Content-Length` framing instead of line-delimited JSON.
 Three independent facts must never be conflated:
 
 - **Wake lifecycle** (host-owned):
-  `queued → delivered(ack) → running → { done | error | cancelled | uncertain }`.
+  `queued → submitted → running(ack) → { done | error | cancelled | uncertain }`.
 - **Message evidence** (server-recorded): `stored → offered → seen → accepted`
   (plus a reply). This is the existing delivery stage — about the *message*, not
   the work.

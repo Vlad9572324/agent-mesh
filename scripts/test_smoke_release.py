@@ -66,7 +66,7 @@ class TemporaryTest(unittest.TestCase):
 class ArchiveTests(TemporaryTest):
     def test_licensed_payload_counts_and_names_are_exact(self):
         self.assertEqual(len(smoke.SERVER_FILES), 9)
-        self.assertEqual(len(smoke.CONNECTOR_FILES), 21)
+        self.assertEqual(len(smoke.CONNECTOR_FILES), 28)
         for allowed in (smoke.SERVER_FILES, smoke.CONNECTOR_FILES):
             self.assertTrue({"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}.issubset(allowed))
 
@@ -314,17 +314,17 @@ class ExecutionTests(TemporaryTest):
         info = {"version": VERSION, "commit": METADATA["source_commit"], "build_date": METADATA["build_date"],
                 "go_version": METADATA["builder_version"], "goos": "linux", "goarch": "amd64"}
         outputs = [json.dumps(info).encode(), b"usage: cli", b"usage: hook", b"usage: mcp",
-                   b"usage: listener", b"usage: artifacts", b""]
+                   b"usage: listener", b"usage: artifacts", b"usage: host", b"usage: echo", b""]
         with mock.patch.object(instance, "command", side_effect=outputs) as command:
             instance.packages(argparse.Namespace(server=server, connectors=connectors, checksums=checksums))
         calls = [call.args[0] for call in command.call_args_list]
         self.assertEqual(calls[0][-1], "version")
-        for argv in calls[1:6]:
+        for argv in calls[1:8]:
             self.assertEqual(argv[-1], "--help")
             self.assertEqual(argv[0], sys.executable)
-        self.assertIn("-I", calls[6])
-        self.assertEqual(instance.report["connector_help_checks"], 5)
-        self.assertEqual(instance.report["connector_imports"], 8)
+        self.assertIn("-I", calls[8])
+        self.assertEqual(instance.report["connector_help_checks"], 7)
+        self.assertEqual(instance.report["connector_imports"], 10)
         self.assertNotEqual(instance.cwd, Path.cwd())
 
     def test_http_uses_numeric_loopback_no_proxy_and_closes_connection(self):
