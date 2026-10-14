@@ -346,6 +346,10 @@ type Message struct {
 	Body           string                   `json:"body"`
 	RecipientIDs   []string                 `json:"recipient_ids"`
 	ReplyTo        *string                  `json:"reply_to"`
+	// Urgent is untrusted, sender-set metadata, stored and echoed verbatim. It is
+	// inert here: it grants no authority and changes no ACL, ordering, acceptance,
+	// permission or queueing. It is only a local-policy-bounded hint a recipient
+	// MAY use to prioritise its own wake.
 	Urgent         bool                     `json:"urgent"`
 	CreatedAt      time.Time                `json:"created_at"`
 	Receipts       []Receipt                `json:"receipts"`

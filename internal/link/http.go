@@ -558,6 +558,9 @@ type messageInput struct {
 	Body         string   `json:"body"`
 	RecipientIDs []string `json:"recipient_ids"`
 	ReplyTo      *string  `json:"reply_to"`
+	// Urgent: optional, untrusted sender hint, stored verbatim and inert on the
+	// server (no authority/ACL/ordering/accept/permission/queue effect); only a
+	// local-policy-bounded wake hint for the recipient.
 	Urgent       bool     `json:"urgent,omitempty"`
 	ChannelOnly  bool     `json:"channel_only,omitempty"`
 }
