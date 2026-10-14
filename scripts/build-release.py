@@ -37,6 +37,7 @@ CONNECTOR_FILES = (
     "scripts/native_launch.py",
     "scripts/agent-link-hook.py",
     "scripts/agent-link-mcp.py",
+    "scripts/agent-link-doorbell.py",
     "adapters/native_bridge.py",
     "adapters/native_hooks.py",
     "adapters/native_mcp.py",

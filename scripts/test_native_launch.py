@@ -113,6 +113,45 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertEqual(native_launch.toml('a"b\\c'), json.dumps('a"b\\c'))
         self.assertEqual(native_launch.toml({'env': {'ID': 'test'}}), '{"env" = {"ID" = "test"}}')
 
+    def test_doorbell_supervisor_uses_exact_tmux_pane_and_stops_with_provider(self):
+        calls = []
+
+        class Process:
+            def __init__(self, role):
+                self.role = role
+                self.terminated = self.killed = False
+
+            def wait(self, timeout=None):
+                calls.append((self.role, "wait", timeout))
+                return 7 if self.role == "provider" else 0
+
+            def terminate(self):
+                self.terminated = True
+                calls.append((self.role, "terminate", None))
+
+            def kill(self):
+                self.killed = True
+
+        processes = []
+
+        def popen(argv, **kwargs):
+            role = "doorbell" if "agent-link-doorbell.py" in " ".join(argv) else "provider"
+            process = Process(role)
+            processes.append((argv, kwargs, process))
+            return process
+
+        launch = {'argv': ['/fake/codex'], 'cwd': str(self.root), 'env': {'SAFE': '1'}}
+        self.assertEqual(native_launch.run_with_doorbell(launch, self.config_path, '%7', popen=popen), 7)
+        self.assertEqual([p[2].role for p in processes], ['doorbell', 'provider'])
+        self.assertIn('%7', processes[0][0])
+        self.assertIn(str(self.config_path), processes[0][0])
+        self.assertTrue(processes[0][2].terminated)
+        self.assertIn(('doorbell', 'wait', 5), calls)
+
+    def test_doorbell_supervisor_rejects_untrusted_target_before_start(self):
+        with self.assertRaises(ValueError):
+            native_launch.run_with_doorbell({}, self.config_path, 'session:0', popen=lambda *a, **k: None)
+
 
 if __name__ == '__main__':
     unittest.main()

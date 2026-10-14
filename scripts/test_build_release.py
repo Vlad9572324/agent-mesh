@@ -29,6 +29,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(set(release.CONNECTOR_FILES), {
             "scripts/agent-link-cli.py", "scripts/native_launch.py",
             "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py",
+            "scripts/agent-link-doorbell.py",
             "adapters/native_bridge.py", "adapters/native_hooks.py", "adapters/native_mcp.py",
             "scripts/agent-link-listener.py", "adapters/task_listener.py",
             "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
@@ -309,7 +310,7 @@ class ReleaseTests(unittest.TestCase):
                 files = {member.name: archive.extractfile(member).read() for member in archive.getmembers()}
             self.assertEqual(set(files), {root + "/" + name for name in payload |
                              {"INSTALL.md", "RELEASE.json", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}})
-            self.assertEqual(len(files), 9 if kind == "linux_amd64" else 20)
+            self.assertEqual(len(files), 9 if kind == "linux_amd64" else 21)
             self.assertEqual(files[root + "/RELEASE.json"], (first / "RELEASE.json").read_bytes())
             identity = json.loads(files[root + "/RELEASE.json"])
             self.assertEqual((identity["version"], identity["source_commit"]),

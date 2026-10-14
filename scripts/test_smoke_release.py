@@ -66,7 +66,7 @@ class TemporaryTest(unittest.TestCase):
 class ArchiveTests(TemporaryTest):
     def test_licensed_payload_counts_and_names_are_exact(self):
         self.assertEqual(len(smoke.SERVER_FILES), 9)
-        self.assertEqual(len(smoke.CONNECTOR_FILES), 20)
+        self.assertEqual(len(smoke.CONNECTOR_FILES), 21)
         for allowed in (smoke.SERVER_FILES, smoke.CONNECTOR_FILES):
             self.assertTrue({"LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"}.issubset(allowed))
 

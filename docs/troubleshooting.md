@@ -193,9 +193,18 @@ backlog) are not new activity rows; receipts and delivery alerts only read the
 first one. A very large `inbox.offered` count therefore points at a connector
 older than this behaviour, not at that many distinct messages.
 
-To nudge an idle session that runs in tmux, use the opt-in doorbell. Copy
-`scripts/agent-link-doorbell.py` next to the connector's `agent-link-hook.py`
-(`<connection>/connectors/scripts/`) and run it per session:
+To nudge an idle session that runs in tmux, use the opt-in doorbell included in
+the connector bundle. The native launcher can supervise it for the lifetime of
+the CLI session:
+
+```sh
+python3 -B <connection>/connectors/scripts/agent-link-cli.py run \
+  --config <connection>/config.json --doorbell -- [CLI arguments]
+```
+
+The command must run inside tmux (`TMUX_PANE` identifies the exact pane). When
+the provider CLI exits, its doorbell sidecar is terminated. To supervise the
+doorbell separately instead, run one process per CLI session:
 
 ```sh
 python3 -B <connection>/connectors/scripts/agent-link-doorbell.py \
@@ -203,8 +212,10 @@ python3 -B <connection>/connectors/scripts/agent-link-doorbell.py \
   --on-giveup /path/to/alert-command
 ```
 
-While messages stay unseen it types one fixed sentence (never message text) into
-that session's empty prompt, with growing pauses, one last wait, and then runs
+While messages stay unseen it types a bounded wake envelope into that session's
+empty prompt. The envelope identifies the validated sender agent, channel and
+unseen count, but never contains message text; the agent is instructed to read
+the native inbox itself. It uses growing pauses, one last wait, and then runs
 `--on-giveup` once with `$AGENT_DOORBELL_REASON`. It never types over a human
 draft, a running turn or a dialog, and it alerts if the session stays blocked.
 It starts no model and accepts no task. A human who starts typing in the instant
