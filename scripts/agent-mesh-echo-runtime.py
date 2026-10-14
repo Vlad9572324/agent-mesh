@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Reference AMRP/1 runtime: protocol exerciser only, never a model."""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "adapters"))
+from runtime_protocol import ProtocolError, negotiate_version, read_frame, write_frame  # noqa: E402
+
+
+VERSION = "1.0"
+
+
+def main():
+    if sys.argv[1:] == ["--help"]:
+        print("usage: agent-mesh-echo-runtime.py  # AMRP/1 protocol-only reference child")
+        return 0
+    if sys.argv[1:]:
+        raise ProtocolError("unexpected command-line arguments")
+    output = sys.stdout.buffer
+    input_stream = sys.stdin.buffer
+    write_frame(output, {
+        "type": "hello", "v": VERSION, "agent_id": "reference-echo",
+        "caps": ["wake", "cancel", "result", "idempotent_wake"],
+        "runtime": "reference-echo", "proto": [VERSION],
+    })
+    welcome = read_frame(input_stream)
+    if welcome is None or welcome["type"] != "welcome":
+        raise ProtocolError("expected welcome")
+    if negotiate_version([welcome["accepted_version"]]) != welcome["accepted_version"]:
+        raise ProtocolError("unsupported welcome version")
+    while True:
+        message = read_frame(input_stream)
+        if message is None:
+            return 0
+        kind = message["type"]
+        if kind == "wake":
+            write_frame(output, {"type": "ack", "v": VERSION,
+                                 "wake_id": message["wake_id"], "state": "accepted"})
+            write_frame(output, {"type": "result", "v": VERSION,
+                                 "wake_id": message["wake_id"], "state": "done",
+                                 "summary": "reference echo completed without reading peer content"})
+        elif kind == "cancel":
+            write_frame(output, {"type": "result", "v": VERSION,
+                                 "wake_id": message["wake_id"], "state": "cancelled"})
+        elif kind == "heartbeat":
+            write_frame(output, {"type": "heartbeat", "v": VERSION,
+                                 "runtime": "reference-echo"})
+        else:
+            raise ProtocolError("unexpected host message")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (ProtocolError, BrokenPipeError) as exc:
+        print("AMRP protocol failure: " + str(exc), file=sys.stderr)
+        raise SystemExit(2)

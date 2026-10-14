@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Run the opt-in provider-neutral Agent Mesh Runtime Host in foreground."""
+import argparse
+import json
+from pathlib import Path
+import signal
+import sys
+import time
+import uuid
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "adapters"))
+from native_bridge import NativeBridge
+from coordination import origin_identity
+from runtime_host import RuntimeHost, load_policy
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--policy", required=True)
+    parser.add_argument("--once", action="store_true", help="poll and dispatch at most one wake")
+    args = parser.parse_args(argv)
+    host = bridge = None
+    stopping = False
+    def stop(_sig, _frame):
+        nonlocal stopping
+        stopping = True
+    previous = {}
+    try:
+        policy = load_policy(args.policy)
+        host = RuntimeHost(policy)
+        bridge = NativeBridge(policy["connector_config"], "runtime-host-" + uuid.uuid4().hex[:12], timeout=5)
+        if (bridge.config["agent_id"] != policy["agent_id"]
+                or bridge.config["project_id"] != policy["project_id"]
+                or bridge.config["runtime"] != policy["runtime"]
+                or origin_identity(bridge.config["url"]) != origin_identity(policy["server_origin"])):
+            raise ValueError("host policy identity differs from connector identity")
+        previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
+        while not stopping:
+            recoverable = host.recoverable()
+            if recoverable:
+                host.dispatch(recoverable[0])
+                print(json.dumps(host.status(), sort_keys=True), flush=True)
+                if args.once:
+                    break
+                continue
+            bridge.poll_inbox(limit=100)
+            offered = bridge.offer_inbox(context_budget=16000, minimum_interval=0, full_text=False)
+            grouped = {}
+            for message in offered["messages"]:
+                key = (message.get("channel_id"), message.get("author_id"))
+                grouped.setdefault(key, []).append(message["id"])
+            dispatched = False
+            for (channel, sender), ids in grouped.items():
+                if channel is None or sender is None:
+                    continue
+                wake_id = host.enqueue(channel, ids, sender)
+                if wake_id:
+                    host.dispatch(wake_id)
+                    dispatched = True
+                    break
+            print(json.dumps(host.status(), sort_keys=True), flush=True)
+            if args.once:
+                break
+            time.sleep(policy["poll_seconds"])
+        return 0
+    except (Exception, KeyboardInterrupt) as error:
+        print(json.dumps({"success": False, "error_category": type(error).__name__}), file=sys.stderr)
+        return 2
+    finally:
+        if bridge is not None:
+            bridge.close()
+        if host is not None:
+            host.close()
+        for sig, old in previous.items():
+            signal.signal(sig, old)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

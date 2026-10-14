@@ -311,7 +311,12 @@ The packaging-version-3 connector archive includes `scripts/agent-link-listener.
 `docs/task-listener.md`, and `listener-contract.json`. That optional
 local listener requires a separate private policy and explicit model-execution
 authorization; ordinary native launches retain their existing behavior. Follow
-the bundled guide for exact creator/file limits, budgets and recovery. Upgrade
+the bundled guide for exact creator/file limits, budgets and recovery. The same
+archive includes the experimental provider-neutral Runtime Host,
+reference echo adapter, [Runtime Host guide](runtime-host.md), and
+`runtime-host-contract.json`. Merely extracting them starts no process. The Host
+requires a private local policy and an explicit foreground invocation; the first
+MVP does not install a service or claim native Windows/macOS acceptance. Upgrade
 the server before using new native activity types such as `inbox.seen`; do not
 assume an older server supports the newly extracted connector.
 

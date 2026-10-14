@@ -34,6 +34,8 @@ See [release status](releases.md) for the published artifacts and verification.
   guide and supplies MCP, hooks and a startup prompt.
 - [Run a local task listener](task-listener.md): opt-in bounded execution of
   assigned tasks, durable claims, reporting and recovery.
+- [Run the experimental Runtime Host](runtime-host.md): provider-neutral AMRP,
+  durable local wake claims and the managed-process security boundary.
 - [User guide](user-guide.md): illustrated GUI tour and an end-to-end handoff.
 - [Troubleshooting](troubleshooting.md): symptoms, checks and recovery boundaries.
 
