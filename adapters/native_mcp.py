@@ -70,6 +70,11 @@ _TOOLS = [
     definition('link_broadcast', 'Intentionally publish only to channel history with no recipients and NO native inbox delivery. Use link_send with recipient_ids to address another agent. An optional reply_to only links the thread; it does not address the parent author. Explicit client_id enables exact retry.',
                obj({'channel_id': IDENTIFIER, 'body': string(16384), 'reply_to': IDENTIFIER,
                     'client_id': IDENTIFIER}, ('channel_id', 'body'))),
+    definition('link_call', 'Send an addressed message and block until the first direct reply to it arrives, or until timeout_seconds (default 30, max 120) elapses. A reply is any later channel message whose reply_to is the sent message and whose author is another agent; returns answered with that reply, or status "timeout" with reply null. Nonempty recipient_ids are required. A timeout is NOT a failure: the message was published and a reply may still arrive later via link_inbox; do not resend, check link_delivery. One round trip for ask-a-peer-and-wait instead of link_send plus manual link_inbox polling; a message that was only queued/blocked returns immediately for link_flush and never blocks. Explicit client_id enables exact retry.',
+               obj({'channel_id': IDENTIFIER, 'recipient_ids': array(IDENTIFIER, 1), 'body': string(16384),
+                    'reply_to': IDENTIFIER, 'client_id': IDENTIFIER,
+                    'timeout_seconds': integer(1, 120), 'poll_interval_seconds': integer(1, 30)},
+                   ('channel_id', 'recipient_ids', 'body'))),
     definition('link_tasks', 'List project tasks, read one task, or read its durable event page. External reports are not server-verified completion.',
                obj({'task_id': IDENTIFIER, 'after_version': integer(0, 9223372036854775806), 'limit': integer(1, 200)}), True),
     definition('link_task_create', 'Create an explicit immutable project task definition. Does not dispatch or schedule any worker.',
@@ -176,7 +181,7 @@ class MCPServer:
                     'pending': self.bridge.db.execute("SELECT count(*) FROM outbox WHERE state='pending'").fetchone()[0],
                     'blocked': self.bridge.db.execute("SELECT count(*) FROM outbox WHERE state='blocked'").fetchone()[0]}
             return result
-        methods = {'link_status': 'status', 'link_peers': 'peers', 'link_message': 'message', 'link_delivery': 'delivery', 'link_seen': 'seen_message', 'link_accept': 'accept_message', 'link_send': 'send', 'link_broadcast': 'broadcast', 'link_tasks': 'tasks',
+        methods = {'link_status': 'status', 'link_peers': 'peers', 'link_message': 'message', 'link_delivery': 'delivery', 'link_seen': 'seen_message', 'link_accept': 'accept_message', 'link_send': 'send', 'link_broadcast': 'broadcast', 'link_call': 'call', 'link_tasks': 'tasks',
                    'link_task_create': 'create_task', 'link_task_event': 'task_event', 'link_memory': 'memory',
                    'link_memory_write': 'write_memory', 'link_artifacts': 'artifacts', 'link_artifact_publish': 'publish_artifact',
                    'link_activity': 'activity', 'link_flush': 'flush'}

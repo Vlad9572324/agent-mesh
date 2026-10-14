@@ -1052,6 +1052,63 @@ class NativeBridge:
         """Intentionally publish channel history without any native inbox recipient."""
         return self._send_message(channel_id, [], body, reply_to, client_id, channel_only=True)
 
+    def call(self, channel_id, recipient_ids=None, body=None, reply_to=None, client_id=None,
+             timeout_seconds=30, poll_interval_seconds=1):
+        """Send an addressed message and block until the first direct reply to it
+        arrives, or until timeout_seconds elapses. A reply is any later message in
+        the channel whose reply_to is the sent message and whose author is not this
+        agent. This is one round trip for the common ask-a-peer-and-wait pattern
+        instead of link_send followed by manual link_inbox polling. A timeout is
+        NOT a failure: the message was published and a reply may still arrive later
+        through the normal inbox. Never blocks on a message that was not actually
+        published (queued/blocked): that returns immediately for link_flush."""
+        if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
+            raise NativeError('invalid_timeout')
+        if type(poll_interval_seconds) is not int or not 1 <= poll_interval_seconds <= 30:
+            raise NativeError('invalid_poll_interval')
+        if not recipient_ids:
+            raise NativeError('recipient_ids_required_for_call')
+        sent = self._send_message(channel_id, recipient_ids, body, reply_to, client_id, channel_only=False)
+        posted = sent.get('result') if isinstance(sent.get('result'), dict) else None
+        message = posted.get('message') if isinstance(posted, dict) else None
+        summary = {'client_id': sent.get('client_id'), 'publication_state': sent.get('publication_state')}
+        if sent.get('publication_state') != 'sent' or not isinstance(message, dict) \
+                or not identifier(message.get('id')) or type(message.get('seq')) is not int:
+            return {'sent': summary, 'answered': False, 'status': sent.get('publication_state') or 'unknown', 'reply': None}
+        summary['message_id'] = message['id']
+        cursor = message['seq']
+        deadline = time.time() + timeout_seconds
+        while True:
+            reply, cursor = self._poll_replies(channel_id, cursor, message['id'])
+            if reply is not None:
+                return {'sent': summary, 'answered': True, 'status': 'answered', 'reply': reply}
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return {'sent': summary, 'answered': False, 'status': 'timeout', 'reply': None}
+            time.sleep(min(poll_interval_seconds, remaining))
+
+    def _poll_replies(self, channel, cursor, parent_id):
+        """Drain every channel message newer than cursor, advancing it, and return
+        the first that directly replies to parent_id from another author."""
+        me = self.config['agent_id']
+        while True:
+            page = self._request('GET', '/v1/channels/' + channel + '/messages?'
+                                 + urlencode({'after_seq': cursor, 'limit': 100})).get('messages')
+            if type(page) is not list or len(page) > 100:
+                raise NativeError('invalid_message_page')
+            for item in page:
+                if type(item) is not dict or type(item.get('seq')) is not int:
+                    raise NativeError('invalid_message_page')
+                if item['seq'] > cursor:
+                    cursor = item['seq']
+                if (item.get('reply_to') == parent_id and item.get('author_id') != me
+                        and identifier(item.get('id')) and isinstance(item.get('body'), str) and item['body']):
+                    reply = {k: item.get(k) for k in ('id', 'channel_id', 'seq', 'author_id',
+                                                      'recipient_ids', 'reply_to', 'body')}
+                    return reply, cursor
+            if len(page) < 100:
+                return None, cursor
+
     def _send_message(self, channel_id, recipient_ids, body, reply_to, client_id, *, channel_only):
         self._identifier(channel_id)
         if (not text(body, 16384) or recipient_ids is not None and
