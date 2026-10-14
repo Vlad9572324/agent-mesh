@@ -20,11 +20,13 @@ It does not start models, accept tasks, or read/mark messages itself.
 """
 
 import argparse
+import json
 import math
 import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -171,6 +173,78 @@ class Ringer:
         return "rang"
 
 
+class SSEWaker:
+    """Instant idle-wake. Blocks until any granted channel emits a server event
+    on its SSE stream (sub-millisecond once an event commits), or until the
+    fallback poll interval elapses. One daemon thread per channel holds a stream;
+    a failure on one channel degrades only that channel to plain interval polling
+    and never raises into the ring loop. Peer content is never parsed here — an
+    event line means only "something changed, poll now".
+    """
+
+    def __init__(self, url, token, ca_file, channels, interval, log, *, opener=None):
+        self.interval = interval
+        self.log = log
+        self._event = threading.Event()
+        self._stop = threading.Event()
+        self._opener = opener or self._network_opener(url, token, ca_file)
+        self._threads = [threading.Thread(target=self._watch, args=(c,), daemon=True) for c in channels]
+        for thread in self._threads:
+            thread.start()
+
+    def wait(self):
+        """Return as soon as an event arrives, otherwise after the interval."""
+        self._event.wait(self.interval)
+        self._event.clear()
+
+    def stop(self):
+        self._stop.set()
+
+    def _watch(self, channel):
+        while not self._stop.is_set():
+            try:
+                with self._opener(channel) as stream:
+                    for line in stream:
+                        if self._stop.is_set():
+                            return
+                        if line.startswith(b"id:") or line.startswith(b"event:"):
+                            self._event.set()  # keepalive comment lines (": ...") are ignored
+            except Exception as error:
+                self.log("sse watch %s failed (%s)" % (channel, type(error).__name__))
+            self._stop.wait(1.0)  # brief backoff; the ring loop's interval still polls meanwhile
+
+    @staticmethod
+    def _network_opener(url, token, ca_file):
+        import ssl
+        import urllib.request
+        context = ssl.create_default_context(cafile=ca_file) if ca_file else None
+        if context is not None:
+            context.check_hostname = False  # the mesh certificate is pinned by ca_file; its SAN may be an IP
+        base = url.rstrip("/")
+
+        def _open(channel):
+            request = urllib.request.Request(
+                base + "/v1/channels/" + channel + "/stream",
+                headers={"Authorization": "Bearer " + token, "Accept": "text/event-stream"})
+            return urllib.request.urlopen(request, timeout=35, context=context)
+
+        return _open
+
+
+def run_loop(ringer, wait, once, log):
+    """Ring, then wait for the next wake (an SSE event or the fallback interval).
+    Extracted from main so the scheduling can be tested without tmux or a server."""
+    while True:
+        try:
+            outcome = ringer.step()
+        except Exception as error:  # Never die on a transient fault; the loop is the safety net.
+            log("cycle failed (%s)" % type(error).__name__)
+            outcome = "error"
+        if once:
+            return 1 if outcome in ("error", "send_failed") else 0
+        wait()
+
+
 def resolve_pane(target):
     """Pin the target to one stable %pane_id so a window switch cannot redirect keystrokes."""
     result = subprocess.run(["tmux", "display-message", "-p", "-t", target, "#{pane_id}"],
@@ -285,15 +359,18 @@ def main(argv=None):
                     giveup, log, max_attempts=args.max_attempts, base_delay=args.base_delay,
                     max_delay=args.max_delay, max_blocked=args.max_blocked)
     try:
-        while True:
-            try:
-                outcome = ringer.step()
-            except Exception as error:  # Never die on a transient fault; the loop is the safety net.
-                log("cycle failed (%s)" % type(error).__name__)
-                outcome = "error"
-            if args.once:
-                return 1 if outcome in ("error", "send_failed") else 0
-            time.sleep(args.interval)
+        if args.once:
+            return run_loop(ringer, lambda: None, True, log)
+        # Wake the instant a granted channel gets an event (SSE) instead of only
+        # every --interval seconds; the interval remains the fallback poll.
+        config = json.loads(Path(args.config).read_text())
+        token = Path(config["key_file"]).read_text().strip()
+        waker = SSEWaker(config["url"], token, config.get("ca_file"),
+                         config.get("channel_ids", []), args.interval, log)
+        try:
+            return run_loop(ringer, waker.wait, False, log)
+        finally:
+            waker.stop()
     except KeyboardInterrupt:
         return 0
     finally:
