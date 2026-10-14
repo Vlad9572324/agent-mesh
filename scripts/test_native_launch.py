@@ -152,6 +152,41 @@ class NativeLaunchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             native_launch.run_with_doorbell({}, self.config_path, 'session:0', popen=lambda *a, **k: None)
 
+    def test_doorbell_supervisor_stops_both_children_when_interrupted(self):
+        # A signal delivered while the supervisor waits surfaces as an interrupt in
+        # provider.wait(); both the provider and the doorbell must still be stopped,
+        # never left orphaned.
+        processes = []
+
+        class Process:
+            def __init__(self, role):
+                self.role = role
+                self.terminated = self.waited = False
+
+            def wait(self, timeout=None):
+                if self.role == "provider" and timeout is None:
+                    raise KeyboardInterrupt  # stand-in for a terminating signal
+                self.waited = True
+                return 0
+
+            def terminate(self):
+                self.terminated = True
+
+            def kill(self):
+                pass
+
+        def popen(argv, **kwargs):
+            process = Process("doorbell" if "agent-link-doorbell.py" in " ".join(argv) else "provider")
+            processes.append(process)
+            return process
+
+        launch = {'argv': ['/fake/codex'], 'cwd': str(self.root), 'env': {}}
+        with self.assertRaises(KeyboardInterrupt):
+            native_launch.run_with_doorbell(launch, self.config_path, '%3', popen=popen)
+        self.assertEqual([p.role for p in processes], ['doorbell', 'provider'])
+        self.assertTrue(all(p.terminated for p in processes), "both children must be terminated")
+        self.assertTrue(all(p.waited for p in processes), "both children must be reaped")
+
 
 if __name__ == '__main__':
     unittest.main()
