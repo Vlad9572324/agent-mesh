@@ -473,7 +473,20 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.Store.Pool.Query(r.Context(), "SELECT id FROM messages WHERE channel_id=$1 AND seq>$2 ORDER BY seq LIMIT $3", r.PathValue("channel"), after, limit)
+	// Select the page and load every message in ONE RepeatableRead snapshot, like
+	// the native-receipts batch. Otherwise the id list and each per-id load run on
+	// separate pooled connections, so a message deleted between them (e.g. a
+	// project purge, lifecycle.go) makes loadMessage return ErrNoRows and 404s the
+	// whole page — a spurious failure of an ordinary history/inbox fetch. In a
+	// snapshot the ids selected here stay visible to the loads below.
+	ctx, channel := r.Context(), r.PathValue("channel")
+	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		internal(w)
+		return
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, "SELECT id FROM messages WHERE channel_id=$1 AND seq>$2 ORDER BY seq LIMIT $3", channel, after, limit)
 	if err != nil {
 		internal(w)
 		return
@@ -496,13 +509,9 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
 	}
 	result := []Message{}
 	for _, id := range ids {
-		m, e := loadMessage(r.Context(), s.Store.Pool, id)
+		m, e := loadMessage(ctx, tx, id)
 		if e != nil {
-			if errors.Is(e, pgx.ErrNoRows) {
-				fail(w, 404, "not found")
-				return
-			}
-			internal(w)
+			internal(w) // within the snapshot a just-selected id cannot vanish
 			return
 		}
 		result = append(result, m)
