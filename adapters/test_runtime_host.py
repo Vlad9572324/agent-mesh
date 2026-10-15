@@ -162,6 +162,28 @@ class RuntimeHostTests(unittest.TestCase):
         finally:
             host.close()
 
+    def test_enrollment_baseline_suppresses_old_ids_without_wake_evidence(self):
+        host = RuntimeHost(self.policy())
+        try:
+            self.assertEqual(host.baseline(["old-1", "old-2"]), 2)
+            self.assertEqual(host.baseline(["old-1", "old-2"]), 0)
+            wake = host.enqueue("development", ["old-1", "new-1"], "peer")
+            rows = {r["wake_id"]: json.loads(r["message_ids"]) for r in host.status()["wakes"]}
+            self.assertEqual(rows[wake], ["new-1"])
+            self.assertEqual(host.status()["baseline_messages"], 2)
+            self.assertEqual(host.db.execute("SELECT count(*) FROM claims").fetchone()[0], 1)
+        finally:
+            host.close()
+
+    def test_enrollment_baseline_rejects_invalid_or_duplicate_ids(self):
+        host = RuntimeHost(self.policy())
+        try:
+            for values in (["duplicate", "duplicate"], ["bad id"], "not-a-list"):
+                with self.subTest(values=values), self.assertRaisesRegex(HostError, "baseline"):
+                    host.baseline(values)
+        finally:
+            host.close()
+
     def test_restart_fences_old_epoch_and_marks_ambiguous_state(self):
         first = RuntimeHost(self.policy())
         wake = first.enqueue("development", ["m1"], "peer")

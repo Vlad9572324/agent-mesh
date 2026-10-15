@@ -17,6 +17,20 @@ class InboxTests(unittest.TestCase):
     config = fixtures.NativeBridgeTests.config
     message = fixtures.NativeBridgeTests.message
 
+    def test_pending_id_snapshot_changes_no_seen_or_acceptance_evidence(self):
+        self.api.messages = [self.message('m1', seq=1), self.message('m2', seq=2)]
+        bridge = self.bridge()
+        bridge.poll_inbox()
+        bridge.seen_message('m1')
+        self.assertEqual(bridge.pending_message_ids(include_seen=False), ['m2'])
+        self.assertEqual(bridge.pending_message_ids(include_seen=True), ['m1', 'm2'])
+        rows = bridge.db.execute(
+            'SELECT id,seen_at,accepted_at FROM inbox ORDER BY rowid').fetchall()
+        self.assertIsNotNone(rows[0]['seen_at'])
+        self.assertIsNone(rows[0]['accepted_at'])
+        self.assertIsNone(rows[1]['seen_at'])
+        self.assertIsNone(rows[1]['accepted_at'])
+
     def test_old_unseen_does_not_starve_new_messages_across_sessions(self):
         self.api.messages = [self.message('old-' + str(i), seq=i, body='Ж' * 1000) for i in range(1, 30)]
         bridge = self.bridge()
