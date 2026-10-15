@@ -3945,7 +3945,8 @@
     renderOnboardingScope(result.invitation);
     const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
     const pipeline = 'curl --disable -fkSs --noproxy "*" --proto "=https" --connect-timeout 10 --max-time 60 --pinnedpubkey "$2" "$1/connect/install.sh" | bash -s -- "$@"';
-    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}`;
+    const attended = $("admin-onboarding-attended").checked ? " --attended" : "";
+    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}${attended}`;
     $("admin-onboarding-command").value = state.onboardingCommand;
     $("admin-onboarding-repository").href = repository.href;
     const {agent_id: agentId, expires_at: expiresAt} = result.invitation;

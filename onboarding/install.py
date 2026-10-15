@@ -154,6 +154,29 @@ def write_files(path, files):
             os.fsync(stream.fileno())
 
 
+def install_attended_dependency():
+    if shutil.which("tmux"):
+        return
+    sudo = [] if os.geteuid() == 0 else ([shutil.which("sudo")] if shutil.which("sudo") else None)
+    managers = (("apt-get", ["update"], ["install", "-y", "tmux"]),
+                ("dnf", [], ["install", "-y", "tmux"]), ("yum", [], ["install", "-y", "tmux"]),
+                ("apk", [], ["add", "tmux"]), ("brew", [], ["install", "tmux"]))
+    for name, prepare, install in managers:
+        executable = shutil.which(name)
+        if not executable:
+            continue
+        prefix = [] if name == "brew" else sudo
+        if prefix is None:
+            raise InstallError("Attended mode needs tmux and privilege escalation is unavailable; install tmux, then retry with a fresh invitation.")
+        for arguments in (prepare, install):
+            if arguments and subprocess.run([*prefix, executable, *arguments], check=False).returncode != 0:
+                raise InstallError("Could not install tmux; fix the package manager, then retry with a fresh invitation.")
+        if not shutil.which("tmux"):
+            raise InstallError("The package manager completed but tmux is still unavailable.")
+        return
+    raise InstallError("Attended mode needs tmux, but no supported package manager was found.")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("origin")
@@ -163,6 +186,7 @@ def main(argv=None):
     parser.add_argument("--runtime", choices=("codex", "claude"))
     parser.add_argument("--workspace", help="existing workspace outside the private installation; default is empty")
     parser.add_argument("--check", action="store_true", help="install and verify access without starting a model or sending messages")
+    parser.add_argument("--attended", action="store_true", help="install tmux if needed and start a wakeable attended CLI session")
     args = parser.parse_args(argv)
     path, tty = None, None
     try:
@@ -170,11 +194,15 @@ def main(argv=None):
             raise InstallError("Python 3.10 or newer and curl are required.")
         os.umask(0o077)
         validate_connection(args.origin, args.pin, args.token)
+        if args.check and args.attended:
+            raise InstallError("--check and --attended cannot be combined.")
         if not args.check:
             try:
                 tty = os.open("/dev/tty", os.O_RDWR)
             except OSError:
                 raise InstallError("Normal startup requires an interactive terminal. Use --check --runtime codex (or claude) for a connection-only installation.") from None
+        if args.attended:
+            install_attended_dependency()
         path = destination(args.install_dir)
         files = unpack(redeem(args.origin, args.pin, args.token), args.origin)
         args.token = None
@@ -186,6 +214,8 @@ def main(argv=None):
         print("Agent Mesh installed. Setup will install ~/.local/bin/mesh-connect; reconnect with mesh-connect codex or mesh-connect claude.", file=sys.stderr, flush=True)
         if args.check:
             command.append("--check")
+        elif args.attended:
+            command.append("--doorbell")
         else:
             for descriptor in (0, 1, 2):
                 os.dup2(tty, descriptor)
