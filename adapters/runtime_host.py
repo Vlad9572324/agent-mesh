@@ -134,6 +134,8 @@ class RuntimeHost:
             detail TEXT);
           CREATE TABLE IF NOT EXISTS claims(message_id TEXT PRIMARY KEY,wake_id TEXT NOT NULL,
             released INTEGER NOT NULL DEFAULT 0);
+          CREATE TABLE IF NOT EXISTS baselines(message_id TEXT PRIMARY KEY,route_id TEXT NOT NULL,
+            created REAL NOT NULL);
         """)
         binding = canonical({key: policy[key] for key in (
             "connector_config", "server_origin", "project_id", "route_id", "agent_id", "runtime",
@@ -175,7 +177,8 @@ class RuntimeHost:
         unique = list(dict.fromkeys(message_ids))
         with self.db:
             available = [mid for mid in unique if not self.db.execute(
-                "SELECT 1 FROM claims WHERE message_id=? AND released=0", (mid,)).fetchone()]
+                "SELECT 1 FROM claims WHERE message_id=? AND released=0 UNION ALL "
+                "SELECT 1 FROM baselines WHERE message_id=?", (mid, mid)).fetchone()]
             if not available:
                 return None
             wake_id = "wake-" + uuid.uuid4().hex
@@ -186,6 +189,18 @@ class RuntimeHost:
             self.db.executemany("INSERT INTO claims(message_id,wake_id) VALUES(?,?)",
                                 ((mid, wake_id) for mid in available))
         return wake_id
+
+    def baseline(self, message_ids):
+        """Suppress pre-enrollment inbox IDs without asserting seen or accepted."""
+        if (type(message_ids) is not list or len(message_ids) > 50000
+                or not all(identifier(value) for value in message_ids)
+                or len(set(message_ids)) != len(message_ids)):
+            raise HostError("invalid baseline identifiers")
+        before = self.db.total_changes
+        with self.db:
+            self.db.executemany("INSERT OR IGNORE INTO baselines VALUES(?,?,?)",
+                                ((value, self.policy["route_id"], time.time()) for value in message_ids))
+        return self.db.total_changes - before
 
     def _transition(self, wake_id, state, detail=None, *, generation=None, epoch=None):
         transitions = {
@@ -329,5 +344,8 @@ class RuntimeHost:
 
     def status(self):
         return {"route_id": self.policy["route_id"], "generation": self.generation, "epoch": self.epoch,
+                "baseline_messages": self.db.execute(
+                    "SELECT count(*) FROM baselines WHERE route_id=?",
+                    (self.policy["route_id"],)).fetchone()[0],
                 "wakes": [dict(r) for r in self.db.execute(
                     "SELECT wake_id,state,channel_id,message_ids,detail FROM wakes ORDER BY created")]}

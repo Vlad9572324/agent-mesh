@@ -580,6 +580,22 @@ class NativeBridge:
                                    (channel, include_seen)).fetchone()[0]
                    for channel in allowed)
 
+    def pending_message_ids(self, include_seen=True):
+        """Return the bounded local pending set without changing delivery evidence."""
+        if type(include_seen) is not bool:
+            raise NativeError('invalid_include_seen')
+        allowed = self._authorize()
+        if not allowed:
+            return []
+        marks = ','.join('?' for _ in allowed)
+        rows = self.db.execute(
+            f'''SELECT id FROM inbox WHERE accepted_at IS NULL AND (? OR seen_at IS NULL)
+                AND channel_id IN ({marks}) ORDER BY rowid LIMIT ?''',
+            (include_seen, *allowed, MAX_ROWS + 1)).fetchall()
+        if len(rows) > MAX_ROWS:
+            raise NativeError('durable_inbox_capacity_reached')
+        return [row['id'] for row in rows]
+
     def _inbox_scope(self, allowed, include_seen):
         state_id = self.db.execute("SELECT value FROM meta WHERE key='inbox_view_id'").fetchone()[0]
         material = [state_id, self.config['agent_id'], self.config['project_id'],

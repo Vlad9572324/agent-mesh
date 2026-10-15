@@ -49,6 +49,22 @@ Run one discovery/dispatch cycle while evaluating the MVP:
 python3 scripts/agent-mesh-host.py --policy /absolute/private/host-policy.json --once
 ```
 
+Before enabling a Host for an identity that already has an inbox, establish an
+explicit enrollment cutoff once:
+
+```sh
+python3 scripts/agent-mesh-host.py \
+  --policy /absolute/private/host-policy.json --baseline-current
+```
+
+This catches the connector cursor up and records every currently pending
+message ID in the private Host journal without marking any message seen or
+accepted and without starting a provider. Later mixed offers exclude those
+baseline IDs and dispatch only newly arrived IDs. The command is idempotent and
+fails rather than silently choosing a cutoff if the bounded inbox traversal
+cannot catch up. Do not use it when the existing backlog is intentionally meant
+to become automated work.
+
 The reference echo runtime starts no model and reads no message body. The
 packaged provider runtime can instead start one bounded headless Codex or
 Claude turn. It installs the existing native Agent Mesh MCP configuration for

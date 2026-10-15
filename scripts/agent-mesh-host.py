@@ -19,6 +19,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--policy", required=True)
     parser.add_argument("--once", action="store_true", help="poll and dispatch at most one wake")
+    parser.add_argument("--baseline-current", action="store_true",
+                        help="record all currently pending IDs without dispatch, then exit")
     args = parser.parse_args(argv)
     host = bridge = None
     stop_event = threading.Event()
@@ -34,6 +36,19 @@ def main(argv=None):
                 or bridge.config["runtime"] != policy["runtime"]
                 or origin_identity(bridge.config["url"]) != origin_identity(policy["server_origin"])):
             raise ValueError("host policy identity differs from connector identity")
+        if args.baseline_current:
+            for _page in range(1000):
+                fetched = bridge.poll_inbox(limit=100)
+                if not fetched["has_more"]:
+                    break
+            else:
+                raise ValueError("inbox did not reach a bounded enrollment cutoff")
+            identifiers = bridge.pending_message_ids(include_seen=True)
+            added = host.baseline(identifiers)
+            print(json.dumps({"success": True, "baseline_added": added,
+                              "baseline_total": host.status()["baseline_messages"],
+                              "messages_dispatched": 0}, sort_keys=True), flush=True)
+            return 0
         previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
         while not stop_event.is_set():
             recoverable = host.recoverable()
