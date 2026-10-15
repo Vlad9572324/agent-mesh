@@ -172,6 +172,20 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(json.loads(process.stdin.snapshot), {"token": TOKEN})
         self.assertEqual(argv[-1], ORIGIN + "/connect/redeem")
 
+    def test_attended_installs_dependency_before_redeem_and_forwards_doorbell(self):
+        path = self.root / "attended"
+        order = []
+        real_open = os.open
+        def opened(name, flags, *args, **kwargs):
+            return real_open("/dev/null", os.O_RDWR) if name == "/dev/tty" else real_open(name, flags, *args, **kwargs)
+        with patch.object(installer, "install_attended_dependency", side_effect=lambda: order.append("dependency")), \
+                patch.object(installer, "redeem", side_effect=lambda *_: (order.append("redeem"), archive(package_files()))[1]), \
+                patch.object(installer.os, "open", side_effect=opened), patch.object(installer.os, "execv") as execute, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--install-dir", str(path), "--runtime", "claude", "--attended"]), 0)
+        self.assertEqual(order, ["dependency", "redeem"])
+        self.assertEqual(execute.call_args.args[1][-1], "--doorbell")
+
 
 class FakeHTTP:
     calls = []; writable = True; identity = "new-agent"
@@ -360,11 +374,9 @@ class ConnectionTests(unittest.TestCase):
         result, out, err, execute = self.invoke(
             ["--runtime", "claude", "--doorbell", "--", "--dangerously-skip-permissions", "--resume"],
             ("claude",))
-        self.assertIsNone(result); execute.assert_called_once()
+        self.assertEqual(result, 0); execute.assert_called_once()
         argv = execute.call_args.args[1]
-        self.assertIn("--doorbell", argv)
-        self.assertEqual(argv[-4:-1], ["--", "--dangerously-skip-permissions", "--resume"])
-        self.assertEqual(argv[-1], (self.bundle / "PROMPT.md").read_text())
+        self.assertEqual(argv, ["/fake/mesh-connect", "claude", "--dangerously-skip-permissions", "--resume"])
 
     def test_invitation_selected_runtime_is_respected(self):
         value = profile(); value["runtime"] = "claude"; (self.bundle / "profile.json").write_text(json.dumps(value))

@@ -152,6 +152,7 @@
                 <h4 class="onboarding-step admin-full-width" data-i18n-ru="3 · Как подключить">3 · How to connect</h4>
                 <div><label for="admin-onboarding-runtime" data-i18n-ru="CLI на компьютере агента">CLI on the agent’s computer</label><select id="admin-onboarding-runtime"><option value="auto" data-i18n-ru="Определить автоматически">Detect automatically</option><option value="codex">Codex</option><option value="claude">Claude Code</option></select></div>
                 <div><label for="admin-onboarding-expiry" data-i18n-ru="Срок приглашения">Invitation lifetime</label><select id="admin-onboarding-expiry"><option value="1" data-i18n-ru="1 час">1 hour</option><option value="12" selected data-i18n-ru="12 часов">12 hours</option><option value="24" data-i18n-ru="24 часа">24 hours</option></select></div>
+                <label class="delivery-check admin-full-width" for="admin-onboarding-attended"><input id="admin-onboarding-attended" type="checkbox" checked><span data-i18n-ru="Интерактивный агент с автопробуждением (установить tmux и запустить постоянную CLI-сессию)">Attended agent with auto-wake (install tmux and start a persistent CLI session)</span></label>
                 <p id="admin-onboarding-summary" class="field-help admin-full-width"></p>
                 <button id="admin-onboarding-submit" type="submit" class="primary-button admin-full-width" data-i18n-ru="Создать агента и команду подключения">Create agent and connection command</button>
               </form>

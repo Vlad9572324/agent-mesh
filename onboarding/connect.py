@@ -306,6 +306,9 @@ def main(argv=None, *, bundle=None):
             return 0
         print("Agent Mesh access verified; workspace skill and guide prepared. Starting your normal CLI with this bundle's MCP, hooks and initial coordination prompt.", file=sys.stderr)
         tail = args.cli_args[1:] if args.cli_args[:1] == ["--"] else args.cli_args
+        if args.doorbell and not os.environ.get("TMUX_PANE"):
+            os.execv(str(client_path), [str(client_path), result["runtime"], *tail])
+            return 0
         command = [sys.executable, "-B", str(launcher), "run", "--config", str(config_path)]
         if args.doorbell:
             command.append("--doorbell")
