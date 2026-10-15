@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import stat
 import subprocess
@@ -184,7 +183,7 @@ def main(argv=None):
         for flag, value in (("--runtime", args.runtime), ("--workspace", args.workspace)):
             if value:
                 command += [flag, value]
-        print("Agent Mesh installed. Reconnect with: " + shlex.join(command), file=sys.stderr, flush=True)
+        print("Agent Mesh installed. Setup will install ~/.local/bin/mesh-connect; reconnect with mesh-connect codex or mesh-connect claude.", file=sys.stderr, flush=True)
         if args.check:
             command.append("--check")
         else:

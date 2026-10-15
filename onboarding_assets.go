@@ -23,9 +23,9 @@ import (
 
 // These are actual repository sources, not a second vendored connector copy.
 //
-//go:embed onboarding/install.sh onboarding/install.py onboarding/connect.py onboarding/README.md onboarding/PROMPT.md
+//go:embed onboarding/install.sh onboarding/install.py onboarding/connect.py onboarding/mesh_connect.py onboarding/README.md onboarding/PROMPT.md
 //go:embed onboarding/SKILL.md onboarding/HOOKS-AND-TOOLS.md
-//go:embed scripts/agent-link-cli.py scripts/native_launch.py scripts/agent-link-hook.py scripts/agent-link-mcp.py
+//go:embed scripts/agent-link-cli.py scripts/native_launch.py scripts/agent-link-hook.py scripts/agent-link-mcp.py scripts/agent-link-doorbell.py
 //go:embed adapters/native_bridge.py adapters/native_hooks.py adapters/native_mcp.py
 //go:embed scripts/agent-link-listener.py adapters/task_listener.py adapters/coordination.py scripts/dev_trial_runtimes.py
 //go:embed scripts/artifact_client.py scripts/agent-link-artifacts.py docs/task-listener.md listener-contract.json
@@ -33,7 +33,7 @@ import (
 var assets embed.FS
 
 var connectorFiles = []string{
-	"scripts/agent-link-cli.py", "scripts/native_launch.py", "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py",
+	"scripts/agent-link-cli.py", "scripts/native_launch.py", "scripts/agent-link-hook.py", "scripts/agent-link-mcp.py", "scripts/agent-link-doorbell.py",
 	"adapters/native_bridge.py", "adapters/native_hooks.py", "adapters/native_mcp.py",
 	"scripts/agent-link-listener.py", "adapters/task_listener.py", "adapters/coordination.py", "scripts/dev_trial_runtimes.py",
 	"scripts/artifact_client.py", "scripts/agent-link-artifacts.py", "docs/task-listener.md", "listener-contract.json",
@@ -150,7 +150,7 @@ func InstallScript() []byte {
 }
 
 func packagePaths() []string {
-	paths := []string{"connect.py", "README.md", "profile.json", "agent.key", "ca.crt", "connectors/RELEASE.json"}
+	paths := []string{"connect.py", "mesh_connect.py", "README.md", "profile.json", "agent.key", "ca.crt", "connectors/RELEASE.json"}
 	paths = append(paths, guidanceNames[:]...)
 	for _, name := range connectorFiles {
 		paths = append(paths, "connectors/"+name)
@@ -177,7 +177,7 @@ func BuildPackage(s Spec) ([]byte, error) {
 		}
 		files["connectors/"+name] = data
 	}
-	for _, name := range []string{"connect.py", "README.md"} {
+	for _, name := range []string{"connect.py", "mesh_connect.py", "README.md"} {
 		data, err := assets.ReadFile("onboarding/" + name)
 		if err != nil {
 			return nil, errors.New("missing embedded onboarding asset")

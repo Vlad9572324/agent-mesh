@@ -59,7 +59,7 @@ CONNECTOR_FILES = (
     "runtime-host-contract.json",
 )
 ONBOARDING_FILES = (
-    "onboarding/install.sh", "onboarding/install.py", "onboarding/connect.py",
+    "onboarding/install.sh", "onboarding/install.py", "onboarding/connect.py", "onboarding/mesh_connect.py",
     "onboarding/README.md", "onboarding/PROMPT.md",
     "onboarding/SKILL.md", "onboarding/HOOKS-AND-TOOLS.md",
 )

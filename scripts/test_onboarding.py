@@ -31,8 +31,9 @@ def module(name, path):
 
 release = module("onboarding_release_test", ROOT / "scripts/build-release.py")
 connect = module("onboarding_connect_test", ROOT / "onboarding/connect.py")
+mesh_client = module("onboarding_mesh_client_test", ROOT / "onboarding/mesh_connect.py")
 GUIDANCE_NAMES = ("PROMPT.md", "SKILL.md", "HOOKS-AND-TOOLS.md")
-paths = ["connect.py", "README.md", *GUIDANCE_NAMES, "profile.json", "agent.key", "ca.crt"]
+paths = ["connect.py", "mesh_connect.py", "README.md", *GUIDANCE_NAMES, "profile.json", "agent.key", "ca.crt"]
 paths += ["connectors/" + name for name in (*release.CONNECTOR_FILES, "LICENSE", "NOTICE", "CLI-CONNECTION.md", "docs/third-party-notices.md")]
 paths += ["connectors/RELEASE.json"]
 installer_source = (ROOT / "onboarding/install.py").read_text().replace("__PACKAGE_PATHS_JSON__", repr(paths))
@@ -58,7 +59,7 @@ def package_files():
             files[name] = json.dumps({"version": "v1.2.3-test.4", "source_commit": "a" * 40}).encode()
         elif name.startswith("connectors/"):
             files[name] = (ROOT / name[len("connectors/"):]).read_bytes()
-        elif name in ("connect.py", "README.md", *GUIDANCE_NAMES):
+        elif name in ("connect.py", "mesh_connect.py", "README.md", *GUIDANCE_NAMES):
             files[name] = (ROOT / "onboarding" / name).read_bytes()
     files.update({"agent.key": (KEY + "\n").encode(), "ca.crt": b"fixture-public-certificate",
                   "profile.json": json.dumps(profile()).encode()})
@@ -195,7 +196,7 @@ class ConnectionTests(unittest.TestCase):
 
     def invoke(self, args, available=(), before_exec=None):
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(self.bridge, "NativeHTTP", FakeHTTP), patch.object(connect.shutil, "which", side_effect=lambda name: "/fake/" + name if name in available else None), patch.object(connect.os, "execv", side_effect=before_exec) as execute, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with patch.object(self.bridge, "NativeHTTP", FakeHTTP), patch.object(connect.shutil, "which", side_effect=lambda name: "/fake/" + name if name in available else None), patch.object(connect, "install_client", return_value=Path("/fake/mesh-connect")), patch.object(connect.os, "execv", side_effect=before_exec) as execute, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             result = connect.main(args, bundle=self.bundle)
         self.assertNotIn(KEY, out.getvalue() + err.getvalue())
         return result, out.getvalue(), err.getvalue(), execute
@@ -355,6 +356,16 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(json.loads((self.bundle / "config.json").read_text())["runtime"], "codex")
         self.assertNotIn(KEY, " ".join(argv))
 
+    def test_doorbell_and_provider_arguments_reach_native_launcher(self):
+        result, out, err, execute = self.invoke(
+            ["--runtime", "claude", "--doorbell", "--", "--dangerously-skip-permissions", "--resume"],
+            ("claude",))
+        self.assertIsNone(result); execute.assert_called_once()
+        argv = execute.call_args.args[1]
+        self.assertIn("--doorbell", argv)
+        self.assertEqual(argv[-4:-1], ["--", "--dangerously-skip-permissions", "--resume"])
+        self.assertEqual(argv[-1], (self.bundle / "PROMPT.md").read_text())
+
     def test_invitation_selected_runtime_is_respected(self):
         value = profile(); value["runtime"] = "claude"; (self.bundle / "profile.json").write_text(json.dumps(value))
         result, out, err, execute = self.invoke([], ("codex", "claude"))
@@ -367,6 +378,47 @@ class ConnectionTests(unittest.TestCase):
             result, out, err, execute = self.invoke([], ("codex",)); self.assertEqual(result, 2); execute.assert_not_called()
         prompt.unlink(); prompt.symlink_to(self.bundle / "agent.key")
         result, out, err, execute = self.invoke([], ("codex",)); self.assertEqual(result, 2); execute.assert_not_called()
+
+
+class InstalledClientTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="mesh-client-test-"); self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name) / "home"; self.home.mkdir()
+        self.bundle = Path(self.temp.name) / "bundle"; self.bundle.mkdir(mode=0o700)
+        (self.bundle / "mesh_connect.py").write_bytes((ROOT / "onboarding/mesh_connect.py").read_bytes())
+        (self.bundle / "connect.py").write_text("# fixture\n")
+        (self.bundle / "config.json").write_text("{}\n")
+
+    def install(self, agent="claude-helper", runtime="claude"):
+        with patch.object(Path, "home", return_value=self.home):
+            return connect.install_client(self.bundle, {"agent_id": agent}, runtime)
+
+    def test_install_registers_private_bundle_and_client(self):
+        target = self.install()
+        self.assertEqual(target, self.home / ".local/bin/mesh-connect")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o700)
+        rows = mesh_client.registrations(self.home)
+        self.assertEqual(rows, [{"version": 1, "agent_id": "claude-helper", "runtime": "claude", "bundle": str(self.bundle)}])
+        registration = next((self.home / ".local/share/agent-mesh/client/connections").iterdir())
+        self.assertEqual(registration.stat().st_mode & 0o777, 0o600)
+
+    def test_client_requires_tmux_then_executes_attended_bundle(self):
+        self.install()
+        with patch.object(mesh_client.shutil, "which", return_value=None), self.assertRaisesRegex(mesh_client.ClientError, "apt-get install"):
+            mesh_client.main(["claude"], home=self.home)
+        with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
+                patch.dict(os.environ, {}, clear=True), patch.object(mesh_client.os, "execvp") as execute:
+            mesh_client.main(["claude", "--dangerously-skip-permissions", "--resume"], home=self.home)
+        argv = execute.call_args.args[1]
+        self.assertEqual(argv[:5], ["/usr/bin/tmux", "new-session", "-A", "-s", "mesh-claude-helper"])
+        self.assertIn("--doorbell", argv)
+        self.assertEqual(argv[-3:], ["--", "--dangerously-skip-permissions", "--resume"])
+
+    def test_multiple_connections_require_explicit_agent(self):
+        self.install("claude-a")
+        self.install("claude-b")
+        with self.assertRaisesRegex(mesh_client.ClientError, "--agent"):
+            mesh_client.main(["claude"], home=self.home)
 
 
 if __name__ == "__main__":
