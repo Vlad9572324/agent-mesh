@@ -2,6 +2,7 @@
 """Connect one provisioned Agent Mesh identity using its private local bundle."""
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -226,25 +227,90 @@ def check_access(config_path, documents):
         bridge.close()
 
 
+def install_client(bundle, profile, runtime):
+    """Install a non-secret user command and privately register this bundle."""
+    home = Path.home()
+    local = home / ".local"
+    bin_dir = local / "bin"
+    share = local / "share"
+    mesh_root = share / "agent-mesh"
+    client_root = mesh_root / "client"
+    registrations = client_root / "connections"
+    for directory, private in ((local, False), (bin_dir, False), (share, False), (mesh_root, True),
+                               (client_root, True), (registrations, True)):
+        if directory.is_symlink():
+            raise SetupError("The mesh-connect installation path must not contain symlinks.")
+        directory.mkdir(mode=0o700 if private else 0o755, parents=True, exist_ok=True)
+        info = directory.stat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or (info.st_mode & (0o077 if private else 0o002))):
+            raise SetupError("The mesh-connect installation directories must be owned by you; private state cannot be shared and executable paths cannot be world-writable.")
+
+    source = bundle / "mesh_connect.py"
+    data = source.read_bytes()
+    if b'agent-mesh-client-v1' not in data or len(data) > 65536:
+        raise SetupError("The verified mesh-connect client is missing or invalid.")
+    target = bin_dir / "mesh-connect"
+    if target.is_symlink():
+        raise SetupError("Refusing to replace a linked mesh-connect command.")
+    if target.exists():
+        info = target.stat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or b'agent-mesh-client-v1' not in target.read_bytes()):
+            raise SetupError("An unrelated or unsafe ~/.local/bin/mesh-connect already exists; preserve it and resolve the conflict.")
+    temporary = bin_dir / (".mesh-connect-" + uuid.uuid4().hex)
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o700)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    finally:
+        try: temporary.unlink()
+        except FileNotFoundError: pass
+
+    identity = hashlib.sha256(profile["agent_id"].encode("utf-8")).hexdigest()
+    registration = registrations / (identity + ".json")
+    value = {"version": 1, "agent_id": profile["agent_id"], "runtime": runtime, "bundle": str(bundle)}
+    encoded = (json.dumps(value, sort_keys=True) + "\n").encode()
+    temporary = registrations / (".connection-" + uuid.uuid4().hex)
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(encoded); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, registration)
+    finally:
+        try: temporary.unlink()
+        except FileNotFoundError: pass
+    return target
+
+
 def main(argv=None, *, bundle=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", choices=("codex", "claude"), help="first launch uses invitation selection, or installed Codex then Claude for auto; later launches reuse the binding")
     parser.add_argument("--workspace", help="existing code directory; default: this private bundle's workspace directory")
     parser.add_argument("--check", action="store_true", help="prepare/verify local configuration and workspace skill, and read server grants; do not start a model or send messages")
+    parser.add_argument("--doorbell", action="store_true", help="run the attended CLI with idle wake inside tmux")
+    parser.add_argument("cli_args", nargs=argparse.REMAINDER, help="provider CLI arguments after --")
     args = parser.parse_args(argv)
     os.umask(0o077)
     directory = Path(bundle).resolve() if bundle is not None else Path(__file__).resolve().parent
     try:
-        _profile, config_path, launcher = prepare(directory, args)
+        profile, config_path, launcher = prepare(directory, args)
         documents = read_guidance(directory)
         result = check_access(config_path, documents)
         skill_path = install_skill(config_path, documents)
-        result.update({"skill_path": str(skill_path), "skill_ready": True})
+        client_path = install_client(directory, profile, result["runtime"])
+        result.update({"skill_path": str(skill_path), "skill_ready": True, "client_path": str(client_path)})
         if args.check:
             print(json.dumps(result, ensure_ascii=False))
             return 0
         print("Agent Mesh access verified; workspace skill and guide prepared. Starting your normal CLI with this bundle's MCP, hooks and initial coordination prompt.", file=sys.stderr)
-        os.execv(sys.executable, [sys.executable, "-B", str(launcher), "run", "--config", str(config_path), "--", documents["PROMPT.md"]])
+        tail = args.cli_args[1:] if args.cli_args[:1] == ["--"] else args.cli_args
+        command = [sys.executable, "-B", str(launcher), "run", "--config", str(config_path)]
+        if args.doorbell:
+            command.append("--doorbell")
+        command += ["--", *tail, documents["PROMPT.md"]]
+        os.execv(sys.executable, command)
     except SetupError as error:
         print(str(error), file=sys.stderr)
         return 2

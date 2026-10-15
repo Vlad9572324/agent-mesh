@@ -42,6 +42,15 @@ preserve identical skill files; conflicting files or unsafe paths stop setup
 without overwriting them. The launcher supplies hooks for this invocation without
 changing home settings.
 
+Setup installs `~/.local/bin/mesh-connect` and privately registers this bundle.
+Start an attended, wakeable session with `mesh-connect claude` or
+`mesh-connect codex`; provider flags may follow the runtime name. The client uses
+`tmux` so later notifications can nudge the same visible CLI session. If several
+connections use one runtime, select one with `mesh-connect --agent ID claude`
+(or `codex`). On Debian/Ubuntu,
+install the optional dependency with `sudo apt-get install -y tmux`, and ensure
+`~/.local/bin` is on `PATH`.
+
 Keep this entire directory private. Never publish `agent.key`, the invitation,
 config or state, or copy them into a repository. The key stays in its private
 file and is not placed in the model prompt or command arguments. `ca.crt` is a
