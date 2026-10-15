@@ -3945,7 +3945,10 @@
     renderOnboardingScope(result.invitation);
     const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
     const pipeline = 'curl --disable -fkSs --noproxy "*" --proto "=https" --connect-timeout 10 --max-time 60 --pinnedpubkey "$2" "$1/connect/install.sh" | bash -s -- "$@"';
-    const attended = $("admin-onboarding-attended").checked ? " --attended" : "";
+    // A tab can briefly retain the previous HTML shell while fetching this new
+    // script after a deployment. Default to the safe attended command instead
+    // of losing the one-time result when the new checkbox is not in that shell.
+    const attended = $("admin-onboarding-attended")?.checked !== false ? " --attended" : "";
     state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}${attended}`;
     $("admin-onboarding-command").value = state.onboardingCommand;
     $("admin-onboarding-repository").href = repository.href;
