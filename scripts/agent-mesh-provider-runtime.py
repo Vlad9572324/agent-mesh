@@ -27,6 +27,14 @@ VERSION = "1.0"
 SESSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 MAX_PROVIDER_ARGS = 32
 MAX_PROVIDER_ARG_BYTES = 4096
+# Exactly the mesh tools a woken worker needs to read and answer: inbox + full
+# message, mark seen, and send the reply. Scoped allowlist only, never a bypass.
+WAKE_TOOLS = (
+    "mcp__agent_link_native__link_inbox",
+    "mcp__agent_link_native__link_message",
+    "mcp__agent_link_native__link_seen",
+    "mcp__agent_link_native__link_send",
+)
 
 
 def _provider_args(raw):
@@ -163,8 +171,11 @@ def main(argv=None):
         raise ProtocolError("expected negotiated wake")
 
     native_id = "native-" + uuid.uuid4().hex
+    # Headless Runtime Host path only: pre-approve exactly the wake tools so a
+    # non-interactive woken worker can read and answer, without any bypass mode.
+    allowlist = WAKE_TOOLS if args.runtime == "claude" else None
     launch = build_launch(config_path, config, cli_args=cli_args, session_id=native_id,
-                          executable=executable)
+                          executable=executable, mcp_allowlist=allowlist)
     stopping = threading.Event()
     child_holder = []
 
