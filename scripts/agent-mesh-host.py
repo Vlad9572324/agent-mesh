@@ -10,7 +10,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "adapters"))
-from native_bridge import NativeBridge
+from native_bridge import NativeBridge, NativeError
 from coordination import origin_identity
 from runtime_host import RuntimeHost, load_policy
 
@@ -58,8 +58,16 @@ def main(argv=None):
                 if args.once:
                     break
                 continue
-            bridge.poll_inbox(limit=100)
-            offered = bridge.offer_inbox(context_budget=16000, minimum_interval=0, full_text=False)
+            try:
+                bridge.poll_inbox(limit=100)
+                offered = bridge.offer_inbox(context_budget=16000, minimum_interval=0, full_text=False)
+            except NativeError as error:
+                if args.once:
+                    raise
+                print(json.dumps({"success": False, "retrying": True,
+                                  "error_category": str(error)}), file=sys.stderr, flush=True)
+                stop_event.wait(policy["poll_seconds"])
+                continue
             grouped = {}
             for message in offered["messages"]:
                 key = (message.get("channel_id"), message.get("author_id"))
