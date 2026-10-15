@@ -682,6 +682,8 @@
     "Maximum {0} UTF-8 bytes.": "Допускается не более {0} байт UTF-8.",
     "Waiting for server confirmation. The request is not retried automatically…": "Ожидается подтверждение сервера. Запрос не повторяется автоматически…",
     "API 409: the ID is occupied (including after deletion), the project version changed, or its state does not permit this action. Refresh the snapshot and check the project and permissions.": "API 409: ID занят (в том числе после удаления), версия проекта изменилась либо его состояние не допускает действие. Обновите снимок и проверьте проект и права.",
+    "Active key: revoke it under Accounts before issuing a replacement command.": "Ключ активен: перед выпуском новой команды отзовите его в разделе «Учётные записи».",
+    "Replacement unavailable: restore write access to the project and every listed channel first.": "Новая команда недоступна: сначала восстановите право записи в проект и каждый указанный канал.",
     "Deletion outcome unknown: server confirmation was not received. The request will not be retried. Close this dialog, refresh the project list and check the audit log. A new deletion requires a fresh inventory and entering the ID again.": "Результат удаления неизвестен: подтверждение сервера не получено. Запрос не будет повторён. Закройте диалог, обновите список проектов и проверьте аудит. Новое удаление возможно только после нового просмотра состава и ввода ID.",
     "Change outcome unknown: the server response was not received. No automatic retry. Refresh the snapshot and check the audit log before another explicit action. If the response containing a key was lost, that key cannot be retrieved again; another rotation requires separate confirmation.": "Результат изменения неизвестен: ответ сервера не получен. Автоматического повтора нет. Обновите снимок и проверьте аудит перед новым явным действием. Если ответ с ключом потерян, получить его повторно нельзя; новая замена ключа требует отдельного подтверждения.",
     "The change was not confirmed by this tab.": "Изменение не подтверждено этой вкладкой.",
@@ -3919,13 +3921,22 @@
     const labels = {pending: tr("Awaiting connection"), claimed: tr("Key issued"), expired: tr("Expired"), revoked: tr("Revoked")};
     replaceContent("admin-onboarding-list", ...list(config?.invitations).map(invite => {
       const row = node("article", "admin-record"); row.dataset.invitationId = invite.id;
-      appendOwned(row, () => node("h4", "", () => invite.agent_id),
+      const principal = list(state.admin?.principals).find(item => item.id === invite.agent_id);
+      const project = list(state.admin?.projects).find(item => item.id === invite.project_id);
+      const projectGrant = list(state.admin?.project_members).find(item => item.agent_id === invite.agent_id && item.project_id === invite.project_id);
+      const channelGrants = new Set(list(state.admin?.channel_members).filter(item => item.agent_id === invite.agent_id && item.can_write === true).map(item => item.channel_id));
+      const activeKey = principal?.key_active === true;
+      const validScope = project && !project.archived_at && projectGrant?.can_write === true && list(invite.channel_ids).every(id => channelGrants.has(id));
+      const canReissue = Boolean(principal) && !activeKey && validScope;
+      const heading = principal?.name && principal.name !== invite.agent_id ? `${principal.name} (${invite.agent_id})` : invite.agent_id;
+      appendOwned(row, () => node("h4", "", () => heading),
         () => node("p", "field-help", () => tr("{0} · {1} · expires {2}", () => labels[invite.status] || invite.status, () => invite.runtime, () => dateText(invite.expires_at))),
         () => node("p", "field-help", () => `${invite.project_id} · ${list(invite.channel_ids).join(", ")}`));
-      const inactive = list(state.admin?.principals).some(principal => principal.id === invite.agent_id && principal.kind === "agent" && principal.key_active !== true);
+      if (activeKey) appendOwned(row, () => node("p", "field-help", () => tr("Active key: revoke it under Accounts before issuing a replacement command.")));
+      else if (!validScope) appendOwned(row, () => node("p", "field-help", () => tr("Replacement unavailable: restore write access to the project and every listed channel first.")));
       const actions = node("div", "admin-actions");
       for (const [action, label] of [["reissue", tr("New command…")], ["revoke", tr("Revoke invitation…")]]) {
-        if (action === "revoke" ? invite.status !== "pending" : !inactive) continue;
+        if (action === "revoke" ? invite.status !== "pending" : !canReissue) continue;
         const button = node("button", "secondary-button", () => label); button.type = "button"; button.dataset.onboardingAction = action;
         button.dataset.focusKey = `onboarding:${invite.id}:${action}`;
         button.addEventListener("click", () => void onboardingAction(invite, action)); appendOwned(actions, () => button);
