@@ -314,6 +314,7 @@ def main(argv=None, *, bundle=None):
             command.append("--doorbell")
         command += ["--", *tail, documents["PROMPT.md"]]
         os.execv(sys.executable, command)
+        return 0  # os.execv never returns in production; keeps main() observable under test
     except SetupError as error:
         print(str(error), file=sys.stderr)
         return 2

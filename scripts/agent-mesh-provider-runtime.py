@@ -56,10 +56,16 @@ def _forbidden_provider_arg(runtime, value):
     common = ("--mcp-config", "--settings", "--append-system-prompt",
               "--append-system-prompt-file", "--system-prompt", "--system-prompt-file",
               "--input-format", "--output-format", "--session-id", "--resume")
+    # Backstop the "never expand privilege past the scoped allowlist" invariant:
+    # refuse only unambiguous bypass / tool-granting flags. Legitimate tighteners
+    # like codex --sandbox and claude --permission-mode stay operator-tunable.
+    escalation = ("--dangerously-skip-permissions", "--permission-prompt-tool",
+                  "--allowedTools", "--allowed-tools")
     codex = ("exec", "e", "resume", "fork", "review", "-C", "--cd",
-             "-o", "--output-last-message")
+             "-o", "--output-last-message", "--full-auto",
+             "--dangerously-bypass-approvals-and-sandbox")
     claude = ("-p", "--print", "-c", "--continue")
-    blocked = common + (codex if runtime == "codex" else claude)
+    blocked = common + escalation + (codex if runtime == "codex" else claude)
     return any(value == item or value.startswith(item + "=") for item in blocked)
 
 

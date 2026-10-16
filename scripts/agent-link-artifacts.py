@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 import sys
 
-from artifact_client import ArtifactClient, MAX_ARTIFACT, digest, pack, read_regular, unpack, validate_bundle, write_new
+from artifact_client import (ArtifactClient, BundleFormatError, MAX_ARTIFACT, digest, pack,
+                             read_regular, unpack, validate_bundle, write_new)
 
 
 def connected_transport(config_path):
@@ -82,6 +83,11 @@ def main():
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except BundleFormatError as error:
+        # Fixed, path-free diagnostic — safe to show so the operator knows the
+        # payload is a tar/gzip, not a masked "refused" with no cause.
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1)
     except (ValueError, OSError, RuntimeError) as error:
         # Paths/remote text in exception chains can contain private material.
         print("Artifact operation refused or failed (" + type(error).__name__ + "); no automatic retry.", file=sys.stderr)

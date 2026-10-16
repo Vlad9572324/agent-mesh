@@ -186,7 +186,10 @@ class RuntimeHost:
             self.db.execute("INSERT INTO wakes VALUES(?,?,?,?,?,?,?,?,?,?,NULL)",
                             (wake_id, self.policy["route_id"], self.generation, self.epoch,
                              "queued", channel_id, sender_id, canonical(available), now, now))
-            self.db.executemany("INSERT INTO claims(message_id,wake_id) VALUES(?,?)",
+            # A prior binding change can leave a released claim row for the same
+            # message (message_id is PRIMARY KEY). Replace it, so re-claiming an
+            # again-available message never collides with the retired row.
+            self.db.executemany("INSERT OR REPLACE INTO claims(message_id,wake_id,released) VALUES(?,?,0)",
                                 ((mid, wake_id) for mid in available))
         return wake_id
 

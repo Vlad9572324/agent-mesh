@@ -62,6 +62,7 @@ The connector runtime closure is:
 scripts/agent-link-cli.py
 scripts/native_launch.py
 scripts/agent-link-hook.py
+scripts/agent-link-doorbell.py
 scripts/agent-link-mcp.py
 adapters/native_bridge.py
 adapters/native_hooks.py

@@ -58,10 +58,14 @@ def main(argv=None):
         while not stop_event.is_set():
             recoverable = host.recoverable()
             if recoverable:
-                host.dispatch(recoverable[0], should_stop=stop_event.is_set)
+                state = host.dispatch(recoverable[0], should_stop=stop_event.is_set)
                 print(json.dumps(host.status(), sort_keys=True), flush=True)
                 if args.once:
                     break
+                if state == "queued":
+                    # Dispatch failed before submission (bad provider handshake or
+                    # immediate exit); back off instead of hot-looping the relaunch.
+                    stop_event.wait(policy["poll_seconds"])
                 continue
             try:
                 bridge.poll_inbox(limit=100)

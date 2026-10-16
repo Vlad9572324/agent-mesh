@@ -7,7 +7,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from artifact_client import ArtifactClient, digest, pack, relative_path, unpack, validate_bundle, write_new
+from artifact_client import (ArtifactClient, BundleFormatError, digest, pack, relative_path,
+                             unpack, validate_bundle, write_new)
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("artifact_cli", ROOT / "scripts/agent-link-artifacts.py")
@@ -50,6 +51,13 @@ class ArtifactBundleTests(unittest.TestCase):
         client.request = wrong
         with self.assertRaisesRegex(ValueError, "receipt"):
             client.upload("mine", "doc-2", "document", "requirements-v1", b"text", title="Exact title")
+
+    def test_tar_or_gzip_payload_is_rejected_with_a_clear_message(self):
+        gzip_magic = b"\x1f\x8b\x08" + b"\x00" * 300
+        tar_magic = b"\x00" * 257 + b"ustar\x0000" + b"\x00" * 200
+        for payload in (gzip_magic, tar_magic):
+            with self.assertRaises(BundleFormatError):
+                unpack(payload, "base-v1", self.root / "tar_receiver")
 
     def test_roundtrip_new_directory_only(self):
         data = pack(self.source, ["sub/test.go", "code.go"], "base-v1")
