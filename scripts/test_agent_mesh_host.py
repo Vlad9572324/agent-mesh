@@ -15,7 +15,7 @@ host = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(host)
 
 POLICY = {"connector_config": "/x/config.json", "agent_id": "a", "project_id": "1",
-          "runtime": "claude", "server_origin": "https://10.0.0.1:1", "poll_seconds": 0}
+          "runtime": "claude", "server_origin": "https://agent-mesh.example", "poll_seconds": 0}
 
 
 class FakeHost:
@@ -37,7 +37,7 @@ class FakeBridge:
 
     def __init__(self, config_path, session_id, timeout=5):
         self.config = {"agent_id": "a", "project_id": "1", "runtime": "claude",
-                       "url": "https://10.0.0.1:1"}
+                       "url": "https://agent-mesh.example"}
         self.polls = 0
         FakeBridge.last = self
 
