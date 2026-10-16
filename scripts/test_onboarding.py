@@ -214,7 +214,10 @@ class ConnectionTests(unittest.TestCase):
 
     def invoke(self, args, available=(), before_exec=None):
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(self.bridge, "NativeHTTP", FakeHTTP), patch.object(connect.shutil, "which", side_effect=lambda name: "/fake/" + name if name in available else None), patch.object(connect, "install_client", return_value=Path("/fake/mesh-connect")), patch.object(connect.os, "execv", side_effect=before_exec) as execute, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        # Neutralize an inherited tmux so the doorbell branch is deterministic:
+        # inside tmux connect runs the launcher inline, outside it execs mesh-connect.
+        env_without_tmux = {k: v for k, v in connect.os.environ.items() if k not in ("TMUX_PANE", "TMUX")}
+        with patch.dict(connect.os.environ, env_without_tmux, clear=True), patch.object(self.bridge, "NativeHTTP", FakeHTTP), patch.object(connect.shutil, "which", side_effect=lambda name: "/fake/" + name if name in available else None), patch.object(connect, "install_client", return_value=Path("/fake/mesh-connect")), patch.object(connect.os, "execv", side_effect=before_exec) as execute, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             result = connect.main(args, bundle=self.bundle)
         self.assertNotIn(KEY, out.getvalue() + err.getvalue())
         return result, out.getvalue(), err.getvalue(), execute

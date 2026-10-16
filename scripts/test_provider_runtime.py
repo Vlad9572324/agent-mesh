@@ -26,6 +26,21 @@ def wake():
 
 
 class ProviderRuntimeTests(unittest.TestCase):
+    def test_privilege_escalation_flags_are_refused(self):
+        for runtime, flag in (("claude", "--dangerously-skip-permissions"),
+                              ("claude", "--allowedTools"),
+                              ("claude", "--allowed-tools=Bash"),
+                              ("claude", "--permission-prompt-tool"),
+                              ("codex", "--full-auto"),
+                              ("codex", "--dangerously-bypass-approvals-and-sandbox")):
+            with self.assertRaises(provider_runtime.ProtocolError):
+                provider_runtime.provider_cli_args(runtime, "fresh", None, [flag])
+        # Legitimate tighteners remain allowed (operator-tunable by contract).
+        self.assertIn("--sandbox=read-only",
+                      provider_runtime.provider_cli_args("codex", "fresh", None, ["--sandbox=read-only"]))
+        self.assertIn("--permission-mode=manual",
+                      provider_runtime.provider_cli_args("claude", "fresh", None, ["--permission-mode=manual"]))
+
     def test_provider_grammar_is_fixed_and_resume_is_local(self):
         self.assertEqual(provider_runtime.provider_cli_args(
             "codex", "fresh", None, ["--sandbox=workspace-write"]),

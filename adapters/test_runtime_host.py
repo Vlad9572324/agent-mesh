@@ -52,6 +52,25 @@ class RuntimeHostTests(unittest.TestCase):
         os.chmod(self.policy_path, 0o600)
         return load_policy(str(self.policy_path))
 
+    def test_enqueue_reclaims_a_released_message_after_route_reconfiguration(self):
+        host = RuntimeHost(self.policy(mode="done"))
+        first = host.enqueue("channel-1", ["m1"], "peer")
+        self.assertIsNotNone(first)
+        host.close()
+        # Reconfigure the same route (binding changes via argv): the queued wake is
+        # errored and its claim released, so m1 is available again. Re-enqueue must
+        # not collide with the retired claim row (regression: UNIQUE on message_id).
+        host = RuntimeHost(self.policy(mode="eof"))
+        try:
+            second = host.enqueue("channel-1", ["m1"], "peer")
+            self.assertIsNotNone(second)
+            self.assertNotEqual(first, second)
+            row = host.db.execute("SELECT wake_id,released FROM claims WHERE message_id=?", ("m1",)).fetchone()
+            self.assertEqual(row["wake_id"], second)
+            self.assertEqual(row["released"], 0)
+        finally:
+            host.close()
+
     def test_policy_is_private_and_command_is_fixed_local_argv(self):
         policy = self.policy()
         self.assertEqual(policy["argv"][0], os.path.realpath(sys.executable))

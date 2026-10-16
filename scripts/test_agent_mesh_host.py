@@ -68,6 +68,43 @@ class AgentMeshHostTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(FakeBridge.last.polls, 1)  # polled once, then stopped — no retry loop
 
+    def test_queued_recoverable_dispatch_backs_off_instead_of_hot_looping(self):
+        waits = []
+
+        class FakeEvent:
+            def __init__(self):
+                self._set = False
+
+            def is_set(self):
+                return self._set
+
+            def set(self):
+                self._set = True
+
+            def wait(self, timeout):
+                waits.append(timeout)
+                self._set = True  # one backoff, then let the loop exit deterministically
+
+        class QueuedHost(FakeHost):
+            def __init__(self, *a, **k):
+                self.n = 0
+
+            def recoverable(self):
+                self.n += 1
+                return ["wake-1"] if self.n == 1 else []
+
+            def dispatch(self, wake_id, should_stop=None):
+                return "queued"  # pre-submission failure: must back off, not hot-loop
+
+        with patch.object(host, "load_policy", return_value={**POLICY, "poll_seconds": 7}), \
+                patch.object(host, "RuntimeHost", QueuedHost), \
+                patch.object(host, "NativeBridge", FakeBridge), \
+                patch.object(host, "origin_identity", lambda url: url), \
+                patch.object(host.threading, "Event", FakeEvent):
+            rc = host.main(["--policy", "/x/policy.json"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(waits, [7])  # backed off once at poll_seconds; no zero-delay relaunch storm
+
 
 if __name__ == "__main__":
     unittest.main()

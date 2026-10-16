@@ -78,6 +78,11 @@ def write_new(path, data):
         os.fsync(stream.fileno())
 
 
+class BundleFormatError(ValueError):
+    """Payload is not an agent-link pack bundle. The message is fixed and path-free,
+    so it is safe to surface to the operator unlike a generic masked error."""
+
+
 def validate_bundle(data, expected_base):
     if not identifier(expected_base) or not isinstance(data, bytes) or not 0 < len(data) <= MAX_ARTIFACT:
         raise ValueError("invalid bundle or expected base")
@@ -138,6 +143,11 @@ def pack(root, paths, base_revision):
 
 def unpack(data, expected_base, destination):
     """Explicit operation into a NEW private directory; never a live worktree."""
+    if isinstance(data, (bytes, bytearray)) and (data[:2] == b"\x1f\x8b" or data[257:262] == b"ustar"):
+        raise BundleFormatError(
+            "This artifact is a gzip/tar archive, not an agent-link pack bundle. "
+            "`download` already wrote the raw file to --output; extract it with `tar` "
+            "yourself, or recreate the bundle with this tool's `pack` command.")
     files = validate_bundle(data, expected_base)
     destination = Path(destination).absolute()
     if destination == Path(destination.anchor) or destination.parent.resolve() != destination.parent:
