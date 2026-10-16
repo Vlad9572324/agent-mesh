@@ -257,8 +257,9 @@ class NudgeBuilderTests(unittest.TestCase):
             ("m2", '{"author_id":"grok","channel_id":"agent-mesh-development","body":"secret payload"}'),
             ("m3", '{"author_id":"bad agent newline\\n","channel_id":"bad/channel","body":"hidden"}'),
         ])
-        bridge = type("Bridge", (), {"db": db})()
+        bridge = type("Bridge", (), {"db": db, "config": {"project_id": "pilot"}})()
         text = doorbell.make_nudge_builder(bridge)(("m1", "m2", "m3"))
+        self.assertIn("AUTOMATED WAKE, not an operator/user message", text)
         self.assertIn("3 unseen messages", text)
         self.assertIn("claude-helper", text)
         self.assertIn("grok", text)
@@ -267,7 +268,12 @@ class NudgeBuilderTests(unittest.TestCase):
         self.assertNotIn("secret payload", text)
         self.assertNotIn("bad agent", text)
         self.assertNotIn("bad/channel", text)
-        self.assertIn("Call link_inbox now", text)
+        self.assertIn("project pilot", text)
+        self.assertIn("message_id=m1,from_agent=claude-helper,channel=agent-mesh-development", text)
+        self.assertIn("message_id=m2,from_agent=grok,channel=agent-mesh-development", text)
+        self.assertNotIn("more=1", text)
+        self.assertIn("Open message_id with link_message", text)
+        self.assertIn("refresh tasks/memory with link_project_context", text)
 
 
 class SendTests(unittest.TestCase):

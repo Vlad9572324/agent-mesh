@@ -97,7 +97,7 @@ type onboardingInvitation struct {
 
 const invitationSelect = `SELECT i.id,i.agent_id,p.name,i.project_id,i.channel_ids,i.runtime,i.created_at,i.expires_at,i.claimed_at,i.revoked_at,
  CASE WHEN i.claimed_at IS NOT NULL THEN 'claimed' WHEN i.revoked_at IS NOT NULL THEN 'revoked' WHEN i.expires_at<=clock_timestamp() THEN 'expired' ELSE 'pending' END
- FROM onboarding_invitations i JOIN principals p ON p.id=i.agent_id `
+ FROM onboarding_invitations i JOIN principals p ON p.id=i.agent_id AND p.archived_at IS NULL `
 
 func scanInvitation(row pgx.Row) (onboardingInvitation, error) {
 	var i onboardingInvitation

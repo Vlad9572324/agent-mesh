@@ -214,9 +214,12 @@ def main(argv=None):
         print("Agent Mesh installed. Setup will install ~/.local/bin/mesh-connect; reconnect with mesh-connect codex or mesh-connect claude.", file=sys.stderr, flush=True)
         if args.check:
             command.append("--check")
-        elif args.attended:
-            command.append("--doorbell")
         else:
+            if args.attended:
+                command.append("--doorbell")
+            # The documented installer is normally fed through `curl | bash`,
+            # so stdin still points at that finished pipe.  Both direct and
+            # attended startup need the real controlling terminal.
             for descriptor in (0, 1, 2):
                 os.dup2(tty, descriptor)
             os.close(tty)

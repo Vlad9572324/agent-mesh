@@ -83,11 +83,33 @@ def hook_definitions(config_path, runtime):
             for name in events}
 
 
-def build_launch(config_path, config, *, cli_args=(), session_id=None, executable=None):
+def _validate_mcp_allowlist(runtime, allowlist):
+    """Bounded scoped permission rules for a headless Runtime Host turn.
+
+    Only agent_link_native MCP tools may be pre-approved, and only for the claude
+    runtime. This grants named tools without a prompt; it never sets a bypass or
+    accept-all mode, so every other tool stays under the provider's normal approval
+    policy. A scoped allowlist is the only safe way to let a non-interactive woken
+    worker read and answer mesh messages.
+    """
+    if allowlist is None:
+        return None
+    if runtime != 'claude':
+        raise ValueError('scoped MCP allowlist is only supported for the claude runtime')
+    rules = list(dict.fromkeys(allowlist))
+    prefix = 'mcp__agent_link_native__'
+    if not rules or any(not isinstance(rule, str) or not rule.startswith(prefix)
+                        or not rule[len(prefix):].isidentifier() for rule in rules):
+        raise ValueError('scoped MCP allowlist must be bounded agent_link_native tool rules')
+    return rules
+
+
+def build_launch(config_path, config, *, cli_args=(), session_id=None, executable=None, mcp_allowlist=None):
     """Create private generated settings and argv, without launching a provider."""
     runtime = config['runtime']
     if runtime not in ('codex', 'claude'):
         raise ValueError('unsupported CLI runtime')
+    allow_rules = _validate_mcp_allowlist(runtime, mcp_allowlist)
     if runtime == 'codex' and any(arg in ('-C', '--cd') or arg.startswith('--cd=') or
                                   (arg.startswith('-C') and len(arg) > 2) for arg in cli_args):
         raise ValueError('configure workspace in the connector; do not override it through CLI arguments')
@@ -116,8 +138,12 @@ def build_launch(config_path, config, *, cli_args=(), session_id=None, executabl
             raise ValueError('provider executable must be an absolute executable regular file')
         executable = str(executable)
     if runtime == 'claude':
+        settings = {'hooks': hooks}
+        if allow_rules:
+            # Scoped pre-approval for exactly the wake tools; no bypass/accept-all mode.
+            settings['permissions'] = {'allow': allow_rules}
         private_json(launch_dir / 'mcp.json', {'mcpServers': {'agent_link_native': mcp}})
-        private_json(launch_dir / 'settings.json', {'hooks': hooks})
+        private_json(launch_dir / 'settings.json', settings)
         argv = [executable, '--mcp-config', str(launch_dir / 'mcp.json'),
                 '--settings', str(launch_dir / 'settings.json'),
                 '--append-system-prompt', INSTRUCTIONS, *cli_args]
@@ -145,6 +171,10 @@ def build_launch(config_path, config, *, cli_args=(), session_id=None, executabl
     })
     env = dict(os.environ)
     env['AGENT_LINK_NATIVE_SESSION_ID'] = native_id
+    # Non-secret discovery pointers let an agent use the full, hash-pinned Mesh
+    # artifact transport without guessing bundle paths or falling back to SSH.
+    env['AGENT_LINK_NATIVE_CONFIG'] = str(config_path)
+    env['AGENT_LINK_ARTIFACT_CLI'] = str(ROOT / 'scripts' / 'agent-link-artifacts.py')
     return {'argv': argv, 'env': env, 'cwd': str(workspace),
             'native_session_id': native_id, 'launch_dir': str(launch_dir)}
 
@@ -180,13 +210,15 @@ def run_with_doorbell(launch, config_path, pane, *, popen=subprocess.Popen):
         except (ValueError, OSError):
             pass  # signals can only be installed on the main thread (e.g. under tests)
 
-    def spawn(argv):
+    def spawn(argv, *, quiet=False):
         # A stop latched before this point must prevent the spawn outright; one
         # that lands in the tiny window after the check is caught right after the
         # child is tracked, and that child is terminated at once.
         if terminating.is_set():
             return None
-        child = popen(argv, cwd=launch['cwd'], env=launch['env'])
+        streams = {'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL,
+                   'stderr': subprocess.DEVNULL} if quiet else {}
+        child = popen(argv, cwd=launch['cwd'], env=launch['env'], **streams)
         children.append(child)
         if terminating.is_set():
             try:
@@ -197,7 +229,7 @@ def run_with_doorbell(launch, config_path, pane, *, popen=subprocess.Popen):
 
     try:
         spawn([sys.executable, str(ROOT / 'scripts/agent-link-doorbell.py'),
-               '--config', str(Path(config_path).resolve(strict=True)), '--tmux-target', pane])
+               '--config', str(Path(config_path).resolve(strict=True)), '--tmux-target', pane], quiet=True)
         provider = spawn(launch['argv'])
         if provider is None:
             return 0  # a stop request arrived before the provider could start

@@ -137,3 +137,10 @@ viewed, accepted and replied; success from `link_send` proves publication only.
 If tools are missing after an update, restart the connector/MCP process and
 compare connector/server versions with `link_status`. Reuse the private binding
 and queues. Review blocked publications instead of resending work under new IDs.
+
+`link_artifacts` intentionally previews at most 16 KiB of text. A truncated
+artifact is transferred in full through the authenticated Mesh artifact API,
+not through SSH: use `$AGENT_LINK_ARTIFACT_CLI download --config
+$AGENT_LINK_NATIVE_CONFIG` with the exact ID, SHA-256 and base revision and an
+explicit nonexistent output path. Bundle unpacking likewise requires the same
+base pin and a new destination; it never executes content or overwrites files.

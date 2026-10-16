@@ -3,9 +3,18 @@
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
 
 from artifact_client import ArtifactClient, MAX_ARTIFACT, digest, pack, read_regular, unpack, validate_bundle, write_new
+
+
+def connected_transport(config_path):
+    """Resolve transport only from the connector's strict private configuration."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "adapters"))
+    from native_bridge import load_config
+    config = load_config(Path(config_path))
+    return config["url"], config["key_file"], config.get("ca_file"), config["project_id"]
 
 
 def main():
@@ -19,11 +28,12 @@ def main():
     p.add_argument("--output", required=True)
     for name in ("upload", "download"):
         p = commands.add_parser(name)
-        p.add_argument("--url", required=True)
-        p.add_argument("--key-file", required=True)
+        p.add_argument("--config", help="private connector config; derives URL, key, CA and project")
+        p.add_argument("--url")
+        p.add_argument("--key-file")
         p.add_argument("--ca-file")
         p.add_argument("--allow-loopback-http", action="store_true")
-        p.add_argument("--project", required=True)
+        p.add_argument("--project")
         p.add_argument("--base", required=True, help="Exact source or document revision identifier (e.g. requirements-v1); not an invented Git SHA")
         if name == "upload":
             p.add_argument("--input", required=True)
@@ -47,14 +57,22 @@ def main():
         data = read_regular(args.input, MAX_ARTIFACT)
         result = unpack(data, args.base, args.destination)
     else:
-        client = ArtifactClient(args.url, args.key_file, args.ca_file, allow_loopback_http=args.allow_loopback_http)
+        if args.config:
+            if any((args.url, args.key_file, args.ca_file, args.project, args.allow_loopback_http)):
+                raise ValueError("--config cannot be combined with manual transport arguments")
+            url, key_file, ca_file, project = connected_transport(args.config)
+        else:
+            if not args.url or not args.key_file or not args.project:
+                raise ValueError("manual transport requires --url, --key-file and --project")
+            url, key_file, ca_file, project = args.url, args.key_file, args.ca_file, args.project
+        client = ArtifactClient(url, key_file, ca_file, allow_loopback_http=args.allow_loopback_http)
         if args.command == "upload":
             data = read_regular(args.input, MAX_ARTIFACT)
             if args.role == "bundle":
                 validate_bundle(data, args.base)
-            result = client.upload(args.project, args.client_id, args.role, args.base, data, title=args.title)
+            result = client.upload(project, args.client_id, args.role, args.base, data, title=args.title)
         else:
-            data = client.download(args.artifact, args.sha256, args.base, expected_project=args.project)
+            data = client.download(args.artifact, args.sha256, args.base, expected_project=project)
             write_new(args.output, data)
             result = {"artifact_id": args.artifact, "sha256": digest(data), "size_bytes": len(data), "base_revision": args.base}
     print(json.dumps(result, ensure_ascii=False))

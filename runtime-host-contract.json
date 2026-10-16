@@ -1,6 +1,7 @@
 {
   "protocol": "AMRP",
-  "version": "1.0",
+  "version": "1.1",
+  "compatible_versions": ["1.1", "1.0"],
   "status": "mvp",
   "transport": {
     "managed": "stdio-jsonl",
@@ -22,6 +23,13 @@
     "wake_required": ["type", "v", "wake_id", "channel_id", "message_ids", "envelope"],
     "wake_allowed": ["type", "v", "wake_id", "channel_id", "message_ids", "epoch", "generation", "envelope", "resume_hint"],
     "wake_forbidden": ["body", "message_body", "prompt", "command", "executable", "argv", "args", "env", "environment", "cwd", "shell", "thread_id", "session_id"]
+  },
+  "typed_envelope_v1_1": {
+    "required": ["source_kind", "event_kind", "source_agent_id", "target_agent_id", "project_id", "channel_id", "object_ids", "correlation_id"],
+    "source_kind": ["agent"],
+    "event_kind": ["message"],
+    "content_free": true,
+    "invariants": ["source_agent_id equals authenticated message author", "target_agent_id equals local policy agent", "object_ids equal wake message_ids", "correlation_id equals wake_id"]
   },
   "wake_states": {
     "initial": "queued",

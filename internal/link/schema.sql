@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS principals (
  key_hash bytea UNIQUE, session_id text NOT NULL DEFAULT '', last_seen_at timestamptz,
  activity text NOT NULL DEFAULT '', runtime text NOT NULL DEFAULT ''
 );
+ALTER TABLE principals ADD COLUMN IF NOT EXISTS archived_at timestamptz;
 -- Upgrade the original constraint without rewriting principals or their keys.
 DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='principals'::regclass

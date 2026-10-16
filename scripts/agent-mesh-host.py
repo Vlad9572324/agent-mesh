@@ -10,9 +10,14 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "adapters"))
-from native_bridge import NativeBridge, NativeError
+from native_bridge import NativeBridge, NativeError, NativeHTTPError
 from coordination import origin_identity
 from runtime_host import RuntimeHost, load_policy
+
+
+def _is_fatal_auth(error):
+    """A terminal auth refusal (stale/revoked key, lost grant) will not recover by retrying."""
+    return isinstance(error, NativeHTTPError) and error.status in (401, 403)
 
 
 def main(argv=None):
@@ -64,6 +69,14 @@ def main(argv=None):
             except NativeError as error:
                 if args.once:
                     raise
+                if _is_fatal_auth(error):
+                    print(json.dumps({"success": False, "fatal": True,
+                                      "error_category": str(error),
+                                      "detail": "mesh credential rejected (stale or revoked key, "
+                                                "or lost channel authorization); not retrying. "
+                                                "Re-provision the connector and restart the host."}),
+                          file=sys.stderr, flush=True)
+                    return 2
                 print(json.dumps({"success": False, "retrying": True,
                                   "error_category": str(error)}), file=sys.stderr, flush=True)
                 stop_event.wait(policy["poll_seconds"])

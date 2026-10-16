@@ -141,13 +141,40 @@ func TestOwnerReadAndAdministrationBoundaries(t *testing.T) {
 	for _, path := range []string{"/v1/heartbeat", "/v1/channels/general/messages", "/v1/projects/pilot/notes", "/v1/messages/" + m["id"].(string) + "/receipts"} {
 		f.expect("POST", path, "owner", map[string]any{}, 404)
 	}
-	for _, action := range []string{"rotate-key", "revoke-key"} {
+	for _, action := range []string{"rotate-key", "revoke-key", "archive"} {
 		f.expect("POST", "/v1/admin/principals/owner/"+action, "owner", map[string]any{}, 403)
 	}
 	f.access("owner", "project", "pilot", "read", 403)
 	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "evil-owner", "name": "evil", "kind": "owner"}, 400)
 	f.expect("GET", "/v1/projects/nonexistent/channels", "owner", nil, 404)
 	f.expect("GET", "/v1/channels/nonexistent/messages", "owner", nil, 404)
+}
+
+func TestAdminArchivesPrincipalWithoutDeletingHistory(t *testing.T) {
+	f := newFixture(t)
+	f.owner("owner")
+	f.message("archive-history", "codex-pilot")
+	f.expect("POST", "/v1/admin/principals/codex-pilot/archive", "owner", map[string]any{}, 200)
+	f.expect("POST", "/v1/admin/principals/codex-pilot/archive", "owner", map[string]any{}, 200)
+	f.expect("GET", "/v1/me", "codex-pilot", nil, 401)
+	f.expect("POST", "/v1/admin/principals/codex-pilot/rotate-key", "owner", map[string]any{}, 409)
+	f.access("codex-pilot", "project", "pilot", "read", 409)
+
+	var archived, keyRevoked, messageKept bool
+	var memberships int
+	err := f.s.Pool.QueryRow(context.Background(), `SELECT archived_at IS NOT NULL,key_hash IS NULL,
+	 (SELECT EXISTS(SELECT 1 FROM messages WHERE client_id='archive-history')),
+	 (SELECT count(*) FROM project_members WHERE agent_id='codex-pilot')+(SELECT count(*) FROM channel_members WHERE agent_id='codex-pilot')
+	 FROM principals WHERE id='codex-pilot'`).Scan(&archived, &keyRevoked, &messageKept, &memberships)
+	if err != nil || !archived || !keyRevoked || !messageKept || memberships != 0 {
+		t.Fatalf("principal archive state is unsafe: archived=%v revoked=%v history=%v memberships=%d err=%v", archived, keyRevoked, messageKept, memberships, err)
+	}
+	overview := f.expect("GET", "/v1/admin/overview", "owner", nil, 200)
+	raw, _ := json.Marshal(overview["principals"])
+	if bytes.Contains(raw, []byte("codex-pilot")) {
+		t.Fatal("archived principal remained in active inventory")
+	}
+	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "codex-pilot", "name": "Reused", "kind": "agent"}, 409)
 }
 
 func TestAdminInventoryAccessAndSecretHygiene(t *testing.T) {

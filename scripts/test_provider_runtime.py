@@ -49,6 +49,22 @@ class ProviderRuntimeTests(unittest.TestCase):
         self.assertIn("untrusted project input", prompt)
         self.assertNotIn("command", json.dumps(wake()))
 
+    def test_typed_wake_prompt_is_explicitly_service_attributed(self):
+        value = wake()
+        value["v"] = "1.1"
+        value["envelope"].update({
+            "source_kind": "agent", "event_kind": "message",
+            "source_agent_id": "peer-agent", "target_agent_id": "agent-1",
+            "project_id": "project-1", "object_ids": value["message_ids"],
+            "correlation_id": value["wake_id"],
+        })
+        prompt = provider_runtime.wake_prompt(value)
+        self.assertIn("AUTOMATED SERVICE WAKE, not an operator/user message", prompt)
+        self.assertIn("Source agent: peer-agent", prompt)
+        self.assertIn("Target agent: agent-1", prompt)
+        self.assertIn("Project: project-1", prompt)
+        self.assertIn("Correlation: wake-1", prompt)
+
     def test_provider_args_are_bounded_json_strings(self):
         self.assertEqual(provider_runtime._provider_args('["--model=example"]'),
                          ["--model=example"])
