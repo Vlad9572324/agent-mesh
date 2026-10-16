@@ -435,6 +435,11 @@ class InstalledClientTests(unittest.TestCase):
         create = next(item for item in tmux_run.call_args_list if item.args[1] == "new-session")
         self.assertIn("--doorbell", create.args)
         self.assertEqual(create.args[-3:], ("--", "--dangerously-skip-permissions", "--resume"))
+        window_size = [item for item in tmux_run.call_args_list
+                       if item.args[1:5] == ("set-window-option", "-t", session + ":0", "window-size")]
+        self.assertEqual(len(window_size), 1)
+        self.assertEqual(window_size[0].args[-1], "latest")
+        self.assertFalse(any(item.args[1] == "resize-window" for item in tmux_run.call_args_list))
         self.assertNotIn("-g", [part for item in tmux_run.call_args_list for part in item.args])
         self.assertEqual(installed_path.split(os.pathsep), [str(self.home / ".local/bin"), "/usr/bin"])
 
@@ -452,6 +457,19 @@ class InstalledClientTests(unittest.TestCase):
         with patch.object(mesh_client, "tmux_run", side_effect=answers), self.assertRaisesRegex(
                 mesh_client.ClientError, "different Agent Mesh identity"):
             mesh_client.prepare_session("tmux", mesh_client.session_name(item["agent_id"]), item, ["provider"])
+
+    def test_existing_matching_session_is_repaired_to_follow_latest_client_size(self):
+        item = {"agent_id": "claude-helper", "bundle": str(self.bundle)}
+        bundle_id = hashlib.sha256(str(self.bundle.resolve()).encode("utf-8")).hexdigest()
+        answers = [types.SimpleNamespace(returncode=0, stdout=""),
+                   types.SimpleNamespace(returncode=0, stdout=item["agent_id"] + "\n"),
+                   types.SimpleNamespace(returncode=0, stdout=bundle_id + "\n"),
+                   types.SimpleNamespace(returncode=0, stdout="")]
+        with patch.object(mesh_client, "tmux_run", side_effect=answers) as tmux_run:
+            session = mesh_client.session_name(item["agent_id"])
+            mesh_client.prepare_session("tmux", session, item, ["provider"])
+        self.assertEqual(tmux_run.call_args_list[-1].args[1:],
+                         ("set-window-option", "-t", session + ":0", "window-size", "latest"))
 
     def test_multiple_connections_require_explicit_agent(self):
         self.install("claude-a")

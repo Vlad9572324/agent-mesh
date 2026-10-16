@@ -138,7 +138,11 @@ def build_launch(config_path, config, *, cli_args=(), session_id=None, executabl
             raise ValueError('provider executable must be an absolute executable regular file')
         executable = str(executable)
     if runtime == 'claude':
-        settings = {'hooks': hooks}
+        # Keep the attended TUI stable on tmux, Linux consoles and remote
+        # terminals.  Rotating tips rewrite a wide line on every spinner tick
+        # and amplify stale-cell/width glitches on limited outer terminals.
+        # This invocation-local setting does not change the user's home config.
+        settings = {'hooks': hooks, 'spinnerTipsEnabled': False}
         if allow_rules:
             # Scoped pre-approval for exactly the wake tools; no bypass/accept-all mode.
             settings['permissions'] = {'allow': allow_rules}
@@ -175,6 +179,10 @@ def build_launch(config_path, config, *, cli_args=(), session_id=None, executabl
     # artifact transport without guessing bundle paths or falling back to SSH.
     env['AGENT_LINK_NATIVE_CONFIG'] = str(config_path)
     env['AGENT_LINK_ARTIFACT_CLI'] = str(ROOT / 'scripts' / 'agent-link-artifacts.py')
+    if runtime == 'claude':
+        # Claude's official full-screen renderer reduces repeated line rewrites
+        # and flicker.  Preserve an explicit operator choice (including "0").
+        env.setdefault('CLAUDE_CODE_NO_FLICKER', '1')
     return {'argv': argv, 'env': env, 'cwd': str(workspace),
             'native_session_id': native_id, 'launch_dir': str(launch_dir)}
 

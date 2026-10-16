@@ -71,6 +71,8 @@ class NativeLaunchTests(unittest.TestCase):
         settings = json.loads((directory / 'settings.json').read_text())
         self.assertIn('PostToolUseFailure', settings['hooks'])
         self.assertIn('Notification', settings['hooks'])
+        self.assertIs(settings['spinnerTipsEnabled'], False)
+        self.assertEqual(launch['env']['CLAUDE_CODE_NO_FLICKER'], '1')
         self.assertNotIn('--strict-mcp-config', launch['argv'])
         self.assertNotIn('--setting-sources', launch['argv'])
         instructions = launch['argv'][launch['argv'].index('--append-system-prompt') + 1]
@@ -84,6 +86,13 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertEqual(launch['env']['AGENT_LINK_NATIVE_CONFIG'], str(self.config_path))
         self.assertEqual(launch['env']['AGENT_LINK_ARTIFACT_CLI'],
                          str(native_launch.ROOT / 'scripts/agent-link-artifacts.py'))
+
+    def test_claude_preserves_explicit_renderer_choice(self):
+        self.config['runtime'] = 'claude'
+        with patch('native_launch.shutil.which', return_value='/fake/claude'), \
+                patch.dict(os.environ, {'CLAUDE_CODE_NO_FLICKER': '0'}, clear=False):
+            launch = native_launch.build_launch(self.config_path, self.config)
+        self.assertEqual(launch['env']['CLAUDE_CODE_NO_FLICKER'], '0')
 
     def test_claude_scoped_mcp_allowlist_without_bypass(self):
         self.config['runtime'] = 'claude'

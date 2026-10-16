@@ -76,6 +76,14 @@ def prepare_session(tmux, session, item, command):
         if (tmux_option(tmux, session, "@agent_mesh_agent") != item["agent_id"]
                 or tmux_option(tmux, session, "@agent_mesh_bundle") != bundle_id):
             raise ClientError("The existing tmux session has a different Agent Mesh identity; run mesh-connect restart after reviewing it.")
+        # A previous launcher may have left the window in manual mode.  That
+        # freezes the TUI at the bootstrap terminal size and produces a small
+        # rendered rectangle surrounded by tmux fill cells on a larger client.
+        # The dedicated session has one attached client (`attach -d` below), so
+        # following the latest client is deterministic and keeps normal
+        # terminal resize events working without changing global tmux state.
+        if tmux_run(tmux, "set-window-option", "-t", session + ":0", "window-size", "latest").returncode != 0:
+            raise ClientError("Could not enable automatic terminal resizing for the Agent Mesh session.")
         return
     try:
         size = os.get_terminal_size()
@@ -88,8 +96,7 @@ def prepare_session(tmux, session, item, command):
     settings = (
         ("set-option", "-t", session, "@agent_mesh_agent", item["agent_id"]),
         ("set-option", "-t", session, "@agent_mesh_bundle", bundle_id),
-        ("set-window-option", "-t", session + ":0", "window-size", "manual"),
-        ("resize-window", "-t", session + ":0", "-x", str(columns), "-y", str(lines)),
+        ("set-window-option", "-t", session + ":0", "window-size", "latest"),
     )
     if any(tmux_run(tmux, *setting).returncode != 0 for setting in settings):
         tmux_run(tmux, "kill-session", "-t", session)
