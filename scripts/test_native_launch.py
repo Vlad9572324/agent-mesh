@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -80,6 +81,9 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertIn('explicitly with link_inbox', instructions)
         mcp = json.loads((directory / 'mcp.json').read_text())['mcpServers']['agent_link_native']
         self.assertEqual(mcp['env']['AGENT_LINK_NATIVE_SESSION_ID'], launch['native_session_id'])
+        self.assertEqual(launch['env']['AGENT_LINK_NATIVE_CONFIG'], str(self.config_path))
+        self.assertEqual(launch['env']['AGENT_LINK_ARTIFACT_CLI'],
+                         str(native_launch.ROOT / 'scripts/agent-link-artifacts.py'))
 
     def test_claude_scoped_mcp_allowlist_without_bypass(self):
         self.config['runtime'] = 'claude'
@@ -187,6 +191,10 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertEqual([p[2].role for p in processes], ['doorbell', 'provider'])
         self.assertIn('%7', processes[0][0])
         self.assertIn(str(self.config_path), processes[0][0])
+        self.assertEqual(processes[0][1]['stdin'], subprocess.DEVNULL)
+        self.assertEqual(processes[0][1]['stdout'], subprocess.DEVNULL)
+        self.assertEqual(processes[0][1]['stderr'], subprocess.DEVNULL)
+        self.assertNotIn('stdout', processes[1][1])
         self.assertTrue(processes[0][2].terminated)
         self.assertIn(('doorbell', 'wait', 5), calls)
 

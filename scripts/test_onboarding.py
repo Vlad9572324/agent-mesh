@@ -180,11 +180,15 @@ class InstallerTests(unittest.TestCase):
             return real_open("/dev/null", os.O_RDWR) if name == "/dev/tty" else real_open(name, flags, *args, **kwargs)
         with patch.object(installer, "install_attended_dependency", side_effect=lambda: order.append("dependency")), \
                 patch.object(installer, "redeem", side_effect=lambda *_: (order.append("redeem"), archive(package_files()))[1]), \
-                patch.object(installer.os, "open", side_effect=opened), patch.object(installer.os, "execv") as execute, \
+                patch.object(installer.os, "open", side_effect=opened), patch.object(installer.os, "dup2") as dup2, \
+                patch.object(installer.os, "execv") as execute, \
                 contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--install-dir", str(path), "--runtime", "claude", "--attended"]), 0)
         self.assertEqual(order, ["dependency", "redeem"])
         self.assertEqual(execute.call_args.args[1][-1], "--doorbell")
+        source_fds = [item.args[0] for item in dup2.call_args_list]
+        self.assertEqual([item.args[1] for item in dup2.call_args_list], [0, 1, 2])
+        self.assertEqual(len(set(source_fds)), 1)
 
 
 class FakeHTTP:
@@ -419,12 +423,35 @@ class InstalledClientTests(unittest.TestCase):
         with patch.object(mesh_client.shutil, "which", return_value=None), self.assertRaisesRegex(mesh_client.ClientError, "apt-get install"):
             mesh_client.main(["claude"], home=self.home)
         with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
-                patch.dict(os.environ, {}, clear=True), patch.object(mesh_client.os, "execvp") as execute:
+                patch.dict(os.environ, {"PATH": "/usr/bin"}, clear=True), \
+                patch.object(mesh_client, "tmux_run", side_effect=lambda _tmux, *parts, **_kw: types.SimpleNamespace(
+                    returncode=1 if parts[0] == "has-session" else 0, stdout="")) as tmux_run, \
+                patch.object(mesh_client.os, "execvp") as execute:
             mesh_client.main(["claude", "--dangerously-skip-permissions", "--resume"], home=self.home)
+            installed_path = os.environ["PATH"]
         argv = execute.call_args.args[1]
-        self.assertEqual(argv[:5], ["/usr/bin/tmux", "new-session", "-A", "-s", "mesh-claude-helper"])
-        self.assertIn("--doorbell", argv)
-        self.assertEqual(argv[-3:], ["--", "--dangerously-skip-permissions", "--resume"])
+        session = mesh_client.session_name("claude-helper")
+        self.assertEqual(argv, ["/usr/bin/tmux", "attach-session", "-d", "-t", session])
+        create = next(item for item in tmux_run.call_args_list if item.args[1] == "new-session")
+        self.assertIn("--doorbell", create.args)
+        self.assertEqual(create.args[-3:], ("--", "--dangerously-skip-permissions", "--resume"))
+        self.assertNotIn("-g", [part for item in tmux_run.call_args_list for part in item.args])
+        self.assertEqual(installed_path.split(os.pathsep), [str(self.home / ".local/bin"), "/usr/bin"])
+
+    def test_session_names_do_not_collide_after_sanitizing(self):
+        first = mesh_client.session_name("agent.a")
+        second = mesh_client.session_name("agent:a")
+        self.assertNotEqual(first, second)
+        self.assertRegex(first, r"^mesh-agent-a-[0-9a-f]{10}$")
+
+    def test_existing_session_requires_matching_identity_and_bundle(self):
+        item = {"agent_id": "claude-helper", "bundle": str(self.bundle)}
+        answers = [types.SimpleNamespace(returncode=0, stdout=""),
+                   types.SimpleNamespace(returncode=0, stdout="another-agent\n"),
+                   types.SimpleNamespace(returncode=0, stdout="ignored\n")]
+        with patch.object(mesh_client, "tmux_run", side_effect=answers), self.assertRaisesRegex(
+                mesh_client.ClientError, "different Agent Mesh identity"):
+            mesh_client.prepare_session("tmux", mesh_client.session_name(item["agent_id"]), item, ["provider"])
 
     def test_multiple_connections_require_explicit_agent(self):
         self.install("claude-a")

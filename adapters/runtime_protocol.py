@@ -10,7 +10,7 @@ import re
 
 
 MAX_FRAME_BYTES = 64 * 1024
-SUPPORTED_VERSIONS = ("1.0",)
+SUPPORTED_VERSIONS = ("1.1", "1.0")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _CAP = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -79,15 +79,30 @@ def _positive_int(value, field):
         raise ProtocolError(field + " must be a positive integer")
 
 
-def _validate_envelope(value):
+def _validate_envelope(value, version, wake):
     if not isinstance(value, dict):
         raise ProtocolError("envelope must be an object")
     # Deliberately structured and closed: peer text, commands and arguments
     # have nowhere to enter the local execution control plane.
-    _exact_keys(value, ("sender_id", "channel_id", "message_count"))
+    legacy = ("sender_id", "channel_id", "message_count")
+    typed = ("source_kind", "event_kind", "source_agent_id", "target_agent_id",
+             "project_id", "object_ids", "correlation_id")
+    _exact_keys(value, legacy + (typed if version == "1.1" else ()))
     _identifier(value["sender_id"], "envelope.sender_id")
     _identifier(value["channel_id"], "envelope.channel_id")
     _positive_int(value["message_count"], "envelope.message_count")
+    if version == "1.1":
+        if value["source_kind"] != "agent" or value["event_kind"] != "message":
+            raise ProtocolError("wake envelope has an unsupported source or event kind")
+        for field in ("source_agent_id", "target_agent_id", "project_id", "correlation_id"):
+            _identifier(value[field], "envelope." + field)
+        _string_list(value["object_ids"], "envelope.object_ids", _identifier)
+        if value["source_agent_id"] != value["sender_id"]:
+            raise ProtocolError("wake envelope source does not match sender")
+        if value["object_ids"] != wake["message_ids"]:
+            raise ProtocolError("wake envelope objects do not match message_ids")
+        if value["correlation_id"] != wake["wake_id"]:
+            raise ProtocolError("wake envelope correlation does not match wake")
 
 
 def validate_message(message, expected_types=None):
@@ -126,7 +141,7 @@ def validate_message(message, expected_types=None):
         _identifier(message["wake_id"], "wake_id")
         _identifier(message["channel_id"], "channel_id")
         _string_list(message["message_ids"], "message_ids", _identifier)
-        _validate_envelope(message["envelope"])
+        _validate_envelope(message["envelope"], message["v"], message)
         if message["envelope"]["channel_id"] != message["channel_id"]:
             raise ProtocolError("envelope channel does not match wake")
         if message["envelope"]["message_count"] != len(message["message_ids"]):

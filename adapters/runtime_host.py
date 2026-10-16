@@ -292,10 +292,18 @@ class RuntimeHost:
                 raise ProtocolError("hello version differs from negotiated version")
             write_frame(proc.stdin, {"v": version, "type": "welcome", "host_id": self.policy["route_id"],
                                      "accepted_version": version, "policy": {"max_turn_seconds": self.policy["turn_seconds"]}})
+            message_ids = json.loads(row["message_ids"])
+            envelope = {"sender_id": row["sender_id"], "channel_id": row["channel_id"],
+                        "message_count": len(message_ids)}
+            if version == "1.1":
+                envelope.update({"source_kind": "agent", "event_kind": "message",
+                                 "source_agent_id": row["sender_id"],
+                                 "target_agent_id": self.policy["agent_id"],
+                                 "project_id": self.policy["project_id"],
+                                 "object_ids": message_ids, "correlation_id": wake_id})
             wake = {"v": version, "type": "wake", "wake_id": wake_id,
-                    "channel_id": row["channel_id"], "message_ids": json.loads(row["message_ids"]),
-                    "envelope": {"sender_id": row["sender_id"], "channel_id": row["channel_id"],
-                                 "message_count": len(json.loads(row["message_ids"]))},
+                    "channel_id": row["channel_id"], "message_ids": message_ids,
+                    "envelope": envelope,
                     "generation": self.generation, "epoch": self.epoch}
             # Persist the ambiguity boundary before touching the child stream.
             # A crash from this point cannot prove that the child saw no bytes.

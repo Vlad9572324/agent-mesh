@@ -121,6 +121,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/admin/access", s.adminAccess)
 	mux.HandleFunc("POST /v1/admin/principals/{agent}/rotate-key", s.adminRotate)
 	mux.HandleFunc("POST /v1/admin/principals/{agent}/revoke-key", s.adminRevoke)
+	mux.HandleFunc("POST /v1/admin/principals/{agent}/archive", s.adminArchivePrincipal)
 	mux.HandleFunc("GET /v1/admin/audit", s.adminAudit)
 	mux.HandleFunc("GET /v1/admin/deliveries", s.adminDeliveries)
 	mux.HandleFunc("GET /v1/admin/delivery-policy", s.adminDeliveryPolicy)
@@ -166,7 +167,7 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 	ctx := r.Context()
-	principals, err := collect(ctx, tx, "SELECT id,name,kind,runtime,session_id,last_seen_at,activity,key_hash IS NOT NULL,clock_timestamp() FROM principals ORDER BY id", func(row pgx.CollectableRow) (inventoryPrincipal, error) {
+	principals, err := collect(ctx, tx, "SELECT id,name,kind,runtime,session_id,last_seen_at,activity,key_hash IS NOT NULL,clock_timestamp() FROM principals WHERE archived_at IS NULL ORDER BY id", func(row pgx.CollectableRow) (inventoryPrincipal, error) {
 		var p inventoryPrincipal
 		var now time.Time
 		err := row.Scan(&p.ID, &p.Name, &p.Kind, &p.Runtime, &p.SessionID, &p.LastSeenAt, &p.Activity, &p.KeyActive, &now)
@@ -325,13 +326,18 @@ func (s *Server) adminAccess(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	ctx := r.Context()
 	var kind string
-	err := tx.QueryRow(ctx, "SELECT kind FROM principals WHERE id=$1 FOR UPDATE", in.AgentID).Scan(&kind)
+	var archived bool
+	err := tx.QueryRow(ctx, "SELECT kind,archived_at IS NOT NULL FROM principals WHERE id=$1 FOR UPDATE", in.AgentID).Scan(&kind, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 404, "principal not found")
 		return
 	}
 	if err != nil {
 		internal(w)
+		return
+	}
+	if archived {
+		fail(w, 409, "principal is archived")
 		return
 	}
 	if kind == "owner" {
@@ -405,13 +411,18 @@ func (s *Server) adminKey(w http.ResponseWriter, r *http.Request, rotate bool) {
 	}
 	defer tx.Rollback(r.Context())
 	var kind string
-	err := tx.QueryRow(r.Context(), "SELECT kind FROM principals WHERE id=$1 FOR UPDATE", id).Scan(&kind)
+	var archived bool
+	err := tx.QueryRow(r.Context(), "SELECT kind,archived_at IS NOT NULL FROM principals WHERE id=$1 FOR UPDATE", id).Scan(&kind, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 404, "principal not found")
 		return
 	}
 	if err != nil {
 		internal(w)
+		return
+	}
+	if archived {
+		fail(w, 409, "principal is archived")
 		return
 	}
 	if kind == "owner" {
@@ -449,6 +460,52 @@ func (s *Server) adminKey(w http.ResponseWriter, r *http.Request, rotate bool) {
 }
 func (s *Server) adminRotate(w http.ResponseWriter, r *http.Request) { s.adminKey(w, r, true) }
 func (s *Server) adminRevoke(w http.ResponseWriter, r *http.Request) { s.adminKey(w, r, false) }
+
+func (s *Server) adminArchivePrincipal(w http.ResponseWriter, r *http.Request) {
+	var in struct{}
+	if !decode(w, r, &in) {
+		return
+	}
+	id := r.PathValue("agent")
+	if !validID(id) {
+		fail(w, 400, "invalid principal identifier")
+		return
+	}
+	tx, ok := s.adminTx(w, r)
+	if !ok {
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var kind string
+	var archived bool
+	err := tx.QueryRow(r.Context(), "SELECT kind,archived_at IS NOT NULL FROM principals WHERE id=$1 FOR UPDATE", id).Scan(&kind, &archived)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, 404, "principal not found")
+		return
+	}
+	if err != nil {
+		internal(w)
+		return
+	}
+	if kind == "owner" {
+		fail(w, 403, "owner accounts are managed only through local CLI")
+		return
+	}
+	if !archived {
+		if err = revokeAgentInvitations(r.Context(), tx, id); err != nil {
+			internal(w)
+			return
+		}
+		if _, err = tx.Exec(r.Context(), "DELETE FROM channel_members WHERE agent_id=$1; DELETE FROM project_members WHERE agent_id=$1; UPDATE principals SET key_hash=NULL,session_id='',activity='',archived_at=clock_timestamp() WHERE id=$1", id); err != nil {
+			internal(w)
+			return
+		}
+	}
+	if !adminCommit(w, r, tx, "principal.archive", "principal", id, auditDetails{}) {
+		return
+	}
+	respond(w, 200, map[string]bool{"archived": true})
+}
 
 func adminLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 	limit := 100

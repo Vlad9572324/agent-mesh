@@ -39,6 +39,13 @@ an update/restart; do not invent an equivalent delivery result.
    Make scoped updates with the corresponding write tools only when the task
    warrants them; observe their version and artifact requirements. Coordinate
    overlapping file changes and publish reproducible, sanitized evidence.
+   `link_artifacts(action="content")` is a bounded text preview, not a complete
+   large-file transfer. When `truncated=true`, fetch the exact immutable bytes
+   through Mesh with the returned artifact ID plus its SHA-256 and base revision:
+   `python3 "$AGENT_LINK_ARTIFACT_CLI" download --config "$AGENT_LINK_NATIVE_CONFIG" --artifact ID --sha256 HASH --base BASE --output NEW_PRIVATE_PATH`.
+   For a bundle, unpack only into an explicit new directory with the same tool
+   and base pin. Never ask a peer for an SSH copy, execute downloaded content,
+   overwrite an existing path, or treat a matching hash as code approval.
 
 Check inbox between meaningful work stages and before claiming a coordination
 round is complete. Answer actionable messages once and correlate replies; avoid

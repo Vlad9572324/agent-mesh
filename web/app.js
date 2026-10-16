@@ -667,6 +667,9 @@
     "Rotate key…": "Заменить ключ…",
     "Issue key…": "Выпустить ключ…",
     "Revoke key…": "Отозвать ключ…",
+    "Remove account…": "Убрать учётную запись…",
+    "Remove “{0}” ({1}) from Agent Mesh? Its key and all permissions will be revoked. It will disappear from active lists, while message history and audit records remain intact.": "Убрать «{0}» ({1}) из Agent Mesh? Ключ и все права будут отозваны. Запись исчезнет из активных списков, а история сообщений и аудит сохранятся.",
+    "Account {0} removed from active lists.": "Учётная запись {0} убрана из активных списков.",
     "No accounts received.": "Учётные записи не получены.",
     "Select an active project": "Выберите активный проект",
     "Select an account": "Выберите учётную запись",
@@ -3611,8 +3614,8 @@
         appendOwned(card, () => (node("p", "field-help", () => (tr("Owner. This account and its key can only be managed through the local CLI.")))));
       } else if (["agent", "viewer"].includes(principal.kind)) {
         const actions = node("div", "admin-actions");
-        for (const [action, label] of [["rotate-key", principal.key_active === true ? tr("Rotate key…") : tr("Issue key…")], ["revoke-key", tr("Revoke key…")]]) {
-          const button = node("button", action === "revoke-key" ? "secondary-button danger-button" : "secondary-button", () => (label));
+        for (const [action, label] of [["rotate-key", principal.key_active === true ? tr("Rotate key…") : tr("Issue key…")], ["revoke-key", tr("Revoke key…")], ["archive", tr("Remove account…")]]) {
+          const button = node("button", action === "rotate-key" ? "secondary-button" : "secondary-button danger-button", () => (label));
           button.type = "button"; button.dataset.adminAction = action; button.dataset.principalId = principal.id;
           button.dataset.focusKey = `principal-action:${principal.id}:${action}`;
           button.addEventListener("click", () => void adminKeyAction(principal, action)); appendOwned(actions, () => (button));
@@ -3980,7 +3983,12 @@
   }
 
   async function adminKeyAction(principal, action) {
-    if (!isOwner() || !["agent", "viewer"].includes(principal.kind) || state.adminBusy || blockingAdminLoad()) return;
+    if (!isOwner() || !["agent", "viewer"].includes(principal.kind) || !["rotate-key", "revoke-key", "archive"].includes(action) || state.adminBusy || blockingAdminLoad()) return;
+    if (action === "archive") {
+      if (!window.confirm(tr("Remove “{0}” ({1}) from Agent Mesh? Its key and all permissions will be revoked. It will disappear from active lists, while message history and audit records remain intact.", () => (principal.name), () => (principal.id)))) return;
+      await adminMutation(`/v1/admin/principals/${pathId(principal.id)}/archive`, "POST", {}, tr("Account {0} removed from active lists.", () => (principal.id)));
+      return;
+    }
     const rotate = action === "rotate-key";
     const warning = rotate
       ? tr("Issue a new key for “{0}” ({1})? The old key will stop working immediately. The new key will be shown only once. History and the ID will be preserved.", () => (principal.name), () => (principal.id))

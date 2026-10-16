@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Launch an installed attended Agent Mesh CLI connection."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 import sys
 
 
@@ -47,6 +49,53 @@ def registrations(home):
     return result
 
 
+def session_name(agent_id):
+    """Return a readable, collision-resistant tmux session name."""
+    prefix = re.sub(r"[^A-Za-z0-9_-]", "-", agent_id)[:48].strip("-") or "agent"
+    digest = hashlib.sha256(agent_id.encode("utf-8")).hexdigest()[:10]
+    return "mesh-%s-%s" % (prefix, digest)
+
+
+def tmux_run(tmux, *args, capture=False):
+    return subprocess.run(
+        [tmux, *args], check=False, text=True,
+        stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL)
+
+
+def tmux_option(tmux, session, name):
+    result = tmux_run(tmux, "show-options", "-v", "-t", session, name, capture=True)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def prepare_session(tmux, session, item, command):
+    """Create or validate the dedicated attended session without touching global tmux state."""
+    bundle_id = hashlib.sha256(str(Path(item["bundle"]).resolve()).encode("utf-8")).hexdigest()
+    exists = tmux_run(tmux, "has-session", "-t", session).returncode == 0
+    if exists:
+        if (tmux_option(tmux, session, "@agent_mesh_agent") != item["agent_id"]
+                or tmux_option(tmux, session, "@agent_mesh_bundle") != bundle_id):
+            raise ClientError("The existing tmux session has a different Agent Mesh identity; run mesh-connect restart after reviewing it.")
+        return
+    try:
+        size = os.get_terminal_size()
+        columns, lines = max(size.columns, 100), max(size.lines, 30)
+    except OSError:
+        columns, lines = 120, 40
+    created = tmux_run(tmux, "new-session", "-d", "-s", session, "-x", str(columns), "-y", str(lines), *command)
+    if created.returncode != 0:
+        raise ClientError("Could not create the dedicated tmux session.")
+    settings = (
+        ("set-option", "-t", session, "@agent_mesh_agent", item["agent_id"]),
+        ("set-option", "-t", session, "@agent_mesh_bundle", bundle_id),
+        ("set-window-option", "-t", session + ":0", "window-size", "manual"),
+        ("resize-window", "-t", session + ":0", "-x", str(columns), "-y", str(lines)),
+    )
+    if any(tmux_run(tmux, *setting).returncode != 0 for setting in settings):
+        tmux_run(tmux, "kill-session", "-t", session)
+        raise ClientError("Could not secure the dedicated tmux session.")
+
+
 def main(argv=None, *, home=None):
     parser = argparse.ArgumentParser(prog="mesh-connect", description=__doc__)
     parser.add_argument("runtime", choices=("codex", "claude"))
@@ -70,11 +119,20 @@ def main(argv=None, *, home=None):
     tmux = shutil.which("tmux")
     if not tmux:
         raise ClientError("tmux is required for waking the attended CLI. Install it with: sudo apt-get install -y tmux")
+    # Non-login SSH commands commonly omit the user's executable directory,
+    # even though both supported CLIs install there. Keep provider discovery
+    # consistent with an interactive shell without depending on shell startup
+    # files or a specific operating system package manager.
+    user_bin = str(home / ".local/bin")
+    path = os.environ.get("PATH", "")
+    if user_bin not in path.split(os.pathsep):
+        os.environ["PATH"] = user_bin + (os.pathsep + path if path else "")
     command = [sys.executable, "-B", str(connect), "--doorbell", "--", *args.provider_args]
-    if os.environ.get("TMUX_PANE"):
-        os.execv(sys.executable, command)
-    session = "mesh-" + re.sub(r"[^A-Za-z0-9_-]", "-", item["agent_id"])[:80]
-    os.execvp(tmux, [tmux, "new-session", "-A", "-s", session, *command])
+    session = session_name(item["agent_id"])
+    prepare_session(tmux, session, item, command)
+    if os.environ.get("TMUX"):
+        os.execvp(tmux, [tmux, "switch-client", "-t", session])
+    os.execvp(tmux, [tmux, "attach-session", "-d", "-t", session])
 
 
 if __name__ == "__main__":

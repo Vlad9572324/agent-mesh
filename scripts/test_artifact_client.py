@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,11 @@ import tempfile
 import unittest
 
 from artifact_client import ArtifactClient, digest, pack, relative_path, unpack, validate_bundle, write_new
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location("artifact_cli", ROOT / "scripts/agent-link-artifacts.py")
+artifact_cli = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(artifact_cli)
 
 
 class ArtifactBundleTests(unittest.TestCase):
@@ -130,6 +136,31 @@ class ArtifactBundleTests(unittest.TestCase):
         client.request = request
         with self.assertRaises(ValueError):
             client.download("artifact", digest(good), "base", expected_project="mine")
+
+    def test_connected_transport_uses_strict_private_connector_config(self):
+        private = self.root / "private"
+        private.mkdir(mode=0o700)
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        state = private / "state"
+        key = private / "agent.key"
+        key.write_text("a" * 64)
+        key.chmod(0o600)
+        ca = private / "ca.crt"
+        ca.write_text("fixture")
+        config = private / "config.json"
+        config.write_text(json.dumps({
+            "version": 1, "url": "https://mesh.example:8766", "runtime": "claude",
+            "ca_file": str(ca), "key_file": str(key), "agent_id": "agent-1",
+            "project_id": "project-1", "channel_ids": ["development"],
+            "workspace_root": str(workspace), "state_dir": str(state),
+        }))
+        config.chmod(0o600)
+        self.assertEqual(artifact_cli.connected_transport(config),
+                         ("https://mesh.example:8766", str(key), str(ca), "project-1"))
+        config.chmod(0o644)
+        with self.assertRaises(ValueError):
+            artifact_cli.connected_transport(config)
 
 
 if __name__ == "__main__":
