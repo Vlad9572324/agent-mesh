@@ -117,6 +117,38 @@ class NativeLaunchTests(unittest.TestCase):
             native_launch.build_launch(self.config_path, self.config,
                                        mcp_allowlist=('mcp__agent_link_native__link_inbox',))
 
+    def test_claude_scoped_mcp_allowlist_without_bypass(self):
+        self.config['runtime'] = 'claude'
+        tools = ('mcp__agent_link_native__link_inbox', 'mcp__agent_link_native__link_send')
+        with patch('native_launch.shutil.which', return_value='/fake/claude'):
+            launch = native_launch.build_launch(self.config_path, self.config, mcp_allowlist=tools)
+        settings = json.loads((Path(launch['launch_dir']) / 'settings.json').read_text())
+        self.assertEqual(settings['permissions']['allow'], list(tools))
+        self.assertNotIn('defaultMode', settings['permissions'])
+        serialized = json.dumps(settings) + ' '.join(launch['argv'])
+        for banned in ('bypassPermissions', 'acceptEdits', '--dangerously-skip-permissions'):
+            self.assertNotIn(banned, serialized)
+
+    def test_claude_without_allowlist_has_no_permissions_block(self):
+        self.config['runtime'] = 'claude'
+        with patch('native_launch.shutil.which', return_value='/fake/claude'):
+            launch = native_launch.build_launch(self.config_path, self.config)
+        settings = json.loads((Path(launch['launch_dir']) / 'settings.json').read_text())
+        self.assertNotIn('permissions', settings)
+
+    def test_mcp_allowlist_rejects_unscoped_or_bypass_rules(self):
+        self.config['runtime'] = 'claude'
+        for bad in (('*',), ('Bash',), ('mcp__other__x',), ('mcp__agent_link_native__',),
+                    ('mcp__agent_link_native__link-inbox',), ('bypassPermissions',), ()):
+            with patch('native_launch.shutil.which', return_value='/fake/claude'):
+                with self.assertRaises(ValueError):
+                    native_launch.build_launch(self.config_path, self.config, mcp_allowlist=bad)
+
+    def test_mcp_allowlist_rejected_for_codex_runtime(self):
+        with self.assertRaises(ValueError):
+            native_launch.build_launch(self.config_path, self.config,
+                                       mcp_allowlist=('mcp__agent_link_native__link_inbox',))
+
     def test_ids_are_per_invocation(self):
         with patch('native_launch.shutil.which', return_value='/fake/codex'):
             first = native_launch.build_launch(self.config_path, self.config)
