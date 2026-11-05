@@ -146,15 +146,33 @@ class NativeBridgeTests(unittest.TestCase):
         bridge = self.bridge()
         result = bridge.send("c", ["b"], "hello", client_id="hint-1")
         self.assertEqual(result["recipients"], [{"id": "b", "in_channel": True}])
-        self.assertIn("link_inbox of: b", result["hint"])
-        self.assertIn("not a read receipt", result["hint"])
+        self.assertIn("durable inbox of: b", result["hint"])
+        self.assertIn("does not prove the recipient is connected", result["hint"])
         self.api.offline = False
         note = bridge.broadcast("c", "history", client_id="hint-2")
         self.assertEqual(note["recipients"], [])
         self.assertIn("nobody was notified", note["hint"])
-        queued = native.NativeBridge._addressing_feedback({"publication_state": "pending"}, "c", ["b"], False)
+        queued = bridge._addressing_feedback({"publication_state": "pending"}, "c", ["b"], False)
         self.assertEqual(queued["recipients"], [{"id": "b", "in_channel": None}])
         self.assertIn("Queued", queued["hint"])
+
+    def test_send_warns_when_registered_recipient_never_connected(self):
+        bridge = self.bridge()
+        unseen = {"state": "unknown", "reason": "no_contact", "last_contact_at": None,
+                  "as_of": "2026-11-05T16:00:00Z", "source": "none", "scope": "complete"}
+        with patch.object(bridge, "peers", return_value={"peers": [{"id": "b", "liveness": unseen}]}):
+            result = bridge.send("c", ["b"], "hello", client_id="never-connected")
+        self.assertEqual(result["publication_state"], "sent")
+        self.assertEqual(result["recipients"][0]["liveness"], unseen)
+        self.assertIn("has never connected", result["hint"])
+        self.assertIn("exact agent ID", result["hint"])
+
+    def test_liveness_lookup_failure_does_not_erase_committed_send(self):
+        bridge = self.bridge()
+        with patch.object(bridge, "peers", side_effect=native.NativeError("offline_fixture")):
+            result = bridge.send("c", ["b"], "hello", client_id="lookup-failed")
+        self.assertEqual(result["publication_state"], "sent")
+        self.assertEqual(result["recipients"], [{"id": "b", "in_channel": True}])
 
     def test_call_returns_the_first_direct_reply(self):
         bridge = self.bridge()

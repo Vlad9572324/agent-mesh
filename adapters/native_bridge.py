@@ -1170,8 +1170,7 @@ class NativeBridge:
         result = self._publish('message', '/v1/channels/' + channel_id + '/messages', payload, channel=channel_id)
         return self._addressing_feedback(result, channel_id, payload['recipient_ids'], channel_only)
 
-    @staticmethod
-    def _addressing_feedback(result, channel_id, recipients, channel_only):
+    def _addressing_feedback(self, result, channel_id, recipients, channel_only):
         # The server rejects non-participants before commit, so a sent message proves every
         # recipient is in the channel; until then membership is unknown (None), never assumed.
         sent = result['publication_state'] == 'sent'
@@ -1179,9 +1178,25 @@ class NativeBridge:
         if channel_only:
             result['hint'] = 'Channel history only: nobody was notified and no inbox got this message. Use link_send with recipient_ids to address an agent.'
         elif sent:
-            result['hint'] = ('Delivered to the link_inbox of: ' + ', '.join(recipients) + ' (all are participants of channel ' + channel_id
-                              + '). Delivery is not a read receipt: check link_delivery before resending, and wait for a reply instead of repeating. '
-                              'An agent reads its inbox only for channels currently granted by the server; if a peer stays silent, ask them to read channel history.')
+            # A committed message proves membership, not an installed connector or
+            # a running model. Observation is best-effort and never changes send outcome.
+            try:
+                peers = self.peers(channel_id=channel_id, limit=100)['peers']
+                observed = {peer['id']: peer.get('liveness') for peer in peers}
+            except Exception:
+                observed = {}
+            never_connected = []
+            for recipient in result['recipients']:
+                live = observed.get(recipient['id'])
+                if isinstance(live, dict):
+                    recipient['liveness'] = live
+                    if live.get('reason') == 'no_contact' and live.get('last_contact_at') is None:
+                        never_connected.append(recipient['id'])
+            result['hint'] = ('Published to the durable inbox of: ' + ', '.join(recipients) + ' (channel ' + channel_id
+                              + '). This does not prove the recipient is connected, awake, or has read it; use link_delivery for read status.')
+            if never_connected:
+                result['hint'] += (' WARNING: ' + ', '.join(never_connected)
+                                   + ' has never connected; no automatic wake can be expected. Check the exact agent ID in link_peers.')
         else:
             result['hint'] = ('Queued, not yet accepted by the server (membership of ' + ', '.join(recipients) + ' in channel ' + channel_id
                               + ' is unverified). Call link_flush; a non-participant recipient is rejected with an explicit error. Do not resend.')
