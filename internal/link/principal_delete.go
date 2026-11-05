@@ -48,7 +48,7 @@ func principalDeletionState(w http.ResponseWriter, r *http.Request, tx pgx.Tx, i
 		fail(w, 409, "archive principal before permanent deletion")
 		return p, nil, false
 	}
-	var blockers []string
+	blockers := []string{}
 	for _, check := range principalDeletionBlockers {
 		var found bool
 		if err := tx.QueryRow(r.Context(), check.query, id).Scan(&found); err != nil {

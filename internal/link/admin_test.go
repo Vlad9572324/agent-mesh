@@ -198,6 +198,9 @@ func TestAdminPrincipalPermanentDeletionRequiresSafeHistory(t *testing.T) {
 	if preview["can_delete"] != true {
 		t.Fatalf("empty archived account should be deletable: %v", preview)
 	}
+	if blockers, ok := preview["blockers"].([]any); !ok || len(blockers) != 0 {
+		t.Fatalf("deletable preview must return an empty blockers array: %v", preview)
+	}
 	f.expect("DELETE", "/v1/admin/principals/reusable-agent", "owner", map[string]any{"confirm_id": "reusable-agent"}, 200)
 	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "reusable-agent", "name": "Second", "kind": "agent"}, 201)
 	f.expect("GET", "/v1/me", "reusable-agent", nil, 401)
