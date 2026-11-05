@@ -3963,7 +3963,8 @@
     // script after a deployment. Default to the safe attended command instead
     // of losing the one-time result when the new checkbox is not in that shell.
     const attended = $("admin-onboarding-attended")?.checked !== false ? " --attended" : "";
-    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}${attended}`;
+    const runtime = result.invitation.runtime === "auto" ? "" : ` --runtime ${quote(result.invitation.runtime)}`;
+    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}${runtime}${attended}`;
     $("admin-onboarding-command").value = state.onboardingCommand;
     $("admin-onboarding-repository").href = repository.href;
     const {agent_id: agentId, expires_at: expiresAt} = result.invitation;

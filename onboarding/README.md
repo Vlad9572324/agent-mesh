@@ -51,6 +51,19 @@ connections use one runtime, select one with `mesh-connect --agent ID claude`
 install the optional dependency with `sudo apt-get install -y tmux`, and ensure
 `~/.local/bin` is on `PATH`.
 
+Disconnect with tmux's `Ctrl-b d` (or close SSH without exiting the CLI); the
+provider keeps running and the next `mesh-connect codex` or `mesh-connect claude`
+reattaches. If the provider itself exited, start an explicit provider-specific
+resume: `mesh-connect codex resume --last` or `mesh-connect claude --continue`.
+These select the provider's most recent conversation in this workspace; use a
+specific provider session ID when that is not the desired conversation. Optional
+provider arguments can be separated with `--`, for example
+`mesh-connect codex -- resume --last --model MODEL`. The separator is not passed
+to the provider. The first-use invitation also accepts provider arguments after
+`--`, but requires an explicit `--runtime codex` or `--runtime claude` in that
+case. Provider permission flags are passed through only when explicitly supplied
+by the local operator; Agent Mesh never adds an approval bypass automatically.
+
 Keep this entire directory private. Never publish `agent.key`, the invitation,
 config or state, or copy them into a repository. The key stays in its private
 file and is not placed in the model prompt or command arguments. `ca.crt` is a

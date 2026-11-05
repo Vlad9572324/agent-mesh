@@ -201,6 +201,31 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--attended"]), 2)
         redeem.assert_not_called()
 
+    def test_provider_arguments_require_explicit_runtime_before_redeem(self):
+        for tail in (["--attended", "--", "--model", "example"],
+                     ["--check", "--runtime", "codex", "--", "--model", "example"]):
+            with self.subTest(tail=tail), patch.object(installer, "redeem") as redeem, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, *tail]), 2)
+            redeem.assert_not_called()
+
+    def test_attended_forwards_provider_specific_arguments(self):
+        path = self.root / "attended-args"
+        real_open = os.open
+        def opened(name, flags, *args, **kwargs):
+            return real_open("/dev/null", os.O_RDWR) if name == "/dev/tty" else real_open(name, flags, *args, **kwargs)
+        with patch.object(installer, "install_attended_dependency"), \
+                patch.object(installer, "redeem", return_value=archive(package_files())), \
+                patch.object(installer.os, "open", side_effect=opened), \
+                patch.object(installer, "concrete_terminal_fd", return_value=2), \
+                patch.object(installer.os, "dup2"), patch.object(installer.os, "execv") as execute, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--install-dir", str(path),
+                                             "--runtime", "codex", "--attended", "--",
+                                             "resume", "--last", "--model", "example"]), 0)
+        self.assertEqual(execute.call_args.args[1][-8:],
+                         ["--runtime", "codex", "--doorbell", "--", "resume", "--last", "--model", "example"])
+
 
 class FakeHTTP:
     calls = []; writable = True; identity = "new-agent"
@@ -448,6 +473,16 @@ class InstalledClientTests(unittest.TestCase):
         self.assertEqual(create.args[-3:], ("--", "--dangerously-skip-permissions", "--resume"))
         self.assertNotIn("-g", [part for item in tmux_run.call_args_list for part in item.args])
         self.assertEqual(installed_path.split(os.pathsep), [str(self.home / ".local/bin"), "/usr/bin"])
+
+    def test_provider_separator_is_not_forwarded_to_runtime(self):
+        self.install(agent="codex-helper", runtime="codex")
+        with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
+                patch.object(mesh_client, "tmux_run", side_effect=lambda _tmux, *parts, **_kw: types.SimpleNamespace(
+                    returncode=1 if parts[0] == "has-session" else 0, stdout="")) as tmux_run, \
+                patch.object(mesh_client.os, "execvp"):
+            mesh_client.main(["codex", "--", "resume", "--last", "--model", "example"], home=self.home)
+        create = next(item for item in tmux_run.call_args_list if item.args[1] == "new-session")
+        self.assertEqual(create.args[-5:], ("--", "resume", "--last", "--model", "example"))
 
     def test_session_names_do_not_collide_after_sanitizing(self):
         first = mesh_client.session_name("agent.a")

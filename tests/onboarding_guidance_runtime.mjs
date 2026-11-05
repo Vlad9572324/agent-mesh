@@ -139,6 +139,17 @@ test('wake choice adds the attended flag only when selected', () => {
   assert.doesNotMatch(f.state.onboardingCommand, /--attended/);
 });
 
+test('explicit runtime is visible in the generated command before provider-specific arguments', () => {
+  for (const runtime of ['codex', 'claude']) {
+    const f = fixture(), value = result();
+    value.invitation.runtime = runtime;
+    f.h.showOnboardingResult(value);
+    assert.match(f.state.onboardingCommand, new RegExp(`--runtime '${runtime}' --attended$`));
+  }
+  const automatic = fixture(); automatic.h.showOnboardingResult(result());
+  assert.doesNotMatch(automatic.state.onboardingCommand, /--runtime/);
+});
+
 test('scope comes from the invitation, with literal identity and requested runtime rather than inferred installation', () => {
   const f = fixture(); f.$('admin-onboarding-project').value = 'different-current-project'; f.h.showOnboardingResult(result());
   const scope = f.$('admin-onboarding-scope');

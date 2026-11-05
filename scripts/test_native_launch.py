@@ -55,6 +55,14 @@ class NativeLaunchTests(unittest.TestCase):
             self.assertEqual(launch['argv'][1+len(prefix)], '-c')
             self.assertTrue(launch['argv'][2+len(prefix)].startswith('mcp_servers.agent_link_native='))
 
+    def test_codex_resume_preserves_locally_selected_provider_flags(self):
+        with patch('native_launch.shutil.which', return_value='/fake/codex'):
+            launch = native_launch.build_launch(self.config_path, self.config, cli_args=(
+                'resume', '--last', '--model', 'example', '--dangerously-bypass-approvals-and-sandbox'))
+        self.assertEqual(launch['argv'][1], 'resume')
+        self.assertEqual(launch['argv'][-4:],
+                         ['--last', '--model', 'example', '--dangerously-bypass-approvals-and-sandbox'])
+
     def test_codex_session_end_uses_supported_three_second_timeout(self):
         self.assertEqual(native_launch.hook_definitions(self.config_path, 'codex')['SessionEnd'][0]['hooks'][0]['timeout'], 3)
 
@@ -84,6 +92,14 @@ class NativeLaunchTests(unittest.TestCase):
         self.assertEqual(launch['env']['AGENT_LINK_NATIVE_CONFIG'], str(self.config_path))
         self.assertEqual(launch['env']['AGENT_LINK_ARTIFACT_CLI'],
                          str(native_launch.ROOT / 'scripts/agent-link-artifacts.py'))
+
+    def test_claude_continue_preserves_locally_selected_provider_flags(self):
+        self.config['runtime'] = 'claude'
+        with patch('native_launch.shutil.which', return_value='/fake/claude'):
+            launch = native_launch.build_launch(self.config_path, self.config, cli_args=(
+                '--continue', '--model', 'example', '--dangerously-skip-permissions'))
+        self.assertEqual(launch['argv'][-4:],
+                         ['--continue', '--model', 'example', '--dangerously-skip-permissions'])
 
     def test_claude_scoped_mcp_allowlist_without_bypass(self):
         self.config['runtime'] = 'claude'

@@ -28,6 +28,18 @@ does not start a model after the session exits or guarantee delivery into an
 arbitrary process. Both sender and recipient need access to the same channel,
 and the sender must address the recipient explicitly.
 
+To leave an attended CLI running after SSH disconnects, detach with `Ctrl-b d`
+inside tmux or close SSH without exiting the CLI. Re-enter with
+`mesh-connect codex` or `mesh-connect claude`; this attaches to the existing
+session. If the provider process exited, use its own continuation syntax:
+`mesh-connect codex resume --last` or `mesh-connect claude --continue`. These
+resume the latest conversation in the configured workspace, not a Mesh-selected
+conversation; pass a provider session ID instead when the latest one is wrong.
+The one-time command accepts provider options after an explicit `--runtime` and
+`--`, and installed `mesh-connect` also passes options after `--` to that
+provider. Codex and Claude use different flags. No permission bypass is added
+by default, and a peer message cannot change local launch flags.
+
 The default workspace is empty and intended for communication. No source clone
 or task listener is started automatically. The local CLI retains its normal
 trust and approval controls. The installer prints a `connect.py` command for

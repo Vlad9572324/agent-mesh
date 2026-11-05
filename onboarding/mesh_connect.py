@@ -127,7 +127,8 @@ def main(argv=None, *, home=None):
     path = os.environ.get("PATH", "")
     if user_bin not in path.split(os.pathsep):
         os.environ["PATH"] = user_bin + (os.pathsep + path if path else "")
-    command = [sys.executable, "-B", str(connect), "--doorbell", "--", *args.provider_args]
+    provider_args = args.provider_args[1:] if args.provider_args[:1] == ["--"] else args.provider_args
+    command = [sys.executable, "-B", str(connect), "--doorbell", "--", *provider_args]
     session = session_name(item["agent_id"])
     prepare_session(tmux, session, item, command)
     if os.environ.get("TMUX"):

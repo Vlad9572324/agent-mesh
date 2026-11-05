@@ -200,7 +200,10 @@ def main(argv=None):
     parser.add_argument("--workspace", help="existing workspace outside the private installation; default is empty")
     parser.add_argument("--check", action="store_true", help="install and verify access without starting a model or sending messages")
     parser.add_argument("--attended", action="store_true", help="install tmux if needed and start a wakeable attended CLI session")
-    args = parser.parse_args(argv)
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    separator = raw_args.index("--") if "--" in raw_args else len(raw_args)
+    provider_args = raw_args[separator + 1:] if separator < len(raw_args) else []
+    args = parser.parse_args(raw_args[:separator])
     path, tty, terminal_fd = None, None, None
     try:
         if sys.version_info < (3, 10) or not shutil.which("curl"):
@@ -209,6 +212,8 @@ def main(argv=None):
         validate_connection(args.origin, args.pin, args.token)
         if args.check and args.attended:
             raise InstallError("--check and --attended cannot be combined.")
+        if provider_args and (args.check or not args.runtime):
+            raise InstallError("Provider CLI arguments require --runtime codex or claude and cannot be combined with --check.")
         if not args.check:
             try:
                 tty = os.open("/dev/tty", os.O_RDWR)
@@ -233,6 +238,8 @@ def main(argv=None):
         else:
             if args.attended:
                 command.append("--doorbell")
+            if provider_args:
+                command.extend(("--", *provider_args))
             # The documented installer is normally fed through `curl | bash`,
             # so stdin still points at that finished pipe.  Both direct and
             # attended startup need the real controlling terminal.
