@@ -127,6 +127,18 @@ test('old backend without guidance keeps the pinned one-time command usable', as
   assert.equal(f.$('admin-onboarding-result-files').children.length, 0);
 });
 
+test('wake choice adds the attended flag only when selected', () => {
+  const f = fixture(), choice = f.$('admin-onboarding-attended');
+  choice.checked = true;
+  f.h.showOnboardingResult(result());
+  assert.match(f.state.onboardingCommand, /'b{64}' --attended$/);
+  f.h.clearOnboardingResult();
+  choice.checked = false;
+  f.h.showOnboardingResult(result());
+  assert.match(f.state.onboardingCommand, /'b{64}'$/);
+  assert.doesNotMatch(f.state.onboardingCommand, /--attended/);
+});
+
 test('scope comes from the invitation, with literal identity and requested runtime rather than inferred installation', () => {
   const f = fixture(); f.$('admin-onboarding-project').value = 'different-current-project'; f.h.showOnboardingResult(result());
   const scope = f.$('admin-onboarding-scope');

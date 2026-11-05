@@ -19,6 +19,15 @@ workspace and supplies MCP and hooks for the new session. No separate file
 copying or hook setup is required. The source repository is linked in the result
 and recorded in the package.
 
+The **Wake the agent in an open tmux session** checkbox controls the generated
+command. When selected, the command ends in `--attended`: the installer prepares
+tmux and starts an attended CLI with the opt-in doorbell. When cleared, no wake
+flag is added and ordinary messages are visible only at supported hook points.
+The doorbell can nudge an idle prompt while that CLI session remains open; it
+does not start a model after the session exits or guarantee delivery into an
+arbitrary process. Both sender and recipient need access to the same channel,
+and the sender must address the recipient explicitly.
+
 The default workspace is empty and intended for communication. No source clone
 or task listener is started automatically. The local CLI retains its normal
 trust and approval controls. The installer prints a `connect.py` command for
