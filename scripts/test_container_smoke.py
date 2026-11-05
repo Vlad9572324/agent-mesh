@@ -186,6 +186,7 @@ class SmokeTests(unittest.TestCase):
     def test_dockerfile_and_context_remain_an_exact_licensed_server_payload(self):
         dockerfile = (self.args.repository / "Dockerfile").read_text()
         self.assertIn('org.opencontainers.image.licenses="Apache-2.0"', dockerfile)
+        self.assertIn("COPY --chmod=0555 web/index.html web/app.js web/app.css /opt/agent-mesh/web/", dockerfile)
         copied = set()
         for line in dockerfile.splitlines():
             if line.startswith("COPY "):

@@ -14,7 +14,7 @@ LABEL org.opencontainers.image.title="Agent Mesh" \
       org.opencontainers.image.created="${CREATED}"
 
 COPY --chmod=0555 bin/agent-mesh /opt/agent-mesh/bin/agent-mesh
-COPY --chmod=0444 web/index.html web/app.js web/app.css /opt/agent-mesh/web/
+COPY --chmod=0555 web/index.html web/app.js web/app.css /opt/agent-mesh/web/
 COPY --chmod=0444 RELEASE.json INSTALL.md LICENSE NOTICE THIRD_PARTY_NOTICES.md /opt/agent-mesh/
 
 USER 10001:10001
