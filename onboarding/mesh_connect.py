@@ -112,6 +112,12 @@ def main(argv=None, *, home=None):
     parser.add_argument("--agent", help="agent ID when more than one installed connection uses this runtime")
     parser.add_argument("provider_args", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
+    provider_args = args.provider_args
+    if provider_args[:1] == ["--agent"]:
+        if args.agent is not None or len(provider_args) < 2 or provider_args[1] == "--":
+            raise ClientError("Specify one agent ID with --agent ID.")
+        args.agent = provider_args[1]
+        provider_args = provider_args[2:]
     home = Path.home() if home is None else Path(home)
     matches = [item for item in registrations(home)
                if item["runtime"] == args.runtime and (args.agent is None or item["agent_id"] == args.agent)]
@@ -137,7 +143,7 @@ def main(argv=None, *, home=None):
     path = os.environ.get("PATH", "")
     if user_bin not in path.split(os.pathsep):
         os.environ["PATH"] = user_bin + (os.pathsep + path if path else "")
-    provider_args = args.provider_args[1:] if args.provider_args[:1] == ["--"] else args.provider_args
+    provider_args = provider_args[1:] if provider_args[:1] == ["--"] else provider_args
     command = [sys.executable, "-B", str(connect), "--doorbell", "--", *provider_args]
     session = session_name(item["agent_id"])
     created = prepare_session(tmux, session, item, command)

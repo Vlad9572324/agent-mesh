@@ -416,7 +416,8 @@ class ConnectionTests(unittest.TestCase):
             ("claude",))
         self.assertEqual(result, 0); execute.assert_called_once()
         argv = execute.call_args.args[1]
-        self.assertEqual(argv, ["/fake/mesh-connect", "claude", "--dangerously-skip-permissions", "--resume"])
+        self.assertEqual(argv, ["/fake/mesh-connect", "--agent", "new-agent", "claude",
+                                "--dangerously-skip-permissions", "--resume"])
 
     def test_invitation_selected_runtime_is_respected(self):
         value = profile(); value["runtime"] = "claude"; (self.bundle / "profile.json").write_text(json.dumps(value))
@@ -485,6 +486,19 @@ class InstalledClientTests(unittest.TestCase):
             mesh_client.main(["codex", "--", "resume", "--last", "--model", "example"], home=self.home)
         create = next(item for item in tmux_run.call_args_list if item.args[1] == "new-session")
         self.assertEqual(create.args[-5:], ("--", "resume", "--last", "--model", "example"))
+
+    def test_agent_after_runtime_selects_one_of_multiple_connections(self):
+        self.install(agent="first", runtime="codex")
+        self.install(agent="second", runtime="codex")
+        with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
+                patch.object(mesh_client, "has_tty", return_value=False), \
+                patch.object(mesh_client, "tmux_run", side_effect=lambda _tmux, *parts, **_kw: types.SimpleNamespace(
+                    returncode=1 if parts[0] == "has-session" else 0, stdout="")) as tmux_run, \
+                contextlib.redirect_stdout(io.StringIO()):
+            mesh_client.main(["codex", "--agent", "second", "--", "--model", "example"], home=self.home)
+        create = next(item for item in tmux_run.call_args_list if item.args[1] == "new-session")
+        self.assertIn(mesh_client.session_name("second"), create.args)
+        self.assertEqual(create.args[-3:], ("--", "--model", "example"))
 
     def test_no_controlling_tty_keeps_attended_session_detached(self):
         self.install(agent="codex-helper", runtime="codex")
