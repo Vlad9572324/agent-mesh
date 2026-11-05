@@ -76,6 +76,7 @@ BUILD_FILES = (
     "cmd/agent-link/onboarding.go",
     "cmd/agent-link/version.go",
     "internal/link/admin.go",
+    "internal/link/principal_delete.go",
     "internal/link/delivery_alerts.go",
     "internal/link/delivery_alerts_schema.sql",
     "internal/link/delivery_stage.go",
