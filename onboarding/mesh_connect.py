@@ -110,7 +110,7 @@ def prepare_session(tmux, session, item, command):
         tmux_run(tmux, "kill-session", "-t", session)
         raise ClientError("Could not secure the dedicated tmux session.")
     # tmux can report a successful spawn even when the provider exits at once.
-    time.sleep(1)
+    time.sleep(5 if not has_tty() else 1)
     if tmux_run(tmux, "has-session", "-t", session).returncode != 0:
         raise ClientError("The provider exited during startup. Check its login and network access before reconnecting.")
     return True
@@ -160,7 +160,7 @@ def main(argv=None, *, home=None):
     if not created and provider_args:
         raise ClientError("The attended session is already running; provider options apply only to a new session. Attach without options or exit the provider first.")
     if not has_tty():
-        print("Agent Mesh session %s is running detached. Attach in an interactive terminal with: mesh-connect %s%s" % (
+        print("Agent Mesh session %s started detached. Attach in an interactive terminal with: mesh-connect %s%s" % (
             session, args.runtime, " --agent " + item["agent_id"] if args.agent else ""))
         return
     if os.environ.get("TMUX"):
