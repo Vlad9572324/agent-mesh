@@ -657,6 +657,11 @@
     "Project {0} and its contents were deleted from the Agent Mesh server. Accounts and keys remain. Backups and copies held by agents were not deleted; project and channel IDs cannot be reused.": "Проект {0} и его содержимое удалены с сервера Agent Mesh. Учётные записи и ключи сохранены. Резервные копии и копии у агентов не удалялись; повторное использование ID проекта и каналов запрещено.",
     "{0} This deletion inventory is no longer usable. Close this dialog and obtain a new inventory before confirming.": "{0} Этот просмотр состава больше нельзя использовать. Закройте диалог и получите новый состав перед подтверждением.",
     "{0} accounts": "{0} учётных записей",
+    "No archived accounts.": "Архивных учётных записей нет.",
+    "Delete account permanently…": "Удалить учётную запись безвозвратно…",
+    "Account {0} cannot be deleted safely: {1}. Keep its archived ID and use a new ID.": "Учётную запись {0} нельзя безопасно удалить: {1}. Оставьте архивный ID и используйте новый.",
+    "To permanently delete account {0}, type its exact ID. This frees the ID for reuse. Backups and client files remain.": "Для безвозвратного удаления учётной записи {0} введите её точный ID. Он освободится для повторного использования. Резервные копии и клиентские файлы останутся.",
+    "Account {0} permanently deleted; its ID can be used again.": "Учётная запись {0} удалена безвозвратно; её ID можно использовать снова.",
     "Key active": "Ключ активен",
     "Key inactive": "Ключ неактивен",
     "Fresh heartbeat": "Свежий heartbeat",
@@ -1218,7 +1223,7 @@
     const groups = {
       onboarding: [$("admin-onboarding-panel")],
       "delivery-alerts": [$("admin-delivery-alerts-panel")],
-      accounts: [$("admin-principal-list").closest("section"), $("admin-principal-form").closest("section")],
+      accounts: [$("admin-principal-list").closest("section"), $("admin-archived-principal-list").closest("section"), $("admin-principal-form").closest("section")],
       projects: [$("admin-project-list").closest("section"), $("admin-project-form").closest("section"), $("admin-channel-form").closest("section")],
       access: [$("admin-access-form").closest("section")],
       diagnostics: [$("admin-panel").querySelector(".admin-diagnostic-grid")],
@@ -3366,7 +3371,7 @@
     state.onboarding = null;
     clearOnboardingGuidance("guide");
     state.adminReadSeq += 1; state.adminLoadBackground = false;
-    for (const id of ["admin-principal-list", "admin-project-list", "admin-audit-list", "admin-delivery-list", "admin-access-agent", "admin-access-project", "admin-access-channel", "admin-channel-project", "admin-onboarding-list", "admin-onboarding-project", "admin-onboarding-channels"]) $(id).replaceChildren();
+    for (const id of ["admin-principal-list", "admin-archived-principal-list", "admin-project-list", "admin-audit-list", "admin-delivery-list", "admin-access-agent", "admin-access-project", "admin-access-channel", "admin-channel-project", "admin-onboarding-list", "admin-onboarding-project", "admin-onboarding-channels"]) $(id).replaceChildren();
     for (const id of ["admin-principal-form", "admin-project-form", "admin-channel-form", "admin-access-form", "admin-onboarding-form"]) {
       $(id).reset();
       for (const input of $(id).querySelectorAll("input")) setOwnedValidity(input, () => (""));
@@ -3625,6 +3630,16 @@
       return card;
     }));
     if (!principals.length) appendOwned($("admin-principal-list"), () => (node("p", "empty-state", () => (tr("No accounts received.")))));
+    const archived = list(state.admin.archived_principals);
+    replaceContent("admin-archived-principal-list", ...archived.map((principal) => {
+      const row = node("article", "admin-record");
+      const button = node("button", "secondary-button danger-button", () => (tr("Delete account permanently…")));
+      button.type = "button";
+      button.addEventListener("click", () => void deleteArchivedPrincipal(principal));
+      appendOwned(row, () => (node("h4", "", () => (principal.name || principal.id))), () => (node("p", "field-help", () => (`${principal.id} · ${principal.kind}`))), () => (button));
+      return row;
+    }));
+    if (!archived.length) appendOwned($("admin-archived-principal-list"), () => (node("p", "empty-state", () => (tr("No archived accounts.")))));
     renderAdminProjects();
     adminOptions("admin-channel-project", activeAdminProjects(), tr("Select an active project"));
     adminOptions("admin-access-agent", principals.filter((principal) => ["agent", "viewer"].includes(principal.kind)), tr("Select an account"));
@@ -3981,6 +3996,26 @@
     if (!window.confirm(question)) return;
     await adminMutation(`/v1/admin/onboarding/${pathId(invite.id)}/${action}`, "POST", action === "reissue" ? {expires_in_hours: Number($("admin-onboarding-expiry").value)} : {},
       action === "reissue" ? tr("New connection command generated.") : tr("Invitation revoked."), action === "reissue" ? showOnboardingResult : undefined);
+  }
+
+  async function deleteArchivedPrincipal(principal) {
+    if (!isOwner() || state.view !== "admin" || state.adminBusy || blockingAdminLoad()) return;
+    const context = state.context;
+    try {
+      const preview = await api(`/v1/admin/principals/${pathId(principal.id)}/deletion-preview`);
+      if (!current(context) || state.view !== "admin" || state.adminBusy) return;
+      if (preview.principal?.id !== principal.id || !Array.isArray(preview.blockers) || typeof preview.can_delete !== "boolean") throw new Error("Invalid principal deletion preview");
+      if (!preview.can_delete) {
+        setText($("admin-status"), () => (tr("Account {0} cannot be deleted safely: {1}. Keep its archived ID and use a new ID.", () => (principal.id), () => (preview.blockers.join(", ")))));
+        return;
+      }
+      const entered = window.prompt(tr("To permanently delete account {0}, type its exact ID. This frees the ID for reuse. Backups and client files remain.", () => (principal.id)));
+      if (entered !== principal.id || !current(context) || state.view !== "admin" || state.adminBusy) return;
+      await adminMutation(`/v1/admin/principals/${pathId(principal.id)}`, "DELETE", {confirm_id: principal.id},
+        tr("Account {0} permanently deleted; its ID can be used again.", () => (principal.id)));
+    } catch (error) {
+      if (current(context) && state.view === "admin") showError(error, "admin-error");
+    }
   }
 
   async function adminKeyAction(principal, action) {

@@ -177,6 +177,54 @@ func TestAdminArchivesPrincipalWithoutDeletingHistory(t *testing.T) {
 	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "codex-pilot", "name": "Reused", "kind": "agent"}, 409)
 }
 
+func TestAdminPrincipalPermanentDeletionRequiresSafeHistory(t *testing.T) {
+	f := newFixture(t)
+	f.owner("owner")
+	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "reusable-agent", "name": "First", "kind": "agent"}, 201)
+	oldKey := f.expect("POST", "/v1/admin/principals/reusable-agent/rotate-key", "owner", map[string]any{}, 200)["key"].(string)
+	f.keys["reusable-agent"] = oldKey
+	f.expect("POST", "/v1/admin/principals/reusable-agent/archive", "owner", map[string]any{}, 200)
+	f.expect("GET", "/v1/me", "reusable-agent", nil, 401)
+	f.expect("DELETE", "/v1/admin/principals/reusable-agent", "owner", map[string]any{"confirm_id": "wrong"}, 400)
+	preview := f.expect("GET", "/v1/admin/principals/reusable-agent/deletion-preview", "owner", nil, 200)
+	if preview["can_delete"] != false {
+		t.Fatal("active peers did not block identifier reuse")
+	}
+	f.expect("DELETE", "/v1/admin/principals/reusable-agent", "owner", map[string]any{"confirm_id": "reusable-agent"}, 409)
+	for _, id := range []string{"claude-pilot", "codex-pilot", "viewer-pilot", "deny-pilot"} {
+		f.expect("POST", "/v1/admin/principals/"+id+"/archive", "owner", map[string]any{}, 200)
+	}
+	preview = f.expect("GET", "/v1/admin/principals/reusable-agent/deletion-preview", "owner", nil, 200)
+	if preview["can_delete"] != true {
+		t.Fatalf("empty archived account should be deletable: %v", preview)
+	}
+	f.expect("DELETE", "/v1/admin/principals/reusable-agent", "owner", map[string]any{"confirm_id": "reusable-agent"}, 200)
+	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "reusable-agent", "name": "Second", "kind": "agent"}, 201)
+	f.expect("GET", "/v1/me", "reusable-agent", nil, 401)
+	newKey := f.expect("POST", "/v1/admin/principals/reusable-agent/rotate-key", "owner", map[string]any{}, 200)["key"].(string)
+	if newKey == oldKey {
+		t.Fatal("new identity reused the revoked key")
+	}
+	f.keys["reusable-agent"] = newKey
+	f.expect("GET", "/v1/me", "reusable-agent", nil, 200)
+	f.expect("GET", "/v1/admin/principals/reusable-agent/deletion-preview", "owner", nil, 409)
+}
+
+func TestAdminPrincipalDeletionRejectsOldMessages(t *testing.T) {
+	f := newFixture(t)
+	f.owner("owner")
+	f.message("old-addressed", "claude-pilot")
+	for _, id := range []string{"claude-pilot", "codex-pilot", "viewer-pilot", "deny-pilot"} {
+		f.expect("POST", "/v1/admin/principals/"+id+"/archive", "owner", map[string]any{}, 200)
+	}
+	preview := f.expect("GET", "/v1/admin/principals/codex-pilot/deletion-preview", "owner", nil, 200)
+	if preview["can_delete"] != false {
+		t.Fatal("old addressed messages did not block identifier reuse")
+	}
+	f.expect("DELETE", "/v1/admin/principals/codex-pilot", "owner", map[string]any{"confirm_id": "codex-pilot"}, 409)
+	f.expect("POST", "/v1/admin/principals", "owner", map[string]any{"id": "codex-pilot", "name": "New identity", "kind": "agent"}, 409)
+}
+
 func TestAdminInventoryAccessAndSecretHygiene(t *testing.T) {
 	f := newFixture(t)
 	f.owner("owner")

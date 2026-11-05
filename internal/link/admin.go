@@ -122,6 +122,8 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/admin/principals/{agent}/rotate-key", s.adminRotate)
 	mux.HandleFunc("POST /v1/admin/principals/{agent}/revoke-key", s.adminRevoke)
 	mux.HandleFunc("POST /v1/admin/principals/{agent}/archive", s.adminArchivePrincipal)
+	mux.HandleFunc("GET /v1/admin/principals/{agent}/deletion-preview", s.adminPrincipalDeletionPreview)
+	mux.HandleFunc("DELETE /v1/admin/principals/{agent}", s.adminDeletePrincipal)
 	mux.HandleFunc("GET /v1/admin/audit", s.adminAudit)
 	mux.HandleFunc("GET /v1/admin/deliveries", s.adminDeliveries)
 	mux.HandleFunc("GET /v1/admin/delivery-policy", s.adminDeliveryPolicy)
@@ -178,6 +180,15 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 		internal(w)
 		return
 	}
+	archivedPrincipals, err := collect(ctx, tx, "SELECT id,name,kind FROM principals WHERE archived_at IS NOT NULL AND kind<>'owner' ORDER BY id", func(row pgx.CollectableRow) (archivedPrincipal, error) {
+		var p archivedPrincipal
+		err := row.Scan(&p.ID, &p.Name, &p.Kind)
+		return p, err
+	})
+	if err != nil {
+		internal(w)
+		return
+	}
 	projects, err := collect(ctx, tx, "SELECT id,name,archived_at,lifecycle_version FROM projects ORDER BY id", func(row pgx.CollectableRow) (Project, error) {
 		var p Project
 		err := row.Scan(&p.ID, &p.Name, &p.ArchivedAt, &p.LifecycleVersion)
@@ -218,7 +229,13 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 		internal(w)
 		return
 	}
-	respond(w, 200, map[string]any{"principals": principals, "projects": projects, "channels": channels, "project_members": pm, "channel_members": cm})
+	respond(w, 200, map[string]any{"principals": principals, "archived_principals": archivedPrincipals, "projects": projects, "channels": channels, "project_members": pm, "channel_members": cm})
+}
+
+type archivedPrincipal struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 func (s *Server) adminProject(w http.ResponseWriter, r *http.Request) {

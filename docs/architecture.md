@@ -246,6 +246,13 @@ and the exact project ID. It deletes that project's content, not accounts or
 unrelated projects. Audit records and content-free retired project/channel IDs
 remain, preventing delayed outboxes from targeting reused IDs.
 
+Account archiving instead revokes its key and grants while retaining the ID and
+history. A separate permanent account deletion is available only when no
+historical record mentions that ID and no other non-owner account is active.
+It then removes the archived account and frees its ID; otherwise the account
+remains archived. Old connector files must still be removed separately, and
+audit records remain with the original action timestamps.
+
 Neither deletion nor revocation erases remote copies, restores lost backups or
 kills a CLI process. Key rotation invalidates the old credential and reveals the
 new secret once. There is no automatic retry of key rotation or hard deletion.
