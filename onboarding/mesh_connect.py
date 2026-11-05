@@ -95,9 +95,13 @@ def prepare_session(tmux, session, item, command):
     # Both an old tmux server and its login shell may reset PATH. Set it on the
     # child command after shell startup without changing unrelated sessions.
     provider_path = os.environ.get("PATH", "")
-    env_command = [shutil.which("env") or "/usr/bin/env", "PATH=" + provider_path, *command]
+    provider_env = ["PATH=" + provider_path]
+    for name in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY"):
+        if os.environ.get(name):
+            provider_env.append(name + "=" + os.environ[name])
+    env_command = [shutil.which("env") or "/usr/bin/env", *provider_env, *command]
     created = tmux_run(tmux, "new-session", "-d", "-s", session, "-x", str(columns), "-y", str(lines),
-                       "-e", "PATH=" + provider_path, *env_command)
+                       *(arg for value in provider_env for arg in ("-e", value)), *env_command)
     if created.returncode != 0:
         raise ClientError("Could not create the dedicated tmux session.")
     settings = (

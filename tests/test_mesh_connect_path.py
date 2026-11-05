@@ -46,6 +46,27 @@ class MeshConnectPathTest(unittest.TestCase):
                     "/usr/bin/tmux", "mesh-example", {"agent_id": "example", "bundle": "/private/bundle"},
                     ["/usr/bin/python3", "connect.py"])
 
+    def test_new_session_receives_proxy_environment(self):
+        calls = []
+
+        def fake_tmux(_binary, *args, **_kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 1 if args[0] == "has-session" and len(calls) == 1 else 0, "")
+
+        with patch.object(mesh_connect, "tmux_run", side_effect=fake_tmux), patch.object(mesh_connect.time, "sleep"):
+            with patch.dict(os.environ, {"PATH": "/usr/bin", "HTTPS_PROXY": "http://127.0.0.1:18109",
+                                         "HTTP_PROXY": "http://127.0.0.1:18109",
+                                         "ALL_PROXY": "socks5h://127.0.0.1:1080"}, clear=True):
+                mesh_connect.prepare_session(
+                    "/usr/bin/tmux", "mesh-example", {"agent_id": "example", "bundle": "/private/bundle"},
+                    ["/usr/bin/python3", "connect.py"])
+
+        create = next(args for args in calls if args[0] == "new-session")
+        self.assertIn("HTTPS_PROXY=http://127.0.0.1:18109", create)
+        self.assertIn("HTTP_PROXY=http://127.0.0.1:18109", create)
+        self.assertIn("ALL_PROXY=socks5h://127.0.0.1:1080", create)
+        self.assertEqual(create.count("-e"), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
