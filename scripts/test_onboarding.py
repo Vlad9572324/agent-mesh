@@ -181,6 +181,7 @@ class InstallerTests(unittest.TestCase):
         with patch.object(installer, "install_attended_dependency", side_effect=lambda: order.append("dependency")), \
                 patch.object(installer, "redeem", side_effect=lambda *_: (order.append("redeem"), archive(package_files()))[1]), \
                 patch.object(installer.os, "open", side_effect=opened), patch.object(installer.os, "dup2") as dup2, \
+                patch.object(installer, "concrete_terminal_fd", return_value=2), \
                 patch.object(installer.os, "execv") as execute, \
                 contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--install-dir", str(path), "--runtime", "claude", "--attended"]), 0)
@@ -189,6 +190,16 @@ class InstallerTests(unittest.TestCase):
         source_fds = [item.args[0] for item in dup2.call_args_list]
         self.assertEqual([item.args[1] for item in dup2.call_args_list], [0, 1, 2])
         self.assertEqual(len(set(source_fds)), 1)
+
+    def test_attended_without_concrete_tty_refuses_before_redeem(self):
+        real_open = os.open
+        def opened(name, flags, *args, **kwargs):
+            return real_open("/dev/null", os.O_RDWR) if name == "/dev/tty" else real_open(name, flags, *args, **kwargs)
+        with patch.object(installer.os, "open", side_effect=opened), \
+                patch.object(installer, "concrete_terminal_fd", return_value=None), \
+                patch.object(installer, "redeem") as redeem, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--attended"]), 2)
+        redeem.assert_not_called()
 
 
 class FakeHTTP:
