@@ -91,7 +91,10 @@ def prepare_session(tmux, session, item, command):
         columns, lines = max(size.columns, 100), max(size.lines, 30)
     except OSError:
         columns, lines = 120, 40
-    created = tmux_run(tmux, "new-session", "-d", "-s", session, "-x", str(columns), "-y", str(lines), *command)
+    # An existing tmux server keeps its old global PATH; pass the provider PATH
+    # to this session rather than changing unrelated sessions or server state.
+    created = tmux_run(tmux, "new-session", "-d", "-s", session, "-x", str(columns), "-y", str(lines),
+                       "-e", "PATH=" + os.environ.get("PATH", ""), *command)
     if created.returncode != 0:
         raise ClientError("Could not create the dedicated tmux session.")
     settings = (
