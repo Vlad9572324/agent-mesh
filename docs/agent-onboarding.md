@@ -35,6 +35,10 @@ session. If the provider process exited, use its own continuation syntax:
 `mesh-connect codex resume --last` or `mesh-connect claude --continue`. These
 resume the latest conversation in the configured workspace, not a Mesh-selected
 conversation; pass a provider session ID instead when the latest one is wrong.
+If `mesh-connect` runs without a controlling terminal, it leaves the dedicated
+tmux session detached and prints the reattach command instead of reporting a
+failed connection. Options passed to an already running session are rejected:
+reattach without them, or exit that provider before starting a new session.
 The one-time command accepts provider options after an explicit `--runtime` and
 `--`, and installed `mesh-connect` also passes options after `--` to that
 provider. Codex and Claude use different flags. No permission bypass is added

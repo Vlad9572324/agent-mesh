@@ -68,6 +68,15 @@ def tmux_option(tmux, session, name):
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def has_tty():
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        return False
+    os.close(fd)
+    return True
+
+
 def prepare_session(tmux, session, item, command):
     """Create or validate the dedicated attended session without touching global tmux state."""
     bundle_id = hashlib.sha256(str(Path(item["bundle"]).resolve()).encode("utf-8")).hexdigest()
@@ -76,7 +85,7 @@ def prepare_session(tmux, session, item, command):
         if (tmux_option(tmux, session, "@agent_mesh_agent") != item["agent_id"]
                 or tmux_option(tmux, session, "@agent_mesh_bundle") != bundle_id):
             raise ClientError("The existing tmux session has a different Agent Mesh identity; run mesh-connect restart after reviewing it.")
-        return
+        return False
     try:
         size = os.get_terminal_size()
         columns, lines = max(size.columns, 100), max(size.lines, 30)
@@ -94,6 +103,7 @@ def prepare_session(tmux, session, item, command):
     if any(tmux_run(tmux, *setting).returncode != 0 for setting in settings):
         tmux_run(tmux, "kill-session", "-t", session)
         raise ClientError("Could not secure the dedicated tmux session.")
+    return True
 
 
 def main(argv=None, *, home=None):
@@ -130,7 +140,13 @@ def main(argv=None, *, home=None):
     provider_args = args.provider_args[1:] if args.provider_args[:1] == ["--"] else args.provider_args
     command = [sys.executable, "-B", str(connect), "--doorbell", "--", *provider_args]
     session = session_name(item["agent_id"])
-    prepare_session(tmux, session, item, command)
+    created = prepare_session(tmux, session, item, command)
+    if not created and provider_args:
+        raise ClientError("The attended session is already running; provider options apply only to a new session. Attach without options or exit the provider first.")
+    if not has_tty():
+        print("Agent Mesh session %s is running detached. Attach in an interactive terminal with: mesh-connect %s%s" % (
+            session, args.runtime, " --agent " + item["agent_id"] if args.agent else ""))
+        return
     if os.environ.get("TMUX"):
         os.execvp(tmux, [tmux, "switch-client", "-t", session])
     os.execvp(tmux, [tmux, "attach-session", "-d", "-t", session])

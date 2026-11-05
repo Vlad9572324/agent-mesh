@@ -460,6 +460,7 @@ class InstalledClientTests(unittest.TestCase):
             mesh_client.main(["claude"], home=self.home)
         with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
                 patch.dict(os.environ, {"PATH": "/usr/bin"}, clear=True), \
+                patch.object(mesh_client, "has_tty", return_value=True), \
                 patch.object(mesh_client, "tmux_run", side_effect=lambda _tmux, *parts, **_kw: types.SimpleNamespace(
                     returncode=1 if parts[0] == "has-session" else 0, stdout="")) as tmux_run, \
                 patch.object(mesh_client.os, "execvp") as execute:
@@ -477,12 +478,37 @@ class InstalledClientTests(unittest.TestCase):
     def test_provider_separator_is_not_forwarded_to_runtime(self):
         self.install(agent="codex-helper", runtime="codex")
         with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
+                patch.object(mesh_client, "has_tty", return_value=True), \
                 patch.object(mesh_client, "tmux_run", side_effect=lambda _tmux, *parts, **_kw: types.SimpleNamespace(
                     returncode=1 if parts[0] == "has-session" else 0, stdout="")) as tmux_run, \
                 patch.object(mesh_client.os, "execvp"):
             mesh_client.main(["codex", "--", "resume", "--last", "--model", "example"], home=self.home)
         create = next(item for item in tmux_run.call_args_list if item.args[1] == "new-session")
         self.assertEqual(create.args[-5:], ("--", "resume", "--last", "--model", "example"))
+
+    def test_no_controlling_tty_keeps_attended_session_detached(self):
+        self.install(agent="codex-helper", runtime="codex")
+        with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
+                patch.object(mesh_client, "has_tty", return_value=False), \
+                patch.object(mesh_client, "tmux_run", side_effect=lambda _tmux, *parts, **_kw: types.SimpleNamespace(
+                    returncode=1 if parts[0] == "has-session" else 0, stdout="")), \
+                patch.object(mesh_client.os, "execvp") as execute, \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            mesh_client.main(["codex"], home=self.home)
+        execute.assert_not_called()
+        self.assertIn("running detached", output.getvalue())
+        self.assertIn("mesh-connect codex", output.getvalue())
+
+    def test_existing_session_rejects_ignored_provider_options(self):
+        self.install(agent="codex-helper", runtime="codex")
+        bundle_id = hashlib.sha256(str(self.bundle.resolve()).encode()).hexdigest()
+        answers = [types.SimpleNamespace(returncode=0, stdout=""),
+                   types.SimpleNamespace(returncode=0, stdout="codex-helper\n"),
+                   types.SimpleNamespace(returncode=0, stdout=bundle_id + "\n")]
+        with patch.object(mesh_client.shutil, "which", return_value="/usr/bin/tmux"), \
+                patch.object(mesh_client, "tmux_run", side_effect=answers), \
+                self.assertRaisesRegex(mesh_client.ClientError, "already running"):
+            mesh_client.main(["codex", "resume", "--last"], home=self.home)
 
     def test_session_names_do_not_collide_after_sanitizing(self):
         first = mesh_client.session_name("agent.a")

@@ -56,7 +56,10 @@ provider keeps running and the next `mesh-connect codex` or `mesh-connect claude
 reattaches. If the provider itself exited, start an explicit provider-specific
 resume: `mesh-connect codex resume --last` or `mesh-connect claude --continue`.
 These select the provider's most recent conversation in this workspace; use a
-specific provider session ID when that is not the desired conversation. Optional
+specific provider session ID when that is not the desired conversation.
+When no controlling terminal is available, `mesh-connect` leaves the session
+detached and prints the reattach command. Provider options passed to an already
+running session are rejected rather than silently ignored. Optional
 provider arguments can be separated with `--`, for example
 `mesh-connect codex -- resume --last --model MODEL`. The separator is not passed
 to the provider. The first-use invitation also accepts provider arguments after
