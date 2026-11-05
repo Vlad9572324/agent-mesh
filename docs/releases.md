@@ -50,6 +50,17 @@ Existing connector installations are not upgraded by a server update; install
 the matching connector bundle while preserving each participant's private key,
 configuration and durable queues.
 
+## Unreleased source after guide.14
+
+The current source adds an explicit wake choice to **Connect agent**. Selecting
+it appends `--attended` to the one-use command; the matching installer prepares
+tmux and starts an attended CLI with the opt-in doorbell. Clearing it leaves the
+ordinary connection command unchanged. The experimental Runtime Host and its
+Codex/Claude adapters remain separate, opt-in local processes; installing a
+connector does not start the Host. These source capabilities require a newer
+published server and matching connector package before they can be used through
+the deployed onboarding page. This section is not a release or deployment claim.
+
 Repository commits or tags newer than this section are development candidates
 until a matching GitHub Release, immutable image digest and verification record
 are published. Do not select a deployment solely because a newer Git tag or
