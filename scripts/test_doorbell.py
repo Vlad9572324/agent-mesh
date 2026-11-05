@@ -16,6 +16,8 @@ CODEX_NEW_READY = ("\x1b[2mWorked for 2m 27s\x1b[0m\n"
                    "\x1b[1m›\x1b[0m \x1b[2mAsk Codex to do anything\x1b[0m\n\n"
                    "  \x1b[38;5;223mGPT-6.1-Sol medium\x1b[39m · "
                    "\x1b[38;5;151m~/.local/share/agent-mesh/workspace\x1b[39m  ⚠ 2 warnings · f2 to view")
+CODEX_HOME_READY = ("output\n› \n\n"
+                    "  GPT-6.1-Sol default · ~ · Ответить на приветствие  ⚠ 2 warnings · f2 to view")
 BUSY = "● Working\n✻ Ideating… (6s · ↓ 263 tokens)\n❯ \n  esc to interrupt"
 BUSY_MINUTES = "✻ Cooking… (2m 14s · ↓ 4k tokens)\n❯ \n──────"
 DIALOG = "Quick safety check: is this a project you trust?\n❯ No, exit\n  Yes, I trust this folder\nEnter to confirm · Esc to cancel"
@@ -44,6 +46,8 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(doorbell.classify_pane(READY), "ready")
         self.assertEqual(doorbell.classify_pane(CODEX_READY), "ready")
         self.assertEqual(doorbell.classify_pane(CODEX_NEW_READY), "ready")
+        self.assertEqual(doorbell.classify_pane(CODEX_HOME_READY), "ready")
+        self.assertEqual(doorbell.classify_pane(CODEX_HOME_READY.replace("› ", "› typed ")), "typing")
         self.assertEqual(doorbell.classify_pane(CODEX_NEW_READY.replace("›\x1b[0m ", "›\x1b[0m typed ")), "typing")
         self.assertEqual(doorbell.classify_pane(BUSY), "busy")
         self.assertEqual(doorbell.classify_pane(BUSY_MINUTES), "busy")
@@ -311,6 +315,14 @@ class SendTests(unittest.TestCase):
 
     def test_first_enter_is_enough(self):
         keys, send, run, capture = self.run_send(self.SCREENS, 1)
+        send("%0", doorbell.NUDGE_TEXT, sleep=lambda s: None, capture=capture, run=run)
+        self.assertEqual(keys, ["TEXT", "Enter"])
+
+    def test_submitted_reminder_in_history_is_not_typed_again(self):
+        screens = {**self.SCREENS,
+                   "sent": "› " + doorbell.NUDGE_TEXT + "\nWorked for 1s\n› \n"
+                           "  GPT-6.1-Sol default · ~ · Ответить на приветствие"}
+        keys, send, run, capture = self.run_send(screens, 1)
         send("%0", doorbell.NUDGE_TEXT, sleep=lambda s: None, capture=capture, run=run)
         self.assertEqual(keys, ["TEXT", "Enter"])
 

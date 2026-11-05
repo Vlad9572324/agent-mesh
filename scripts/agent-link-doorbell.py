@@ -49,7 +49,8 @@ CHROME = re.compile(r"^[\s─━│┃╭╮╰╯┌┐└┘═\-_|]*$|auto mo
                     r"accept edits|plan mode|Update installed|Restart to update|paste again|tmux detected|"
                     r"focus-events|scroll with|context left", re.IGNORECASE)
 # Newer Codex draws its model and workspace below an otherwise empty prompt.
-CODEX_FOOTER = re.compile(r"^\s*GPT-[\w.+-]+(?:\s+[A-Za-z-]+)?\s+·\s+(?:~/|/|\./).+$")
+CODEX_FOOTER = re.compile(
+    r"^\s*GPT-[\w.+-]+(?:\s+[A-Za-z-]+)?\s+·\s+(?:(?:~/|/|\./).+|~(?:\s+·.*)?)$")
 TAIL_LINES = 14
 SEND_FAILURES_BEFORE_GIVEUP = 3
 
@@ -304,6 +305,15 @@ def tmux_pane_text(pane):
 SEND_MARKER = "Agent Mesh:"  # Stable prefix shared by fixed and metadata wake envelopes.
 
 
+def reminder_in_input(screen):
+    """Only the last prompt may be the editable input; older prompts are history."""
+    lines = screen.rstrip().splitlines()[-TAIL_LINES:]
+    for index in range(len(lines) - 1, -1, -1):
+        if PROMPT_LINE.match(lines[index]):
+            return SEND_MARKER in "\n".join(lines[index:])
+    return False
+
+
 def tmux_send(pane, text, *, sleep=time.sleep, capture=None, run=subprocess.run):
     """Type the reminder, confirm it is in the input box, then press Enter until it is sent.
 
@@ -320,13 +330,13 @@ def tmux_send(pane, text, *, sleep=time.sleep, capture=None, run=subprocess.run)
         screen = visible_text(capture())
         if DIALOG.search("\n".join(screen.rstrip().splitlines()[-TAIL_LINES:])):
             raise RuntimeError("a dialog opened; Enter withheld")
-        if attempt == 0 and SEND_MARKER not in screen:
+        if attempt == 0 and not reminder_in_input(screen):
             raise RuntimeError("typed text is not visible; Enter withheld")
-        if attempt and SEND_MARKER not in "\n".join(screen.rstrip().splitlines()[-TAIL_LINES:]):
+        if attempt and (classify_pane(screen) in ("ready", "busy") or not reminder_in_input(screen)):
             return  # The input box no longer holds the reminder: it was submitted.
         run(["tmux", "send-keys", "-t", pane, "Enter"], check=True, timeout=10)
     sleep(1.5)
-    if SEND_MARKER in "\n".join(visible_text(capture()).rstrip().splitlines()[-TAIL_LINES:]):
+    if reminder_in_input(visible_text(capture())):
         raise RuntimeError("reminder still unsent in the input box")
 
 
