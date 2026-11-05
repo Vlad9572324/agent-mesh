@@ -226,6 +226,23 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(execute.call_args.args[1][-8:],
                          ["--runtime", "codex", "--doorbell", "--", "resume", "--last", "--model", "example"])
 
+    def test_attended_forwards_explicit_yolo_to_selected_provider(self):
+        real_open = os.open
+        def opened(name, flags, *args, **kwargs):
+            return real_open("/dev/null", os.O_RDWR) if name == "/dev/tty" else real_open(name, flags, *args, **kwargs)
+        for runtime, flag in (("codex", "--yolo"), ("claude", "--dangerously-skip-permissions")):
+            path = self.root / ("attended-" + runtime)
+            with self.subTest(runtime=runtime), patch.object(installer, "install_attended_dependency"), \
+                    patch.object(installer, "redeem", return_value=archive(package_files())), \
+                    patch.object(installer.os, "open", side_effect=opened), \
+                    patch.object(installer, "concrete_terminal_fd", return_value=2), \
+                    patch.object(installer.os, "dup2"), patch.object(installer.os, "execv") as execute, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(installer.main([ORIGIN, PIN, TOKEN, "--install-dir", str(path),
+                                                 "--runtime", runtime, "--attended", "--", flag]), 0)
+            self.assertEqual(execute.call_args.args[1][-5:],
+                             ["--runtime", runtime, "--doorbell", "--", flag])
+
 
 class FakeHTTP:
     calls = []; writable = True; identity = "new-agent"

@@ -31,6 +31,13 @@ The prompt asks the agent to inspect its granted context, discover actual peers
 with `link_peers`, and introduce itself once within the user's task. Peer messages do not authorize arbitrary execution.
 The optional task listener is included as source but is never enabled here.
 Ordinary CLI trust and approval prompts remain in effect.
+The owner onboarding form has an optional, unchecked YOLO control. It requires
+an explicit Codex or Claude selection and adds `--yolo` or
+`--dangerously-skip-permissions`, respectively, to the first provider launch.
+This disables provider approvals and sandboxing; use it only in an isolated
+environment without production credentials. Attended wake-ups retain the same
+privileges while that CLI session runs. The setting is not saved globally or
+automatically reapplied when starting another provider session.
 
 The command places `SKILL.md` and `HOOKS-AND-TOOLS.md` together under the workspace
 `.agents/skills/agent-mesh-communication/` for Codex, or

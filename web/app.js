@@ -3888,6 +3888,7 @@
     $("admin-onboarding-scope").replaceChildren();
     $("admin-onboarding-result-guide").open = false;
     $("admin-onboarding-command").value = "";
+    $("admin-onboarding-yolo-notice").hidden = true;
     setText($("admin-onboarding-target"), () => (""));
     setText($("admin-onboarding-copy-status"), () => (""));
     $("admin-onboarding-repository").removeAttribute("href");
@@ -3914,6 +3915,10 @@
   function updateOnboardingControls(unavailable) {
     const disabled = unavailable || state.onboarding?.enabled !== true;
     for (const control of $("admin-onboarding-form").querySelectorAll("input,select,button")) control.disabled = disabled;
+    const yolo = $("admin-onboarding-yolo");
+    const explicitRuntime = ["codex", "claude"].includes($("admin-onboarding-runtime").value);
+    if (!explicitRuntime) yolo.checked = false;
+    yolo.disabled = disabled || !explicitRuntime;
     const selected = selectedOnboardingChannels();
     for (const input of $("admin-onboarding-channels").querySelectorAll("input")) input.disabled = disabled || (!input.checked && selected.length >= 8);
     $("admin-onboarding-submit").disabled = disabled || !$("admin-onboarding-project").value || !selected.length || selected.length > 8;
@@ -3979,8 +3984,12 @@
     // of losing the one-time result when the new checkbox is not in that shell.
     const attended = $("admin-onboarding-attended")?.checked !== false ? " --attended" : "";
     const runtime = result.invitation.runtime === "auto" ? "" : ` --runtime ${quote(result.invitation.runtime)}`;
-    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}${runtime}${attended}`;
+    const yolo = $("admin-onboarding-yolo")?.checked === true && $("admin-onboarding-runtime")?.value === result.invitation.runtime
+      && ["codex", "claude"].includes(result.invitation.runtime)
+      ? ` -- ${result.invitation.runtime === "codex" ? "--yolo" : "--dangerously-skip-permissions"}` : "";
+    state.onboardingCommand = `bash -o pipefail -c ${quote(pipeline)} mesh-connect ${quote(origin.origin)} ${quote(result.spki_pin)} ${quote(result.token)}${runtime}${attended}${yolo}`;
     $("admin-onboarding-command").value = state.onboardingCommand;
+    $("admin-onboarding-yolo-notice").hidden = !yolo;
     $("admin-onboarding-repository").href = repository.href;
     const {agent_id: agentId, expires_at: expiresAt} = result.invitation;
     setText($("admin-onboarding-target"), () => tr("Agent {0}. Use once before {1}.", () => agentId, () => dateText(expiresAt)));
@@ -4083,6 +4092,7 @@
   $("message-list").addEventListener("scroll", scheduleChannelRead, {passive: true});
   for (const dialog of document.querySelectorAll("dialog")) dialog.addEventListener("close", scheduleChannelRead);
   $("admin-onboarding-project").addEventListener("change", () => { renderOnboardingChannels(true); updateAdminControls(); });
+  $("admin-onboarding-runtime").addEventListener("change", updateAdminControls);
   $("admin-onboarding-form").addEventListener("submit", event => {
     event.preventDefault();
     if ($("admin-onboarding-submit").disabled || !validAdminForm("admin-onboarding-form")) return;

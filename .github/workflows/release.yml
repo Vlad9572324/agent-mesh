@@ -108,6 +108,7 @@ jobs:
           python3 -B -m unittest discover -s tests -p 'installer_terminal.py'
           python3 -B -m unittest discover -s tests -p 'test_operator_targets.py'
           node --check web/app.js
+          node tests/onboarding_yolo.mjs
           node tests/i18n_runtime.mjs
           node --test tests/delivery_alerts_runtime.mjs
           node --test tests/artifact_documents_runtime.mjs
