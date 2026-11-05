@@ -48,6 +48,8 @@ PROMPT_LINE = re.compile(r"^\s*[❯›>](?:\s|$)")
 CHROME = re.compile(r"^[\s─━│┃╭╮╰╯┌┐└┘═\-_|]*$|auto mode|shift\+tab|for shortcuts|for agents|bypass permissions|"
                     r"accept edits|plan mode|Update installed|Restart to update|paste again|tmux detected|"
                     r"focus-events|scroll with|context left", re.IGNORECASE)
+# Newer Codex draws its model and workspace below an otherwise empty prompt.
+CODEX_FOOTER = re.compile(r"^\s*GPT-[\w.+-]+(?:\s+[A-Za-z-]+)?\s+·\s+(?:~/|/|\./).+$")
 TAIL_LINES = 14
 SEND_FAILURES_BEFORE_GIVEUP = 3
 
@@ -91,7 +93,7 @@ def classify_pane(text):
         if PROMPT_LINE.match(lines[index]):
             if lines[index].strip() not in ("❯", "›", ">"):
                 return "typing"
-            if all(CHROME.search(line) for line in lines[index + 1:]):
+            if all(CHROME.search(line) or CODEX_FOOTER.fullmatch(line) for line in lines[index + 1:]):
                 return "ready"
             return "typing"
     return "typing"

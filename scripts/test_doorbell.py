@@ -12,6 +12,10 @@ spec.loader.exec_module(doorbell)
 
 READY = "some output\n──────\n❯ \n──────\n  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents"
 CODEX_READY = "output\n› \n\n  ? for shortcuts                                  100% context left"
+CODEX_NEW_READY = ("\x1b[2mWorked for 2m 27s\x1b[0m\n"
+                   "\x1b[1m›\x1b[0m \x1b[2mAsk Codex to do anything\x1b[0m\n\n"
+                   "  \x1b[38;5;223mGPT-6.1-Sol medium\x1b[39m · "
+                   "\x1b[38;5;151m~/.local/share/agent-mesh/workspace\x1b[39m  ⚠ 2 warnings · f2 to view")
 BUSY = "● Working\n✻ Ideating… (6s · ↓ 263 tokens)\n❯ \n  esc to interrupt"
 BUSY_MINUTES = "✻ Cooking… (2m 14s · ↓ 4k tokens)\n❯ \n──────"
 DIALOG = "Quick safety check: is this a project you trust?\n❯ No, exit\n  Yes, I trust this folder\nEnter to confirm · Esc to cancel"
@@ -39,6 +43,8 @@ class ClassifyTests(unittest.TestCase):
     def test_screens(self):
         self.assertEqual(doorbell.classify_pane(READY), "ready")
         self.assertEqual(doorbell.classify_pane(CODEX_READY), "ready")
+        self.assertEqual(doorbell.classify_pane(CODEX_NEW_READY), "ready")
+        self.assertEqual(doorbell.classify_pane(CODEX_NEW_READY.replace("›\x1b[0m ", "›\x1b[0m typed ")), "typing")
         self.assertEqual(doorbell.classify_pane(BUSY), "busy")
         self.assertEqual(doorbell.classify_pane(BUSY_MINUTES), "busy")
         self.assertEqual(doorbell.classify_pane(DIALOG), "dialog")
