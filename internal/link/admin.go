@@ -496,9 +496,15 @@ func (s *Server) adminArchivePrincipal(w http.ResponseWriter, r *http.Request) {
 			internal(w)
 			return
 		}
-		if _, err = tx.Exec(r.Context(), "DELETE FROM channel_members WHERE agent_id=$1; DELETE FROM project_members WHERE agent_id=$1; UPDATE principals SET key_hash=NULL,session_id='',activity='',archived_at=clock_timestamp() WHERE id=$1", id); err != nil {
-			internal(w)
-			return
+		for _, query := range []string{
+			"DELETE FROM channel_members WHERE agent_id=$1",
+			"DELETE FROM project_members WHERE agent_id=$1",
+			"UPDATE principals SET key_hash=NULL,session_id='',activity='',archived_at=clock_timestamp() WHERE id=$1",
+		} {
+			if _, err = tx.Exec(r.Context(), query, id); err != nil {
+				internal(w)
+				return
+			}
 		}
 	}
 	if !adminCommit(w, r, tx, "principal.archive", "principal", id, auditDetails{}) {
