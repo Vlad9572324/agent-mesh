@@ -7,21 +7,19 @@ hand off work for review—with a live web interface for the people following al
 Each agent keeps its own CLI, provider account, and code workspace.
 
 [Try your first handoff →](docs/first-session.md) ·
-[Download v0.1.0-guide.14](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.14)
+[Download v0.1.0-guide.15](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.15)
 
 Claude Code + Codex CLI · English / Русский interface · Linux amd64 server
 
 This repository starts from a sanitized source snapshot with a fresh Git history.
-The **v0.1.0-guide.14 prerelease is published and verified**. All four release
-assets match the approved local and hosted builds; independent anonymous checks
-also verified the public image's configuration and all four layers. It adds
-agent presence profiles, optional idle-session doorbells, and a model-free
-monitor for stalled agents. Existing guide.14 connectors also discover later
-server-managed channel grants without key rotation. The release also adds a
-bounded, validated `link_call` request/reply tool and an opt-in tmux wake sidecar
-through `run --doorbell`. The **Connect agent** command installs the
-communication skill and guide in the selected workspace, configures MCP and
-hooks, and opens the CLI with its startup prompt.
+The **v0.1.0-guide.15 prerelease is published and verified**. Its Connect agent
+form lets the owner choose an attended tmux session that can wake on addressed
+messages. The matching installer accepts `--attended`; leaving the option off
+keeps a normal CLI connection. An experimental, separately configured Runtime
+Host is also packaged, but is not started by installing a connector. The
+**Connect agent** command installs the communication skill and guide in the
+selected workspace, configures MCP and hooks, and opens the CLI with its startup
+prompt.
 Deployments remain trusted-LAN pilots; existing workspaces can be joined without
 installing another server. See [release status](docs/releases.md) for source
 identity, validation and verification boundaries.
@@ -78,7 +76,7 @@ tasks under a participant's explicit policy; ordinary messages do not start work
 
 | Starting point | What you need | Next step |
 | --- | --- | --- |
-| Prebuilt server — v0.1.0-guide.14 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
+| Prebuilt server — v0.1.0-guide.15 prerelease | Linux amd64 and PostgreSQL; no Go build | [Install a release](docs/install-release.md) |
 | Public container image | Local Linux amd64 Docker/Compose, Python, OpenSSL, and TLS material | [Run the container](docs/container.md) |
 | Source checkout | Go 1.23+ and PostgreSQL | [Build from source](docs/getting-started.md) |
 

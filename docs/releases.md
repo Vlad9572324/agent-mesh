@@ -2,7 +2,31 @@
 
 [Documentation](README.md) · [Contributing](../CONTRIBUTING.md) · [Release process](release-process.md)
 
-## Current status: v0.1.0-guide.14 prerelease published
+## Current status: v0.1.0-guide.15 prerelease published
+
+Frozen source: `6852e0c5566cc9fb353e6104543b8308133f0722`; packaging version: **3**.
+The tag workflow validated the Linux amd64 server, matching web assets and
+Python connectors, then published all four assets and the version-qualified
+container image. An updated pilot passed a TLS-pinned `/healthz` check after
+replacing only its application container.
+
+| Verification | Result |
+| --- | --- |
+| Container CI | [42022972164](https://github.com/Vlad9572324/agent-mesh/actions/runs/42022972164) — passed |
+| Package inspection | [42022972176](https://github.com/Vlad9572324/agent-mesh/actions/runs/42022972176) — passed |
+| Version-tag publication run | [42023296670](https://github.com/Vlad9572324/agent-mesh/actions/runs/42023296670) — passed |
+| Published GitHub prerelease | [v0.1.0-guide.15](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.15), release ID `435148393` |
+| Published SHA256SUMS digest | `51602a30cbe12ce1a3e4ae8c2a9432025f9e4b7ba065dc4eb32f309a937465c9` |
+| Published image tag | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.15` |
+| Exact image digest | `sha256:676d7edac34da7e320a1aea3272120588349ad6ec556ddd6a8ed4a033ef8cf19` |
+
+The Connect agent form now offers an explicit tmux wake choice. The matching
+installer adds `--attended` only when selected. The separately configured
+Runtime Host and Codex/Claude adapters are packaged as an experimental,
+opt-in path; they are not started by a normal connection. A server update does
+not replace existing agents' local connector bundles.
+
+## Earlier release: v0.1.0-guide.14
 
 Frozen source: `81a425e5a3cc9a3fa1f72abb60bf26e2dc7b2ed7`; packaging version: **3**.
 The published Linux amd64 server, matching web assets and Python connectors
@@ -50,18 +74,7 @@ Existing connector installations are not upgraded by a server update; install
 the matching connector bundle while preserving each participant's private key,
 configuration and durable queues.
 
-## Unreleased source after guide.14
-
-The current source adds an explicit wake choice to **Connect agent**. Selecting
-it appends `--attended` to the one-use command; the matching installer prepares
-tmux and starts an attended CLI with the opt-in doorbell. Clearing it leaves the
-ordinary connection command unchanged. The experimental Runtime Host and its
-Codex/Claude adapters remain separate, opt-in local processes; installing a
-connector does not start the Host. These source capabilities require a newer
-published server and matching connector package before they can be used through
-the deployed onboarding page. This section is not a release or deployment claim.
-
-Repository commits or tags newer than this section are development candidates
+Repository commits or tags newer than guide.15 are development candidates
 until a matching GitHub Release, immutable image digest and verification record
 are published. Do not select a deployment solely because a newer Git tag or
 container tag exists.

@@ -8,14 +8,12 @@ provider CLI, connector daemon, or production deployment. Native CLI participant
 still run on their own machines using the [CLI connection guide](../CLI-CONNECTION.md).
 
 **Published image:**
-`ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.14`.
-The [publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/38632114841)
-passed for source `81a425e5a3cc9a3fa1f72abb60bf26e2dc7b2ed7`, including container
-execution and digest-pull identity checks. Independent anonymous downloads
-verified the configuration and all four layers against their descriptor sizes
-and SHA-256 hashes, plus exact source/version and nonroot metadata. That download
-verification did not execute Docker. See [release status](releases.md) for the
-full evidence and preserved earlier releases.
+`ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.15`.
+The [publication workflow](https://github.com/Vlad9572324/agent-mesh/actions/runs/42023296670)
+passed for source `6852e0c5566cc9fb353e6104543b8308133f0722`, including container
+execution and digest-pull identity checks. A separate anonymous Docker pull and
+`version` invocation confirmed the exact published digest and source identity.
+See [release status](releases.md) for the full evidence and earlier releases.
 
 Agent Mesh is licensed under [Apache-2.0](../LICENSE). The packaging-version-3 image contains
 `LICENSE`, `NOTICE` and `THIRD_PARTY_NOTICES.md` under `/opt/agent-mesh/`, with an
@@ -27,8 +25,8 @@ earlier images remain unchanged.
 
 | Distribution | Identity | What it supplies |
 | --- | --- | --- |
-| GitHub prerelease | [v0.1.0-guide.14](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.14) | Linux amd64 server archive, Python connectors, metadata and checksums; all four assets verified anonymously |
-| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.14` | Linux amd64 server image; configuration and all four layers verified anonymously |
+| GitHub prerelease | [v0.1.0-guide.15](https://github.com/Vlad9572324/agent-mesh/releases/tag/v0.1.0-guide.15) | Linux amd64 server archive, Python connectors, metadata and checksums; publication workflow verified all four assets |
+| Public GHCR release image | `ghcr.io/vlad9572324/agent-mesh-server:v0.1.0-guide.15` | Linux amd64 server image; publication workflow and a separate Docker pull verified its digest and source identity |
 | GHCR manual candidate — separate workflow | `ghcr.io/vlad9572324/agent-mesh-server:sha-<full-commit>` | Linux amd64 server container from a manually published source commit |
 
 Manual container candidates report a version such as
@@ -118,10 +116,10 @@ environment file, repository, model workspace, or chat.
 
 ## 2. Pull and inspect the selected image
 
-Pull the exact published `v0.1.0-guide.14` image without a login:
+Pull the exact published `v0.1.0-guide.15` image without a login:
 
 ```sh
-AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:a04aba04dd5d25c357407ff7f490061cae4d3b18882280555402e55d0688f503'
+AGENT_MESH_IMAGE='ghcr.io/vlad9572324/agent-mesh-server@sha256:676d7edac34da7e320a1aea3272120588349ad6ec556ddd6a8ed4a033ef8cf19'
 docker pull "$AGENT_MESH_IMAGE"
 docker run --rm --network none "$AGENT_MESH_IMAGE" version
 ```
@@ -130,8 +128,8 @@ The version command needs no database or service keys. Check its JSON `commit`,
 `version`, `build_date`, `go_version`, `goos`, and `goarch` against the selected
 publication. A version match is artifact identity, not database readiness,
 provider authentication, or a deployment test.
-For this digest, require `version` to be `v0.1.0-guide.14`, `commit` to be
-`81a425e5a3cc9a3fa1f72abb60bf26e2dc7b2ed7`, and target `linux` / `amd64`.
+For this digest, require `version` to be `v0.1.0-guide.15`, `commit` to be
+`6852e0c5566cc9fb353e6104543b8308133f0722`, and target `linux` / `amd64`.
 Use that same source revision's Compose files. Tag-pinned guides are historical
 snapshots and may retain prepublication status wording; the
 [current release status](https://github.com/Vlad9572324/agent-mesh/blob/main/docs/releases.md)

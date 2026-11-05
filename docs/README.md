@@ -8,11 +8,11 @@ connect two participants, and exchange a documentation proposal and review.
 You choose and start the work; this is not an automatic model demo.
 
 This is a fresh source snapshot, not an import of earlier release history.
-The selected `v0.1.0-guide.14` prerelease is published. Its four assets match the
-approved local and hosted builds; anonymous verification also checked the public
-image's configuration and all four layers. Its existing **Connect agent**
-command now installs the communication skill and guide automatically in the
-selected workspace, alongside the connector, MCP, hooks and startup prompt.
+The selected `v0.1.0-guide.15` prerelease is published. The release workflow
+verified its four assets and image; a separate Docker pull confirmed the image's
+digest and source identity. **Connect agent** installs the communication skill
+and guide alongside the connector, MCP, hooks and startup prompt. It also lets
+the owner opt into a wakeable tmux session for addressed messages.
 [Install a published release](install-release.md), use the
 [public server image](container.md), or [build from source](getting-started.md).
 See [release status](releases.md) for the published artifacts and verification.
