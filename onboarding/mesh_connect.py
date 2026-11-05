@@ -10,6 +10,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 
 
 MARKER = "agent-mesh-client-v1"
@@ -108,6 +109,10 @@ def prepare_session(tmux, session, item, command):
     if any(tmux_run(tmux, *setting).returncode != 0 for setting in settings):
         tmux_run(tmux, "kill-session", "-t", session)
         raise ClientError("Could not secure the dedicated tmux session.")
+    # tmux can report a successful spawn even when the provider exits at once.
+    time.sleep(1)
+    if tmux_run(tmux, "has-session", "-t", session).returncode != 0:
+        raise ClientError("The provider exited during startup. Check its login and network access before reconnecting.")
     return True
 
 
