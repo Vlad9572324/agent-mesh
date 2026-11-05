@@ -91,10 +91,12 @@ def prepare_session(tmux, session, item, command):
         columns, lines = max(size.columns, 100), max(size.lines, 30)
     except OSError:
         columns, lines = 120, 40
-    # An existing tmux server keeps its old global PATH; pass the provider PATH
-    # to this session rather than changing unrelated sessions or server state.
+    # Both an old tmux server and its login shell may reset PATH. Set it on the
+    # child command after shell startup without changing unrelated sessions.
+    provider_path = os.environ.get("PATH", "")
+    env_command = [shutil.which("env") or "/usr/bin/env", "PATH=" + provider_path, *command]
     created = tmux_run(tmux, "new-session", "-d", "-s", session, "-x", str(columns), "-y", str(lines),
-                       "-e", "PATH=" + os.environ.get("PATH", ""), *command)
+                       "-e", "PATH=" + provider_path, *env_command)
     if created.returncode != 0:
         raise ClientError("Could not create the dedicated tmux session.")
     settings = (

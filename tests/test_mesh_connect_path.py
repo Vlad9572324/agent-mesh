@@ -26,6 +26,8 @@ class MeshConnectPathTest(unittest.TestCase):
         self.assertTrue(created)
         create = next(args for args in calls if args[0] == "new-session")
         self.assertEqual(create[create.index("-e") + 1], "PATH=/root/.local/bin:/usr/bin")
+        self.assertTrue(create[create.index("-e") + 2].endswith("/env"))
+        self.assertEqual(create[create.index("-e") + 3], "PATH=/root/.local/bin:/usr/bin")
         self.assertEqual(create[-2:], ("/usr/bin/python3", "connect.py"))
 
 
