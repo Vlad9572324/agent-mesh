@@ -70,6 +70,7 @@ jobs:
           python3 -B -m unittest discover -s adapters -p 'test_*.py'
           python3 -B -m unittest discover -s scripts -p 'test_*.py'
           python3 -B -m unittest discover -s deploy/compose -p 'test_*.py'
+          python3 -B -m unittest discover -s tests -p 'installer_terminal.py'
           python3 -B -m unittest discover -s tests -p 'test_operator_targets.py'
           node --check web/app.js
           node tests/i18n_runtime.mjs

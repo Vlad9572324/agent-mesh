@@ -177,6 +177,19 @@ def install_attended_dependency():
     raise InstallError("Attended mode needs tmux, but no supported package manager was found.")
 
 
+def concrete_terminal_fd(controlling_tty):
+    """Find a standard fd naming the controlling terminal, not /dev/tty's alias."""
+    foreground = os.tcgetpgrp(controlling_tty)
+    for fd in (0, 1, 2):
+        try:
+            if (os.isatty(fd) and os.tcgetpgrp(fd) == foreground
+                    and os.ttyname(fd) != "/dev/tty"):
+                return fd
+        except OSError:
+            continue
+    return None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("origin")
@@ -188,7 +201,7 @@ def main(argv=None):
     parser.add_argument("--check", action="store_true", help="install and verify access without starting a model or sending messages")
     parser.add_argument("--attended", action="store_true", help="install tmux if needed and start a wakeable attended CLI session")
     args = parser.parse_args(argv)
-    path, tty = None, None
+    path, tty, terminal_fd = None, None, None
     try:
         if sys.version_info < (3, 10) or not shutil.which("curl"):
             raise InstallError("Python 3.10 or newer and curl are required.")
@@ -201,6 +214,9 @@ def main(argv=None):
                 tty = os.open("/dev/tty", os.O_RDWR)
             except OSError:
                 raise InstallError("Normal startup requires an interactive terminal. Use --check --runtime codex (or claude) for a connection-only installation.") from None
+            terminal_fd = concrete_terminal_fd(tty)
+            if args.attended and terminal_fd is None:
+                raise InstallError("Attended startup requires a directly connected terminal. Open an interactive SSH session with -tt, then retry; the invitation was not used.")
         if args.attended:
             install_attended_dependency()
         path = destination(args.install_dir)
@@ -221,7 +237,7 @@ def main(argv=None):
             # so stdin still points at that finished pipe.  Both direct and
             # attended startup need the real controlling terminal.
             for descriptor in (0, 1, 2):
-                os.dup2(tty, descriptor)
+                os.dup2(terminal_fd if terminal_fd is not None else tty, descriptor)
             os.close(tty)
             tty = None
         os.execv(sys.executable, command)

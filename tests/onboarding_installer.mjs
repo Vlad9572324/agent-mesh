@@ -155,7 +155,7 @@ async function runTerminalInstaller(invitation, path, runtimeName) {
   await mkdir(fakebin,{mode:0o700});
   const fakeCLI = `#!/usr/bin/env python3
 import json,os,pathlib,sys
-value={'runtime':pathlib.Path(sys.argv[0]).name,'argv':sys.argv[1:],'cwd':os.getcwd(),'session':os.environ.get('AGENT_LINK_NATIVE_SESSION_ID'),'tty':[os.isatty(n) for n in (0,1,2)]}
+value={'runtime':pathlib.Path(sys.argv[0]).name,'argv':sys.argv[1:],'cwd':os.getcwd(),'session':os.environ.get('AGENT_LINK_NATIVE_SESSION_ID'),'tty':[os.isatty(n) for n in (0,1,2)],'tty_names':[os.ttyname(n) for n in (0,1,2)]}
 with open(os.environ['AGENT_LINK_FIXTURE_LAUNCH_RECEIPT'],'x') as f:json.dump(value,f)
 `;
   for (const name of ['codex','claude']) await writeFile(`${fakebin}/${name}`,fakeCLI,{mode:0o700,flag:'wx'});
@@ -208,6 +208,7 @@ function assertHookDefinition(handlers,path,runtimeName) {
 async function assertNativeLaunch(launch,path,runtimeName,invitation) {
   const expectedPrompt=invitation.guidance.files.find(file=>file.name==='PROMPT.md').content;
   assert(launch.runtime === runtimeName && launch.cwd === `${path}/workspace` && launch.tty.every(Boolean), 'Normal command did not enter the selected CLI workspace and terminal');
+  assert(launch.tty_names.every(name => name !== '/dev/tty'), 'Normal command must inherit the concrete terminal, not the /dev/tty alias rejected by tmux');
   assert(launch.argv.at(-1) === expectedPrompt && /^native-[a-f0-9]{32}$/.test(launch.session), 'Normal CLI did not receive the complete startup prompt and native session');
   assert(!JSON.stringify(launch).includes(invitation.token) && !JSON.stringify(launch).includes(keys.owner), 'Bootstrap capability escaped into CLI arguments');
   const events=['SessionStart','UserPromptSubmit','PreToolUse','PostToolUse','Stop','SessionEnd'];

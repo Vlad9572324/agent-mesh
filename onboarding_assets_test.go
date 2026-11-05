@@ -219,7 +219,7 @@ func TestInstallerFullyRenderedAndSecretFree(t *testing.T) {
 			t.Fatalf("missing allowlist path %s", path)
 		}
 	}
-	if !bytes.Contains(script, []byte("os.dup2(tty, descriptor)")) {
-		t.Fatal("piped installer must restore interactive CLI stdio")
+	if !bytes.Contains(script, []byte("concrete_terminal_fd(tty)")) || !bytes.Contains(script, []byte("os.dup2(terminal_fd if terminal_fd is not None else tty, descriptor)")) {
+		t.Fatal("piped installer must restore concrete interactive CLI stdio")
 	}
 }
