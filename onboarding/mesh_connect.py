@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 
 MARKER = "agent-mesh-client-v1"
@@ -78,6 +79,22 @@ def has_tty():
     return True
 
 
+def configure_provider_proxy():
+    """Apply an opt-in proxy to this launch, without changing the caller's shell."""
+    proxy = os.environ.get("AGENT_MESH_PROXY_URL", "")
+    if not proxy:
+        return
+    try:
+        parsed = urlsplit(proxy)
+    except ValueError:
+        raise ClientError("AGENT_MESH_PROXY_URL must be an HTTP(S) or SOCKS5 proxy URL.") from None
+    if (parsed.scheme not in ("http", "https", "socks5", "socks5h") or not parsed.hostname
+            or parsed.path not in ("", "/") or parsed.query or parsed.fragment):
+        raise ClientError("AGENT_MESH_PROXY_URL must be an HTTP(S) or SOCKS5 proxy URL.")
+    for name in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"):
+        os.environ[name] = proxy
+
+
 def prepare_session(tmux, session, item, command):
     """Create or validate the dedicated attended session without touching global tmux state."""
     bundle_id = hashlib.sha256(str(Path(item["bundle"]).resolve()).encode("utf-8")).hexdigest()
@@ -132,6 +149,19 @@ def main(argv=None, *, home=None):
             raise ClientError("Specify one agent ID with --agent ID.")
         args.agent = provider_args[1]
         provider_args = provider_args[2:]
+    action = None
+    session_id = None
+    if provider_args[:1] == ["--new"]:
+        action = "new"
+        provider_args = provider_args[1:]
+    elif provider_args[:1] == ["--resume"]:
+        if args.runtime != "codex" or len(provider_args) < 2 or provider_args[1].startswith("-"):
+            raise ClientError("Use --resume SESSION_ID with Codex.")
+        action, session_id = "resume", provider_args[1]
+        provider_args = provider_args[2:]
+    provider_args = provider_args[1:] if provider_args[:1] == ["--"] else provider_args
+    if action == "resume":
+        provider_args = ["resume", *provider_args, session_id]
     home = Path.home() if home is None else Path(home)
     matches = [item for item in registrations(home)
                if item["runtime"] == args.runtime and (args.agent is None or item["agent_id"] == args.agent)]
@@ -157,10 +187,12 @@ def main(argv=None, *, home=None):
     path = os.environ.get("PATH", "")
     if user_bin not in path.split(os.pathsep):
         os.environ["PATH"] = user_bin + (os.pathsep + path if path else "")
-    provider_args = provider_args[1:] if provider_args[:1] == ["--"] else provider_args
+    configure_provider_proxy()
     command = [sys.executable, "-B", str(connect), "--doorbell", "--", *provider_args]
     session = session_name(item["agent_id"])
     created = prepare_session(tmux, session, item, command)
+    if not created and action == "new":
+        raise ClientError("The attended session is already running; attach without --new or exit the provider first.")
     if not created and provider_args:
         raise ClientError("The attended session is already running; provider options apply only to a new session. Attach without options or exit the provider first.")
     if not has_tty():

@@ -60,10 +60,19 @@ install the optional dependency with `sudo apt-get install -y tmux`, and ensure
 
 Disconnect with tmux's `Ctrl-b d` (or close SSH without exiting the CLI); the
 provider keeps running and the next `mesh-connect codex` or `mesh-connect claude`
-reattaches. If the provider itself exited, start an explicit provider-specific
-resume: `mesh-connect codex resume --last` or `mesh-connect claude --continue`.
+reattaches. Typing `exit`, `/exit`, or Ctrl-D inside the provider exits the
+provider and therefore ends its tmux session. To explicitly create a new Codex
+conversation after that, run `mesh-connect codex --new`; to restore a specific
+one, run `mesh-connect codex --resume SESSION_ID`. Both accept provider options
+after `--`, for example `mesh-connect codex --resume SESSION_ID -- --yolo`.
+The existing provider-specific resume form still works:
+`mesh-connect codex resume --last` or `mesh-connect claude --continue`.
 These select the provider's most recent conversation in this workspace; use a
 specific provider session ID when that is not the desired conversation.
+If the provider needs a proxy but other local commands do not, set
+`AGENT_MESH_PROXY_URL` in the launching shell. `mesh-connect` passes it as
+`HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` only to a newly created provider
+session; attaching to an existing session does not change its environment.
 When no controlling terminal is available, `mesh-connect` leaves the session
 detached and prints the reattach command. Provider options passed to an already
 running session are rejected rather than silently ignored. Optional

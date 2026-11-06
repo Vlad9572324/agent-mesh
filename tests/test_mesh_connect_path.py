@@ -1,7 +1,9 @@
 """Attended sessions must see the local CLI path even with an old tmux server."""
 
 import os
+from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -9,6 +11,43 @@ from onboarding import mesh_connect
 
 
 class MeshConnectPathTest(unittest.TestCase):
+    def test_explicit_new_and_resume_select_provider_arguments(self):
+        with tempfile.TemporaryDirectory() as root:
+            bundle = Path(root) / "bundle"
+            bundle.mkdir()
+            (bundle / "connect.py").touch()
+            (bundle / "config.json").touch()
+            registration = {"agent_id": "misha-agent", "runtime": "codex", "bundle": str(bundle)}
+            with (patch.object(mesh_connect, "registrations", return_value=[registration]),
+                  patch.object(mesh_connect.shutil, "which", return_value="/usr/bin/tmux"),
+                  patch.object(mesh_connect, "prepare_session", return_value=True) as prepare,
+                  patch.object(mesh_connect, "has_tty", return_value=False),
+                  patch.dict(os.environ, {"AGENT_MESH_PROXY_URL": "socks5h://127.0.0.1:1080"}, clear=True)):
+                mesh_connect.main(["codex", "--agent", "misha-agent", "--new", "--", "--yolo"], home=Path(root))
+                self.assertEqual(prepare.call_args.args[3][-2:], ["--", "--yolo"])
+                self.assertEqual(os.environ["HTTPS_PROXY"], "socks5h://127.0.0.1:1080")
+                mesh_connect.main(["codex", "--agent", "misha-agent", "--resume", "session-123", "--", "--yolo"], home=Path(root))
+                self.assertEqual(prepare.call_args.args[3][-4:], ["--", "resume", "--yolo", "session-123"])
+
+    def test_explicit_new_refuses_existing_session(self):
+        with tempfile.TemporaryDirectory() as root:
+            bundle = Path(root) / "bundle"
+            bundle.mkdir()
+            (bundle / "connect.py").touch()
+            (bundle / "config.json").touch()
+            registration = {"agent_id": "misha-agent", "runtime": "codex", "bundle": str(bundle)}
+            with (patch.object(mesh_connect, "registrations", return_value=[registration]),
+                  patch.object(mesh_connect.shutil, "which", return_value="/usr/bin/tmux"),
+                  patch.object(mesh_connect, "prepare_session", return_value=False),
+                  patch.dict(os.environ, {}, clear=True)):
+                with self.assertRaisesRegex(mesh_connect.ClientError, "already running"):
+                    mesh_connect.main(["codex", "--agent", "misha-agent", "--new"], home=Path(root))
+
+    def test_rejects_invalid_provider_proxy(self):
+        with patch.dict(os.environ, {"AGENT_MESH_PROXY_URL": "file:///etc/passwd"}, clear=True):
+            with self.assertRaisesRegex(mesh_connect.ClientError, "proxy URL"):
+                mesh_connect.configure_provider_proxy()
+
     def test_new_session_receives_provider_path(self):
         calls = []
         sessions_checked = 0
